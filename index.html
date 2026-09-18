@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Central de Docas — Gigantes da Noite</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root{
     --bg-0:#070B14;
@@ -160,6 +161,29 @@
   .carrier-group{border:1px solid var(--line);border-radius:8px;margin-bottom:12px;}
   .carrier-group[open] summary{border-radius:8px 8px 0 0;border-bottom:1px solid var(--line);}
   .carrier-group .body{padding:14px 16px;}
+
+  .view-toggle{display:flex;gap:4px;background:var(--bg-2);border:1px solid var(--line);border-radius:7px;padding:3px;}
+  .view-toggle button{border:none;background:transparent;padding:6px 12px;font-size:12.5px;font-weight:600;color:var(--text-2);border-radius:5px;}
+  .view-toggle button.active{background:var(--amber);color:#1a1200;}
+  .view-toggle button:hover:not(.active){background:var(--bg-3);color:var(--text-0);}
+
+  .matrix-legend{display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--text-2);margin-bottom:12px;}
+  .matrix-legend .lg-item{display:flex;align-items:center;gap:6px;}
+  .matrix-legend .lg-swatch{width:14px;height:14px;border-radius:3px;display:inline-block;border:1px solid var(--line);}
+
+  .doca-matrix-wrap{overflow:auto;border:1px solid var(--line);border-radius:8px;max-height:70vh;}
+  table.doca-matrix{border-collapse:collapse;font-size:12.5px;width:100%;}
+  table.doca-matrix th, table.doca-matrix td{border:1px solid var(--line);text-align:center;padding:0;white-space:nowrap;}
+  table.doca-matrix thead th{background:var(--bg-2);color:var(--text-1);font-size:11px;padding:8px 10px;position:sticky;top:0;z-index:2;}
+  table.doca-matrix thead th.col-doca{left:0;z-index:3;}
+  table.doca-matrix td.doca-label{background:var(--bg-2);color:var(--text-0);font-family:var(--mono);font-weight:700;padding:6px 12px;position:sticky;left:0;z-index:1;text-align:left;}
+  table.doca-matrix td.cell-idle{background:rgba(47,217,185,.14);color:var(--teal);}
+  table.doca-matrix td.cell-busy{background:var(--bg-1);}
+  table.doca-matrix td.cell-conflict{background:rgba(255,93,102,.22);}
+  table.doca-matrix td.cell-empty{background:var(--bg-0);color:var(--text-2);}
+  .cell-inner{display:block;padding:6px 8px;cursor:default;font-size:11.5px;line-height:1.3;}
+  .cell-chip{font-family:var(--mono);font-weight:700;font-size:12px;}
+  .cell-sub{display:block;font-size:10px;color:var(--text-2);font-weight:400;white-space:normal;max-width:140px;margin:0 auto;}
 
   /* ================= LOGIN SCREEN ================= */
   #loginScreen{
@@ -374,9 +398,9 @@
       <div class="panel-head"><div><h2>Arquivos GAN</h2><div class="desc">Placa ↔ Pré-Romaneio ↔ Filial. (GAN_[REGIÃO]_dd.txt)</div></div></div>
       <div class="dropzone" onclick="document.getElementById('inpGAN').click()"
            ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event,'GAN')">
-        <span class="k">Clique ou arraste os .txt aqui</span>múltiplos arquivos permitidos
+        <span class="k">Clique ou arraste os .txt (ou .zip) aqui</span>múltiplos arquivos permitidos · arquivos .zip são extraídos automaticamente
       </div>
-      <input type="file" id="inpGAN" multiple accept=".txt" style="display:none" onchange="handleFiles(event.target.files,'GAN')">
+      <input type="file" id="inpGAN" multiple style="display:none" onchange="handleFiles(event.target.files,'GAN')">
       <div class="filelist" id="listGAN"></div>
     </div>
 
@@ -384,9 +408,9 @@
       <div class="panel-head"><div><h2>Arquivos hebls</h2><div class="desc">Log de NF incluída no Pré-Romaneio (define QTD por PRÉ).</div></div></div>
       <div class="dropzone" onclick="document.getElementById('inpHEBLS').click()"
            ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event,'HEBLS')">
-        <span class="k">Clique ou arraste os .txt aqui</span>múltiplos arquivos permitidos
+        <span class="k">Clique ou arraste os .txt (ou .zip) aqui</span>múltiplos arquivos permitidos · arquivos .zip são extraídos automaticamente
       </div>
-      <input type="file" id="inpHEBLS" multiple accept=".txt" style="display:none" onchange="handleFiles(event.target.files,'HEBLS')">
+      <input type="file" id="inpHEBLS" multiple style="display:none" onchange="handleFiles(event.target.files,'HEBLS')">
       <div class="filelist" id="listHEBLS"></div>
     </div>
 
@@ -394,9 +418,9 @@
       <div class="panel-head"><div><h2>Arquivos Região</h2><div class="desc">Detalhe Placa/NF/Sequência/Território.</div></div></div>
       <div class="dropzone" onclick="document.getElementById('inpREGIAO').click()"
            ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event,'REGIAO')">
-        <span class="k">Clique ou arraste os .txt aqui</span>múltiplos arquivos permitidos
+        <span class="k">Clique ou arraste os .txt (ou .zip) aqui</span>múltiplos arquivos permitidos · arquivos .zip são extraídos automaticamente
       </div>
-      <input type="file" id="inpREGIAO" multiple accept=".txt" style="display:none" onchange="handleFiles(event.target.files,'REGIAO')">
+      <input type="file" id="inpREGIAO" multiple style="display:none" onchange="handleFiles(event.target.files,'REGIAO')">
       <div class="filelist" id="listREGIAO"></div>
     </div>
   </div>
@@ -455,8 +479,12 @@
 
   <div class="panel">
     <div class="panel-head">
-      <div><h2>Resultado por transportadora e onda</h2><div class="desc">Clique no nome da transportadora para abrir/fechar. Ajuste a doca manualmente se precisar — o status muda para "Ajustado". Defina o status operacional de cada onda.</div></div>
-      <div style="display:flex;gap:8px;">
+      <div><h2 id="alocacaoTituloView">Mapa de docas — visão unificada</h2><div class="desc" id="alocacaoDescView">Todas as docas da unidade, lado a lado, cruzadas com as ondas — independente da transportadora. Use para enxergar rapidamente docas ociosas (oportunidade de realocação) e conflitos de doca dupla. O filtro por transportadora abaixo funciona como recorte pontual, não como estrutura principal.</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <div class="view-toggle">
+          <button id="btnViewUnificado" class="active" onclick="setAlocacaoView('unificado')">Unificado</button>
+          <button id="btnViewTransp" onclick="setAlocacaoView('transportadora')">Por transportadora</button>
+        </div>
         <select id="filtroTransp" onchange="renderAlocacao()"><option value="">Todas transportadoras</option></select>
         <select id="filtroFilial" onchange="renderAlocacao()"><option value="">Todas filiais</option></select>
       </div>
@@ -895,17 +923,67 @@ function findTransportadoraDaPlaca(placa){
 let PENDING = { GAN: [], HEBLS: [], REGIAO: [] };
 
 function handleDrop(ev, tipo){ ev.preventDefault(); ev.currentTarget.classList.remove('drag'); handleFiles(ev.dataTransfer.files, tipo); }
-function handleFiles(fileList, tipo){
-  Array.from(fileList).forEach(file=>{
+
+function lerArquivoComoTexto(file){
+  return new Promise((resolve, reject)=>{
     const reader = new FileReader();
-    reader.onload = (e)=>{
-      PENDING[tipo].push({nome:file.name, regiao: extrairRegiaoDoNome(file.name), texto:e.target.result});
-      renderFileList(tipo);
-      atualizarPreviaUpload();
-    };
-    reader.onerror = ()=> toast('Falha ao ler '+file.name, 'err');
+    reader.onload = (e)=> resolve(e.target.result);
+    reader.onerror = ()=> reject(new Error('Falha ao ler '+file.name));
     reader.readAsText(file, 'ISO-8859-1');
   });
+}
+
+function adicionarPendente(tipo, nome, texto){
+  PENDING[tipo].push({nome, regiao: extrairRegiaoDoNome(nome), texto});
+}
+
+async function processarZip(file, tipo){
+  if(typeof JSZip === 'undefined'){
+    toast('Não foi possível ler o .zip: biblioteca de descompactação não carregou.', 'err');
+    return;
+  }
+  try{
+    const zip = await JSZip.loadAsync(file);
+    let algumArquivo = false;
+    const entries = Object.values(zip.files).filter(e=>!e.dir);
+    for(const entry of entries){
+      // ignora arquivos de metadados/ocultos comuns em zips (ex: __MACOSX, .DS_Store)
+      if(/(^|\/)(__MACOSX|\.DS_Store)/.test(entry.name)) continue;
+      algumArquivo = true;
+      try{
+        const u8 = await entry.async('uint8array');
+        const texto = new TextDecoder('iso-8859-1').decode(u8);
+        const nomeBase = entry.name.split('/').pop();
+        adicionarPendente(tipo, nomeBase, texto);
+      }catch(err){
+        toast('Falha ao extrair '+entry.name+' do zip.', 'err');
+      }
+    }
+    if(!algumArquivo){
+      toast('O arquivo '+file.name+' (.zip) não contém arquivos aproveitáveis.', 'err');
+    }
+  }catch(err){
+    toast('Falha ao abrir o .zip '+file.name+'. Verifique se não está corrompido/protegido por senha.', 'err');
+  }
+}
+
+async function handleFiles(fileList, tipo){
+  const arquivos = Array.from(fileList);
+  for(const file of arquivos){
+    const isZip = /\.zip$/i.test(file.name) || file.type === 'application/zip' || file.type === 'application/x-zip-compressed';
+    if(isZip){
+      await processarZip(file, tipo);
+    } else {
+      try{
+        const texto = await lerArquivoComoTexto(file);
+        adicionarPendente(tipo, file.name, texto);
+      }catch(err){
+        toast('Falha ao ler '+file.name, 'err');
+      }
+    }
+  }
+  renderFileList(tipo);
+  atualizarPreviaUpload();
 }
 function extrairRegiaoDoNome(nome){
   const clean = nome.replace(/\.[^.]+$/,'');
@@ -1212,6 +1290,18 @@ function baseAlocRow(carga, transportadora, status, doca, motivo, onda){
 function statusOnda(transp, onda){ return STATE.ondaStatus[transp+'__'+onda] || 'Aguardando'; }
 function setStatusOnda(transp, onda, val){ STATE.ondaStatus[transp+'__'+onda] = val; saveState(); renderDashboard(); }
 
+let alocacaoView = 'unificado'; // 'unificado' | 'transportadora'
+function setAlocacaoView(v){
+  alocacaoView = v;
+  document.getElementById('btnViewUnificado').classList.toggle('active', v==='unificado');
+  document.getElementById('btnViewTransp').classList.toggle('active', v==='transportadora');
+  document.getElementById('alocacaoTituloView').textContent = v==='unificado' ? 'Mapa de docas — visão unificada' : 'Resultado por transportadora e onda';
+  document.getElementById('alocacaoDescView').textContent = v==='unificado'
+    ? 'Todas as docas da unidade, lado a lado, cruzadas com as ondas — independente da transportadora. Use para enxergar rapidamente docas ociosas (oportunidade de realocação) e conflitos de doca dupla. O filtro por transportadora abaixo funciona como recorte pontual, não como estrutura principal.'
+    : 'Clique no nome da transportadora para abrir/fechar. Ajuste a doca manualmente se precisar — o status muda para "Ajustado". Defina o status operacional de cada onda.';
+  renderAlocacao();
+}
+
 function renderAlocacao(){
   // popular filtros
   const selTransp = document.getElementById('filtroTransp');
@@ -1238,10 +1328,100 @@ function renderAlocacao(){
   const body = document.getElementById('alocacaoBody');
   if(STATE.alocacao.length===0){ body.innerHTML = '<div class="empty">Rode a alocação para ver o resultado.</div>'; return; }
 
+  const rowsFiltradas = STATE.alocacao.filter(a=>{
+    if(filtroTransp && a.transportadora!==filtroTransp) return false;
+    if(filtroFilial && !a.pres.some(p=>p.filial===filtroFilial)) return false;
+    return true;
+  });
+
+  if(alocacaoView==='unificado'){
+    renderAlocacaoUnificada(body, rowsFiltradas, filtroTransp);
+    return;
+  }
+
+  renderAlocacaoPorTransportadora(body, rowsFiltradas);
+}
+
+/* =========================================================
+   ALOCAÇÃO — VISÃO UNIFICADA (mapa doca x onda, todas transportadoras juntas)
+   ========================================================= */
+function renderAlocacaoUnificada(body, rows, filtroTransp){
+  // universo de docas: faixas parametrizadas das transportadoras (respeitando o filtro), dentro das docas disponíveis da unidade
+  const transpConsideradas = STATE.config.transportadoras.filter(t=> !filtroTransp || t.nome===filtroTransp);
+  const docaSet = new Set();
+  transpConsideradas.forEach(t=>{
+    const unidade = STATE.config.unidades.find(u=>u.id===t.unidade);
+    const docasUnidade = unidade ? new Set(getDocasDisponiveisUnidade(unidade)) : null;
+    for(let d=t.docaIn; d<=t.docaFim; d++){ if(!docasUnidade || docasUnidade.has(d)) docaSet.add(d); }
+  });
+  // garante que docas usadas de fato na alocação também apareçam, mesmo sem faixa parametrizada visível no filtro atual
+  rows.forEach(r=>{ const d = r.docaManual!=null?r.docaManual:r.docaSugerida; if(d!=null) docaSet.add(d); });
+
+  const docas = Array.from(docaSet).sort((a,b)=>a-b);
+  const maxOnda = Math.max(0, ...rows.map(r=>r.onda||0));
+
+  if(docas.length===0 || maxOnda===0){
+    body.innerHTML = '<div class="empty">Sem docas/ondas para exibir com o filtro atual. Rode a alocação ou ajuste o filtro.</div>';
+    return;
+  }
+
+  // monta índice doca+onda -> cargas
+  const idx = {};
+  let conflitos = 0;
+  rows.forEach(r=>{
+    const d = r.docaManual!=null?r.docaManual:r.docaSugerida;
+    if(d==null || !r.onda) return;
+    const key = d+'__'+r.onda;
+    if(!idx[key]) idx[key] = [];
+    idx[key].push(r);
+  });
+  Object.values(idx).forEach(arr=>{ if(arr.length>1) conflitos++; });
+
+  let html = `<div class="matrix-legend">
+    <span class="lg-item"><span class="lg-swatch" style="background:var(--bg-1);"></span> Doca ocupada na onda</span>
+    <span class="lg-item"><span class="lg-swatch" style="background:rgba(47,217,185,.14);border-color:var(--teal);"></span> Doca ociosa/disponível na onda</span>
+    <span class="lg-item"><span class="lg-swatch" style="background:rgba(255,93,102,.22);border-color:var(--red);"></span> Conflito — mais de uma carga na mesma doca/onda</span>
+    ${conflitos>0 ? `<span style="color:var(--red);font-weight:600;">${conflitos} conflito(s) detectado(s)</span>` : ''}
+  </div>`;
+
+  html += '<div class="doca-matrix-wrap"><table class="doca-matrix"><thead><tr><th class="col-doca">Doca</th>';
+  for(let o=1;o<=maxOnda;o++) html += `<th>${o}ª Onda</th>`;
+  html += '</tr></thead><tbody>';
+
+  docas.forEach(d=>{
+    html += `<tr><td class="doca-label">${d}</td>`;
+    for(let o=1;o<=maxOnda;o++){
+      const matches = idx[d+'__'+o] || [];
+      if(matches.length===0){
+        html += `<td class="cell-idle"><span class="cell-inner" title="Doca ${d} livre na ${o}ª onda">livre</span></td>`;
+      } else if(matches.length===1){
+        const r = matches[0];
+        const badgeColor = r.status==='OK' ? 'var(--teal)' : (r.status==='AJUSTADO' ? 'var(--text-1)' : 'var(--red)');
+        html += `<td class="cell-busy"><span class="cell-inner" title="${r.transportadora||'Sem transportadora'} · ${r.placa} · prioridade ${r.prioridade}${r.motivo?(' · '+r.motivo):''}">
+          <span class="cell-chip" style="color:${badgeColor}">${r.placa}</span>
+          <span class="cell-sub">${r.transportadora||'—'}</span>
+        </span></td>`;
+      } else {
+        const lista = matches.map(r=>`${r.placa} (${r.transportadora||'—'})`).join(' + ');
+        html += `<td class="cell-conflict"><span class="cell-inner" title="Conflito: ${lista}">
+          <span class="cell-chip" style="color:var(--red)">${matches.length}x</span>
+          <span class="cell-sub">${lista}</span>
+        </span></td>`;
+      }
+    }
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+
+  body.innerHTML = html;
+}
+
+/* =========================================================
+   ALOCAÇÃO — VISÃO POR TRANSPORTADORA (agrupada, filtro pontual)
+   ========================================================= */
+function renderAlocacaoPorTransportadora(body, rows){
   const porTransp = {};
-  STATE.alocacao.forEach(a=>{
-    if(filtroTransp && a.transportadora!==filtroTransp) return;
-    if(filtroFilial && !a.pres.some(p=>p.filial===filtroFilial)) return;
+  rows.forEach(a=>{
     const key = a.transportadora || 'Sem transportadora';
     if(!porTransp[key]) porTransp[key] = [];
     porTransp[key].push(a);
