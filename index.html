@@ -119,6 +119,7 @@
 
   .filelist{margin-top:10px;font-size:12.5px;}
   .filelist .fitem{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed var(--line);color:var(--text-1);}
+  .filelist:empty::before{content:'Nenhum arquivo ainda';color:var(--text-2);}
 
   .toast-wrap{position:fixed;bottom:20px;right:20px;z-index:100;display:flex;flex-direction:column;gap:8px;}
   .toast{
@@ -314,6 +315,7 @@
   <button class="tab-btn" data-tab="upload" onclick="switchTab('upload')">3 · Upload &amp; Consolidação</button>
   <button class="tab-btn" data-tab="alocacao" onclick="switchTab('alocacao')">4 · Alocação de Docas</button>
   <button class="tab-btn" data-tab="dashboard" onclick="switchTab('dashboard')">5 · Indicadores</button>
+  <button class="tab-btn" data-tab="painel" onclick="switchTab('painel')">6 · Painel por Doca &amp; Ondas</button>
 </div>
 
 <!-- ================= TAB 1: PARAMETROS ================= -->
@@ -393,52 +395,61 @@
 <!-- ================= TAB 3: UPLOAD ================= -->
 <div class="view" id="view-upload">
 
-  <div class="grid cols-3">
-    <div class="panel">
-      <div class="panel-head"><div><h2>Arquivos GAN</h2><div class="desc">Placa ↔ Pré-Romaneio ↔ Filial. (GAN_[REGIÃO]_dd.txt)</div></div></div>
-      <div class="dropzone" onclick="document.getElementById('inpGAN').click()"
-           ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event,'GAN')">
-        <span class="k">Clique ou arraste os .txt (ou .zip) aqui</span>múltiplos arquivos permitidos · arquivos .zip são extraídos automaticamente
-      </div>
-      <input type="file" id="inpGAN" multiple style="display:none" onchange="handleFiles(event.target.files,'GAN')">
-      <div class="filelist" id="listGAN"></div>
+  <div class="panel">
+    <div class="panel-head"><div><h2>Carregar arquivos</h2><div class="desc">Solte todos os arquivos de uma vez (.txt ou .zip). A ferramenta identifica o tipo de cada um sozinha, pelo conteúdo.</div></div></div>
+    <div class="dropzone" onclick="document.getElementById('inpAUTO').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDropAuto(event)">
+      <span class="k">Clique ou arraste todos os arquivos aqui</span>múltiplos arquivos misturados · arquivos .zip são extraídos automaticamente
     </div>
+    <input type="file" id="inpAUTO" multiple style="display:none" onchange="handleFilesAuto(event.target.files); this.value=''">
+    <div id="autoResumo" style="margin-top:12px;"></div>
+  </div>
 
-    <div class="panel">
-      <div class="panel-head"><div><h2>Arquivos hebls</h2><div class="desc">Log de NF incluída no Pré-Romaneio (define QTD por PRÉ).</div></div></div>
-      <div class="dropzone" onclick="document.getElementById('inpHEBLS').click()"
-           ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event,'HEBLS')">
-        <span class="k">Clique ou arraste os .txt (ou .zip) aqui</span>múltiplos arquivos permitidos · arquivos .zip são extraídos automaticamente
-      </div>
-      <input type="file" id="inpHEBLS" multiple style="display:none" onchange="handleFiles(event.target.files,'HEBLS')">
-      <div class="filelist" id="listHEBLS"></div>
-    </div>
+  <div style="display:none"><div id="listGAN"></div><div id="listHEBLS"></div><div id="listREGIAO"></div></div>
 
-    <div class="panel">
-      <div class="panel-head"><div><h2>Arquivos Região</h2><div class="desc">Detalhe Placa/NF/Sequência/Território.</div></div></div>
-      <div class="dropzone" onclick="document.getElementById('inpREGIAO').click()"
-           ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event,'REGIAO')">
-        <span class="k">Clique ou arraste os .txt (ou .zip) aqui</span>múltiplos arquivos permitidos · arquivos .zip são extraídos automaticamente
+  <div class="panel">
+    <details>
+      <summary style="cursor:pointer;color:var(--text-1);font-size:13px;">Envio manual por tipo (opcional — use só se algum arquivo não for reconhecido automaticamente)</summary>
+      <div class="grid cols-3" style="margin-top:12px;">
+        <div>
+          <div class="dropzone" onclick="document.getElementById('inpGAN').click()"
+               ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event,'GAN')">
+            <span class="k">Forçar como GAN</span>.txt ou .zip
+          </div>
+          <input type="file" id="inpGAN" multiple style="display:none" onchange="handleFiles(event.target.files,'GAN'); this.value=''">
+        </div>
+        <div>
+          <div class="dropzone" onclick="document.getElementById('inpHEBLS').click()"
+               ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event,'HEBLS')">
+            <span class="k">Forçar como Log de NF</span>.txt ou .zip
+          </div>
+          <input type="file" id="inpHEBLS" multiple style="display:none" onchange="handleFiles(event.target.files,'HEBLS'); this.value=''">
+        </div>
+        <div>
+          <div class="dropzone" onclick="document.getElementById('inpREGIAO').click()"
+               ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event,'REGIAO')">
+            <span class="k">Forçar como Região</span>.txt ou .zip
+          </div>
+          <input type="file" id="inpREGIAO" multiple style="display:none" onchange="handleFiles(event.target.files,'REGIAO'); this.value=''">
+        </div>
       </div>
-      <input type="file" id="inpREGIAO" multiple style="display:none" onchange="handleFiles(event.target.files,'REGIAO')">
-      <div class="filelist" id="listREGIAO"></div>
-    </div>
+    </details>
   </div>
 
   <div class="panel">
     <div class="panel-head">
-      <div><h2>Consolidar</h2><div class="desc">Junta GAN + hebls + Região pela chave Pré-Romaneio/Placa. Se a placa já existir numa carga, o novo PRÉ é adicionado a ela (nunca cria uma carga separada só por ser de outra filial).</div></div>
+      <div><h2>Consolidar</h2><div class="desc">Junta GAN + Log de NF + Região pela chave Pré-Romaneio/Placa. Se a placa já existir numa carga, o novo PRÉ é adicionado a ela (nunca cria uma carga separada só por ser de outra filial).</div></div>
       <div style="display:flex;gap:8px;">
         <button class="danger small" onclick="limparUploadsPendentes()">Limpar arquivos carregados</button>
         <button class="primary" onclick="consolidarUploads()">Consolidar →</button>
       </div>
     </div>
-    <div id="uploadSummary" class="empty">Carregue arquivos GAN, hebls e/ou Região acima para ver a prévia aqui.</div>
+    <div id="uploadSummary" class="empty">Carregue os arquivos acima para ver a prévia aqui.</div>
   </div>
 
   <div class="panel" id="panelOrfaos" style="display:none;">
     <div class="panel-head">
-      <div><h2>⚠ PRÉs sem placa vinculada</h2><div class="desc">Esses Pré-Romaneios apareceram no hebls mas nenhum arquivo GAN trouxe a placa correspondente. Informe a placa manualmente para que entrem na carga certa — sem isso a ferramenta não vai alocar doca/onda para eles.</div></div>
+      <div><h2>⚠ PRÉs sem placa vinculada</h2><div class="desc">Esses Pré-Romaneios apareceram no log de NF mas nenhum arquivo GAN trouxe a placa correspondente. Informe a placa manualmente para que entrem na carga certa — sem isso a ferramenta não vai alocar doca/onda para eles.</div></div>
     </div>
     <div class="table-wrap"><table id="tblOrfaos"><thead><tr><th>Pré-Romaneio</th><th>Qtd. Entrega</th><th>Placa (informar)</th><th>Filial</th><th></th></tr></thead><tbody></tbody></table></div>
   </div>
@@ -546,6 +557,26 @@
 
 <div id="watermark">Criado e desenvolvido por Rafael Mariano</div>
 
+<!-- ================= TAB 6: PAINEL POR DOCA / LISTA POR ONDA ================= -->
+<div class="view" id="view-painel">
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>Painel de cargas por doca</h2>
+        <div class="desc">Cada cartão é uma doca; dentro dele, as cargas de cada onda. Usa a alocação já calculada (doca manual tem prioridade sobre a sugerida).</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <select id="pTransp" onchange="renderPainel()"></select>
+        <select id="pFilial" onchange="renderPainel()"></select>
+        <select id="pOnda" onchange="renderPainel()"></select>
+        <label style="display:flex;gap:5px;align-items:center;margin:0;"><input type="checkbox" id="pLivres" onchange="renderPainel()"> mostrar docas livres</label>
+        <button class="primary" onclick="exportarListaOndasExcel()">⬇ Gerar Excel da lista</button>
+      </div>
+    </div>
+    <div class="grid cols-4" id="pStats"></div>
+  </div>
+  <div class="panel"><div class="panel-head"><h2>Docas</h2></div><div id="pDocas" class="grid cols-3"></div></div>
+  <div class="panel"><div class="panel-head"><h2>Lista por onda</h2></div><div id="pOndas"></div></div>
+</div>
+
 <script>
 /* =========================================================
    LOGIN / CONTROLE DE ACESSO
@@ -555,7 +586,7 @@
    arquivo: eles são criados no console do Firebase, em
    Authentication > Users > Add user.
 
-   A lógica em si está no <script type="module"> no fim da
+   A lógica em si está no <script type="module"><script type="module"> no fim da
    página, que é onde o SDK do Firebase é carregado.
    ========================================================= */
 function entrarNaFerramenta(){
@@ -1002,7 +1033,97 @@ function renderFileList(tipo){
   });
 }
 function removePending(tipo, idx){ PENDING[tipo].splice(idx,1); renderFileList(tipo); atualizarPreviaUpload(); }
-function limparUploadsPendentes(){ PENDING={GAN:[],HEBLS:[],REGIAO:[]}; ['GAN','HEBLS','REGIAO'].forEach(renderFileList); atualizarPreviaUpload(); toast('Arquivos carregados limpos.', 'ok'); }
+function limparUploadsPendentes(){ PENDING={GAN:[],HEBLS:[],REGIAO:[]}; var rs=document.getElementById('autoResumo'); if(rs) rs.innerHTML=''; ['GAN','HEBLS','REGIAO'].forEach(renderFileList); atualizarPreviaUpload(); toast('Arquivos carregados limpos.', 'ok'); }
+
+/* ---------- UPLOAD ÚNICO: identificação automática do tipo ---------- */
+function escAuto(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+// Descobre se o arquivo é GAN, hebls ou Região usando os MESMOS parsers de sempre:
+// o tipo com mais linhas reconhecidas vence. Só olha o nome se o conteúdo não decidir.
+function detectarTipoArquivo(nome, texto){
+  const amostra = texto.length > 300000 ? texto.slice(0, 300000) : texto;
+  const score = {
+    GAN:    parseGAN(amostra, null).length,
+    HEBLS:  Object.values(parseHEBLS(amostra)).reduce((a,b)=>a+b, 0),
+    REGIAO: parseREGIAO(amostra, null).length
+  };
+  const max = Math.max(score.GAN, score.HEBLS, score.REGIAO);
+  // O nome do arquivo hebls é o usuário que extraiu (varia), então não serve de pista para ele.
+  const dica = /(^|[^a-z])gan([^a-z]|$)/i.test(nome) ? 'GAN'
+             : /regi[aã]o/i.test(nome) ? 'REGIAO' : null;
+  if(max === 0) return dica ? {tipo:dica, porNome:true} : null;
+  const empatados = Object.keys(score).filter(k=>score[k]===max);
+  if(empatados.length === 1) return {tipo:empatados[0], porNome:false};
+  return (dica && empatados.includes(dica)) ? {tipo:dica, porNome:false} : null;
+}
+
+async function extrairZipItens(file){
+  const itens = [];
+  if(typeof JSZip === 'undefined'){
+    toast('Não foi possível ler o .zip: biblioteca de descompactação não carregou.', 'err');
+    return itens;
+  }
+  try{
+    const zip = await JSZip.loadAsync(file);
+    const entries = Object.values(zip.files).filter(e=>!e.dir);
+    for(const entry of entries){
+      if(/(^|\/)(__MACOSX|\.DS_Store)/.test(entry.name)) continue;
+      try{
+        const u8 = await entry.async('uint8array');
+        itens.push({nome: entry.name.split('/').pop(), texto: new TextDecoder('iso-8859-1').decode(u8)});
+      }catch(err){ toast('Falha ao extrair '+entry.name+' do zip.', 'err'); }
+    }
+    if(!itens.length) toast('O arquivo '+file.name+' (.zip) não contém arquivos aproveitáveis.', 'err');
+  }catch(err){
+    toast('Falha ao abrir o .zip '+file.name+'. Verifique se não está corrompido/protegido por senha.', 'err');
+  }
+  return itens;
+}
+
+function handleDropAuto(ev){ ev.preventDefault(); ev.currentTarget.classList.remove('drag'); handleFilesAuto(ev.dataTransfer.files); }
+
+async function handleFilesAuto(fileList){
+  const arquivos = Array.from(fileList);
+  if(!arquivos.length) return;
+  const itens = [];
+  for(const file of arquivos){
+    const isZip = /\.zip$/i.test(file.name) || file.type === 'application/zip' || file.type === 'application/x-zip-compressed';
+    if(isZip){
+      (await extrairZipItens(file)).forEach(i=>itens.push(i));
+    } else {
+      try{ itens.push({nome:file.name, texto: await lerArquivoComoTexto(file)}); }
+      catch(err){ toast('Falha ao ler '+file.name, 'err'); }
+    }
+  }
+  const res = {ok:{GAN:0, HEBLS:0, REGIAO:0}, porNome:[], repetidos:[], naoReconhecidos:[]};
+  itens.forEach(it=>{
+    const det = detectarTipoArquivo(it.nome, it.texto);
+    if(!det){ res.naoReconhecidos.push(it.nome); return; }
+    // mesmo arquivo solto duas vezes dobraria a contagem de NFs do hebls
+    if(PENDING[det.tipo].some(p=>p.nome===it.nome && p.texto===it.texto)){ res.repetidos.push(it.nome); return; }
+    adicionarPendente(det.tipo, it.nome, it.texto);
+    res.ok[det.tipo]++;
+    if(det.porNome) res.porNome.push(it.nome);
+  });
+  ['GAN','HEBLS','REGIAO'].forEach(renderFileList);
+  atualizarPreviaUpload();
+  renderResumoAuto(res);
+  const total = res.ok.GAN + res.ok.HEBLS + res.ok.REGIAO;
+  if(res.naoReconhecidos.length) toast(res.naoReconhecidos.length+' arquivo(s) não reconhecido(s) — veja o aviso.', 'err');
+}
+
+function renderResumoAuto(res){
+  const el = document.getElementById('autoResumo');
+  if(!el) return;
+  const box = (cor, txt)=>`<div style="border-left:3px solid var(${cor});background:var(--bg-2);padding:8px 12px;border-radius:4px;margin-bottom:6px;font-size:12.5px;color:var(--text-1);">${txt}</div>`;
+  const lista = arr => arr.map(n=>'<span class="mono">'+escAuto(n)+'</span>').join(', ');
+  const total = res.ok.GAN + res.ok.HEBLS + res.ok.REGIAO;
+  let h = '';
+  if(res.porNome.length) h += box('--amber', `Tipo definido só pelo nome (nenhuma linha reconhecida no conteúdo): ${lista(res.porNome)}`);
+  if(res.repetidos.length) h += box('--amber', `Ignorado(s), já estava(m) carregado(s): ${lista(res.repetidos)}`);
+  if(res.naoReconhecidos.length) h += box('--red', `Não reconhecido(s): ${lista(res.naoReconhecidos)}. Se for de um desses tipos com formato diferente, use o envio manual abaixo.`);
+  el.innerHTML = h;
+}
 
 // GAN: linhas "  012805  33  15/09/26 CPG3069"
 function parseGAN(texto, regiao){
@@ -1035,7 +1156,7 @@ function parseREGIAO(texto, regiao){
 function atualizarPreviaUpload(){
   const el = document.getElementById('uploadSummary');
   const totalGAN = PENDING.GAN.length, totalHEBLS = PENDING.HEBLS.length, totalREGIAO = PENDING.REGIAO.length;
-  if(totalGAN+totalHEBLS+totalREGIAO === 0){ el.className='empty'; el.textContent='Carregue arquivos GAN, hebls e/ou Região acima para ver a prévia aqui.'; return; }
+  if(totalGAN+totalHEBLS+totalREGIAO === 0){ el.className='empty'; el.textContent='Carregue os arquivos acima para ver a prévia aqui.'; return; }
   let ganRows=0, heblsCount=0, regiaoRows=0;
   PENDING.GAN.forEach(f=> ganRows += parseGAN(f.texto, f.regiao).length);
   PENDING.HEBLS.forEach(f=> { const c=parseHEBLS(f.texto); heblsCount += Object.values(c).reduce((a,b)=>a+b,0); });
@@ -1043,7 +1164,7 @@ function atualizarPreviaUpload(){
   el.className = '';
   el.innerHTML = `<div class="grid cols-3">
     <div class="stat"><div class="num">${ganRows}</div><div class="lbl">registros Placa/Pré-Romaneio (GAN)</div></div>
-    <div class="stat"><div class="num">${heblsCount}</div><div class="lbl">notas fiscais lidas (hebls)</div></div>
+    <div class="stat"><div class="num">${heblsCount}</div><div class="lbl">notas fiscais lidas</div></div>
     <div class="stat"><div class="num">${regiaoRows}</div><div class="lbl">linhas de detalhe (Região)</div></div>
   </div>`;
 }
@@ -1243,10 +1364,16 @@ function rodarAlocacao(){
   });
 
   const resultado = [];
+  /* REGRA DE ONDA UTILIZADA: uma doca só pode ter UMA carga por onda.
+     As cargas são processadas por prioridade (menor número primeiro); cada uma ocupa a
+     primeira doca livre da faixa da sua transportadora na menor onda possível. Se a doca
+     já está usada naquela onda por outra carga (ex.: duas transportadoras na mesma doca),
+     a carga de menor prioridade é lançada para a onda seguinte. */
+  const ocupado = new Set();   // 'unidade|doca|onda'
+  const fila = [];
 
   Object.keys(porTransp).forEach(nomeTransp=>{
-    const cargas = porTransp[nomeTransp].slice().sort((a,b)=> prioridadeDaCarga(a)-prioridadeDaCarga(b) || menorPreRomaneio(a)-menorPreRomaneio(b));
-
+    const cargas = porTransp[nomeTransp];
     if(nomeTransp === '__SEM_TRANSPORTADORA__'){
       cargas.forEach(c=> resultado.push(baseAlocRow(c, null, 'ALTERAR', null, 'Placa sem transportadora cadastrada')));
       return;
@@ -1260,18 +1387,23 @@ function rodarAlocacao(){
     const docasUnidade = unidade ? new Set(getDocasDisponiveisUnidade(unidade)) : null;
     const docasFaixa = [];
     for(let d=cfg.docaIn; d<=cfg.docaFim; d++){ if(!docasUnidade || docasUnidade.has(d)) docasFaixa.push(d); }
-    const numDocas = docasFaixa.length;
-
-    if(numDocas===0){
+    if(docasFaixa.length===0){
       cargas.forEach(c=> resultado.push(baseAlocRow(c, nomeTransp, 'ALTERAR', null, 'Nenhuma doca disponível na faixa parametrizada para essa transportadora')));
       return;
     }
+    cargas.forEach(c=> fila.push({c, nomeTransp, docasFaixa, un: cfg.unidade}));
+  });
 
-    cargas.forEach((c,i)=>{
-      const onda = Math.floor(i/numDocas) + 1;
-      const doca = docasFaixa[i % numDocas];
-      resultado.push(baseAlocRow(c, nomeTransp, 'OK', doca, '', onda));
-    });
+  fila.sort((x,y)=> prioridadeDaCarga(x.c)-prioridadeDaCarga(y.c) || x.nomeTransp.localeCompare(y.nomeTransp) || menorPreRomaneio(x.c)-menorPreRomaneio(y.c));
+  fila.forEach(it=>{
+    for(let onda=1; onda<=500; onda++){
+      const doca = it.docasFaixa.find(d=>!ocupado.has(it.un+'|'+d+'|'+onda));
+      if(doca!==undefined){
+        ocupado.add(it.un+'|'+doca+'|'+onda);
+        resultado.push(baseAlocRow(it.c, it.nomeTransp, 'OK', doca, '', onda));
+        break;
+      }
+    }
   });
 
   STATE.alocacao = resultado;
@@ -1661,6 +1793,212 @@ document.addEventListener('DOMContentLoaded', ()=>{
 </script>
 
 <!-- ================= AUTENTICAÇÃO (Firebase) ================= -->
+<script>
+/* =========================================================
+   PAINEL POR DOCA + LISTA POR ONDA + EXCEL
+   ========================================================= */
+(function(){
+  const origSwitch = switchTab;
+  window.switchTab = function(t){ origSwitch(t); if(t==='painel') renderPainel(); };
+})();
+
+function pEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function pDoca(a){ return a.docaManual!=null ? a.docaManual : a.docaSugerida; }
+function pEntregas(a){ return a.pres.reduce((s,p)=>s+(parseInt(p.qtdEntrega)||0),0); }
+function pPresTxt(a){ return a.pres.map(p=>nomeFilial(p.filial)+'·'+p.preRomaneio+'·'+(p.qtdEntrega||0)).join(' | '); }
+function pUnidadeDaDoca(d){
+  const u = STATE.config.unidades.find(u=>getDocasDisponiveisUnidade(u).includes(d));
+  return u ? u.nome : '—';
+}
+
+function pFiltrar(){
+  const fT=document.getElementById('pTransp').value, fF=document.getElementById('pFilial').value, fO=document.getElementById('pOnda').value;
+  return STATE.alocacao.filter(a=>{
+    if(fT && a.transportadora!==fT) return false;
+    if(fF && !a.pres.some(p=>p.filial===fF)) return false;
+    if(fO && (''+a.onda)!==fO) return false;
+    return true;
+  });
+}
+
+function renderPainel(){
+  const sT=document.getElementById('pTransp'), sF=document.getElementById('pFilial'), sO=document.getElementById('pOnda');
+  const cT=sT.value, cF=sF.value, cO=sO.value;
+  const nomes=Array.from(new Set(STATE.alocacao.map(a=>a.transportadora).filter(Boolean))).sort();
+  sT.innerHTML='<option value="">Todas transportadoras</option>'+nomes.map(n=>`<option ${n===cT?'selected':''}>${pEsc(n)}</option>`).join('');
+  sF.innerHTML='<option value="">Todas filiais</option>'+STATE.config.filiais.map(f=>`<option value="${pEsc(f.codigo)}" ${f.codigo===cF?'selected':''}>${pEsc(f.nome)}</option>`).join('');
+  const maxO=Math.max(0,...STATE.alocacao.map(a=>a.onda||0));
+  let oo='<option value="">Todas as ondas</option>';
+  for(let i=1;i<=maxO;i++) oo+=`<option value="${i}" ${(''+i)===cO?'selected':''}>${i}ª Onda</option>`;
+  sO.innerHTML=oo;
+
+  const elD=document.getElementById('pDocas'), elO=document.getElementById('pOndas');
+  if(!STATE.alocacao.length){
+    document.getElementById('pStats').innerHTML='';
+    elD.innerHTML=elO.innerHTML='<div class="empty">Rode a alocação (aba 4) para ver o painel.</div>';
+    return;
+  }
+  const rows=pFiltrar();
+  const alocadas=rows.filter(a=>a.status!=='ALTERAR' && pDoca(a)!=null);
+  const pend=rows.filter(a=>a.status==='ALTERAR' || pDoca(a)==null);
+
+  // agrupar por doca
+  const porDoca={};
+  alocadas.forEach(a=>{ (porDoca[pDoca(a)] = porDoca[pDoca(a)] || []).push(a); });
+  let docas=Object.keys(porDoca).map(Number);
+  if(document.getElementById('pLivres').checked){
+    STATE.config.unidades.forEach(u=>getDocasDisponiveisUnidade(u).forEach(d=>{ if(!docas.includes(d)) docas.push(d); }));
+  }
+  docas.sort((a,b)=>a-b);
+
+  document.getElementById('pStats').innerHTML=[
+    stat(rows.length,'cargas no filtro'), stat(Object.keys(porDoca).length,'docas em uso','var(--amber)'),
+    stat(new Set(alocadas.map(a=>a.onda)).size,'ondas','var(--teal)'), stat(pend.length,'pendências','var(--red)')
+  ].join('').replace(/stat mini/g,'stat');
+
+  elD.innerHTML = docas.length ? docas.map(d=>{
+    const lista=(porDoca[d]||[]).slice().sort((a,b)=>(a.onda-b.onda)||a.prioridade-b.prioridade);
+    const transps=Array.from(new Set(lista.map(a=>a.transportadora)));
+    const conflito=lista.some(a=>lista.some(b=>b!==a && b.onda===a.onda));
+    const ondas={}; lista.forEach(a=>(ondas[a.onda]=ondas[a.onda]||[]).push(a));
+    const corpo=lista.length ? Object.keys(ondas).map(o=>`
+      <div style="margin-top:8px;"><span class="badge neutral">${o}ª onda</span> <span style="color:var(--text-2);font-size:11.5px;">${pEsc(statusOnda(ondas[o][0].transportadora,+o))}</span>
+      ${ondas[o].map(a=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dashed var(--line);font-size:12.5px;">
+        <span><b class="mono">${pEsc(a.placa)}</b> <span style="color:var(--text-2)">${pEsc(a.transportadora)}</span></span>
+        <span style="color:var(--text-1)">${a.pres.length} PRÉ · ${pEntregas(a)} ent. <button class="small ghost" style="margin-left:6px;padding:2px 7px;" title="Alterar doca" onclick="abrirAlterarDoca(${STATE.alocacao.indexOf(a)})">✎</button></span></div>`).join('')}</div>`).join('')
+      : '<div style="color:var(--text-2);font-size:12.5px;margin-top:8px;">Livre</div>';
+    return `<div class="stat" style="${lista.length?'':'opacity:.6;'}">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <div class="num" style="font-size:20px;">Doca ${d}</div>
+        <div>${conflito?'<span class="badge alert">doca dupla na onda</span>':lista.length?'<span class="badge ok">'+lista.length+' carga(s)</span>':'<span class="badge neutral">livre</span>'}</div></div>
+      <div class="lbl">${pEsc(pUnidadeDaDoca(d))}${transps.length?' · '+pEsc(transps.join(', ')):''}</div>${corpo}</div>`;
+  }).join('') : '<div class="empty">Nenhuma carga alocada neste filtro.</div>';
+
+  // lista por onda
+  const porOnda={}; alocadas.forEach(a=>(porOnda[a.onda]=porOnda[a.onda]||[]).push(a));
+  let html=Object.keys(porOnda).map(Number).sort((a,b)=>a-b).map(o=>{
+    const l=porOnda[o].slice().sort((a,b)=>pDoca(a)-pDoca(b)||(a.transportadora||'').localeCompare(b.transportadora||''));
+    return `<h3 style="font-size:14px;margin:16px 0 8px;color:var(--amber);">${o}ª Onda <span style="color:var(--text-2);font-weight:400;">— ${l.length} carga(s) · ${l.reduce((s,a)=>s+pEntregas(a),0)} entregas</span></h3>
+    <div class="table-wrap"><table><thead><tr><th>Doca</th><th>Transportadora</th><th>Placa</th><th>Região</th><th>PRÉs</th><th>Entregas</th><th>Status da onda</th><th></th></tr></thead><tbody>
+    ${l.map(a=>`<tr><td class="mono">${pDoca(a)}</td><td>${pEsc(a.transportadora)}</td><td class="mono">${pEsc(a.placa)}</td><td>${pEsc(a.regiao||'—')}</td><td>${a.pres.length}</td><td>${pEntregas(a)}</td><td>${pEsc(statusOnda(a.transportadora,o))}</td><td><button class="small" onclick="abrirAlterarDoca(${STATE.alocacao.indexOf(a)})">Alterar doca</button></td></tr>`).join('')}
+    </tbody></table></div>`;
+  }).join('');
+  if(pend.length) html+=`<h3 style="font-size:14px;margin:16px 0 8px;color:var(--red);">Pendências — ${pend.length} carga(s)</h3>
+    <div class="table-wrap"><table><thead><tr><th>Placa</th><th>Transportadora</th><th>Motivo</th><th></th></tr></thead><tbody>
+    ${pend.map(a=>`<tr><td class="mono">${pEsc(a.placa)}</td><td>${pEsc(a.transportadora||'—')}</td><td>${pEsc(a.motivo||'')}</td><td><button class="small" onclick="abrirAlterarDoca(${STATE.alocacao.indexOf(a)})">Definir doca</button></td></tr>`).join('')}</tbody></table></div>`;
+  elO.innerHTML=html||'<div class="empty">Nenhuma carga alocada neste filtro.</div>';
+}
+
+/* =========================================================
+   ALTERAR DOCA (respeita a regra: 1 carga por doca por onda)
+   ========================================================= */
+function docasTodas(){
+  const s=new Set(); STATE.config.unidades.forEach(u=>getDocasDisponiveisUnidade(u).forEach(d=>s.add(d)));
+  return Array.from(s).sort((a,b)=>a-b);
+}
+function ocupanteDaDoca(doca, onda, ignoreIdx){
+  return STATE.alocacao.find((b,j)=> j!==ignoreIdx && b.status!=='ALTERAR' && pDoca(b)===doca && b.onda===onda);
+}
+function proximaOndaLivre(doca, onda, ignoreIdx){
+  let o=onda; while(ocupanteDaDoca(doca,o,ignoreIdx) && o<500) o++; return o;
+}
+function aplicarDoca(idx, doca, onda, silencioso){
+  const a=STATE.alocacao[idx]; if(!a) return false;
+  if(!docasTodas().includes(doca)){ toast('Doca '+doca+' não existe ou está indisponível.','err'); return false; }
+  onda = onda>0 ? onda : (a.onda||1);
+  const oc=ocupanteDaDoca(doca,onda,idx);
+  if(oc){
+    const nova=proximaOndaLivre(doca,onda,idx);
+    if(!silencioso && !confirm(`A doca ${doca} já está ocupada na ${onda}ª onda pela placa ${oc.placa} (${oc.transportadora||'—'}).\n\nLançar esta carga (${a.placa}) para a ${nova}ª onda?`)) return false;
+    onda=nova;
+  }
+  a.docaManual=doca; a.onda=onda; a.status='AJUSTADO'; a.motivo='';
+  saveState(); renderAlocacao(); renderPainel();
+  if(document.getElementById('view-dashboard').classList.contains('active')) renderDashboard();
+  toast(`Carga ${a.placa}: doca ${doca}, ${onda}ª onda.`,'ok');
+  return true;
+}
+function removerAjusteDoca(idx){
+  const a=STATE.alocacao[idx]; if(!a) return;
+  a.docaManual=null; a.status=a.docaSugerida!=null?'OK':'ALTERAR';
+  saveState(); renderAlocacao(); renderPainel();
+}
+/* a aba 4 passa a usar a mesma regra */
+window.ajustarDocaManual=function(idx,val){
+  if(val===''){ removerAjusteDoca(idx); return; }
+  aplicarDoca(idx, parseInt(val), 0);
+};
+
+function abrirAlterarDoca(idx){
+  const a=STATE.alocacao[idx]; if(!a) return;
+  fecharAlterarDoca();
+  const cfg=STATE.config.transportadoras.find(t=>t.nome===a.transportadora);
+  const faixa=cfg?docasTodas().filter(d=>d>=cfg.docaIn&&d<=cfg.docaFim):[];
+  const outras=docasTodas().filter(d=>!faixa.includes(d));
+  const atual=pDoca(a);
+  const opt=d=>`<option value="${d}" ${d===atual?'selected':''}>${d}${d===atual?' (atual)':''}</option>`;
+  const ov=document.createElement('div'); ov.id='modalDoca';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML=`<div class="panel" style="width:420px;max-width:100%;margin:0;">
+    <div class="panel-head"><h2>Alterar doca</h2></div>
+    <div style="font-size:13px;color:var(--text-1);margin-bottom:12px;"><b class="mono">${pEsc(a.placa)}</b> · ${pEsc(a.transportadora||'sem transportadora')}<br>
+      Atual: ${atual!=null?'doca '+atual+', '+a.onda+'ª onda':'sem doca'}</div>
+    <div class="grid cols-2">
+      <div><label>Nova doca</label><select id="mdDoca" style="width:100%">
+        ${faixa.length?'<optgroup label="Faixa da transportadora">'+faixa.map(opt).join('')+'</optgroup>':''}
+        <optgroup label="Outras docas">${outras.map(opt).join('')}</optgroup></select></div>
+      <div><label>Onda</label><input id="mdOnda" type="number" min="1" style="width:100%" value="${a.onda||1}"></div>
+    </div>
+    <div id="mdHint" style="margin:12px 0;font-size:12.5px;min-height:34px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+      ${a.docaManual!=null?'<button class="danger small" id="mdRem">Remover ajuste</button>':''}
+      <button id="mdCan">Cancelar</button><button class="primary" id="mdOk">Aplicar</button></div></div>`;
+  document.body.appendChild(ov);
+  const hint=()=>{
+    const d=parseInt(document.getElementById('mdDoca').value), o=parseInt(document.getElementById('mdOnda').value)||1;
+    const oc=ocupanteDaDoca(d,o,idx);
+    document.getElementById('mdHint').innerHTML = oc
+      ? `<span style="color:var(--amber)">Doca ${d} ocupada na ${o}ª onda por <b>${pEsc(oc.placa)}</b> (${pEsc(oc.transportadora||'—')}). Ao aplicar, a carga vai para a <b>${proximaOndaLivre(d,o,idx)}ª onda</b>.</span>`
+      : `<span style="color:var(--teal)">Doca ${d} livre na ${o}ª onda.</span>`;
+  };
+  document.getElementById('mdDoca').onchange=hint; document.getElementById('mdOnda').oninput=hint; hint();
+  document.getElementById('mdCan').onclick=fecharAlterarDoca;
+  ov.addEventListener('click',e=>{ if(e.target===ov) fecharAlterarDoca(); });
+  if(a.docaManual!=null) document.getElementById('mdRem').onclick=()=>{ removerAjusteDoca(idx); fecharAlterarDoca(); };
+  document.getElementById('mdOk').onclick=()=>{
+    const d=parseInt(document.getElementById('mdDoca').value), o=parseInt(document.getElementById('mdOnda').value)||1;
+    if(aplicarDoca(idx,d,o,true)) fecharAlterarDoca();
+  };
+}
+function fecharAlterarDoca(){ const m=document.getElementById('modalDoca'); if(m) m.remove(); }
+
+function exportarListaOndasExcel(){
+  if(typeof XLSX==='undefined'){ toast('Biblioteca de Excel não carregou. Verifique a conexão.','err'); return; }
+  if(!STATE.alocacao.length){ toast('Rode a alocação antes de gerar o Excel.','err'); return; }
+  const rows=pFiltrar();
+  const ok=rows.filter(a=>a.status!=='ALTERAR' && pDoca(a)!=null).sort((a,b)=>(a.onda-b.onda)||(pDoca(a)-pDoca(b))||(a.transportadora||'').localeCompare(b.transportadora||''));
+  const pend=rows.filter(a=>a.status==='ALTERAR' || pDoca(a)==null);
+  const linha=a=>({'Onda':a.onda,'Doca':pDoca(a),'Unidade':pUnidadeDaDoca(pDoca(a)),'Transportadora':a.transportadora||'','Placa':a.placa,'Região':a.regiao||'',
+    'Prioridade':a.prioridade,'Qtd PRÉs':a.pres.length,'Qtd Entregas':pEntregas(a),'PRÉs (filial·nº·qtd)':pPresTxt(a),
+    'Status da onda':statusOnda(a.transportadora,a.onda),'Ajuste manual':a.docaManual!=null?'Sim':'Não'});
+  const wb=XLSX.utils.book_new();
+  const add=(nome,data,cols)=>{ const ws=XLSX.utils.json_to_sheet(data); ws['!cols']=cols.map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,ws,nome.slice(0,31)); };
+  const cols=[7,7,10,20,11,14,10,9,12,60,16,13];
+  add('Lista por Onda', ok.map(linha), cols);
+  const ondas=Array.from(new Set(ok.map(a=>a.onda))).sort((a,b)=>a-b);
+  ondas.forEach(o=>add(o+'a Onda', ok.filter(a=>a.onda===o).map(linha), cols));
+  const pd={}; ok.forEach(a=>{ const d=pDoca(a); (pd[d]=pd[d]||[]).push(a); });
+  add('Resumo por Doca', Object.keys(pd).map(Number).sort((a,b)=>a-b).map(d=>({
+    'Doca':d,'Unidade':pUnidadeDaDoca(d),'Transportadoras':Array.from(new Set(pd[d].map(a=>a.transportadora))).join(', '),
+    'Ondas':Array.from(new Set(pd[d].map(a=>a.onda))).sort((a,b)=>a-b).join(', '),'Cargas':pd[d].length,'Entregas':pd[d].reduce((s,a)=>s+pEntregas(a),0),
+    'Placas':pd[d].map(a=>a.onda+'ª: '+a.placa).join(' | ')})), [7,10,30,12,8,10,70]);
+  if(pend.length) add('Pendências', pend.map(a=>({'Placa':a.placa,'Transportadora':a.transportadora||'','Motivo':a.motivo||'Sem doca'})), [11,22,60]);
+  const ts=new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+  XLSX.writeFile(wb,`lista_por_onda_${ts}.xlsx`);
+  toast('Excel gerado: '+ok.length+' carga(s) em '+ondas.length+' onda(s).','ok');
+}
+</script>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
