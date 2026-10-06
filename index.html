@@ -667,9 +667,44 @@ function loadState(){
     return defaultState();
   }
 }
+/* Espaço total usado pelo localStorage deste site (em KB) — o limite é ~5.000 KB e é COMPARTILHADO
+   por todas as páginas do mesmo domínio (ex.: todos os projetos em usuario.github.io). */
+function usoLocalStorageKB(){
+  let t=0;
+  try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); t += (k.length + (localStorage.getItem(k)||'').length)*2; } }catch(e){}
+  return Math.round(t/1024);
+}
+let _ultimoAvisoSalvar = 0;
+function avisarFalhaSalvar(e, ctx){
+  console.error('Falha ao salvar estado ('+ctx+')', e);
+  if(Date.now() - _ultimoAvisoSalvar < 60000) return;   // não repete o aviso a cada clique
+  _ultimoAvisoSalvar = Date.now();
+  const nome = (e && e.name) || 'Erro';
+  let motivo;
+  if(nome === 'QuotaExceededError' || /quota/i.test(String(e && e.message))){
+    motivo = 'o armazenamento deste site no navegador está cheio ('+usoLocalStorageKB()+' KB usados; os dados da operação ocupam ~'+Math.round(JSON.stringify(STATE).length/1024)+' KB). Outras páginas do mesmo domínio podem estar ocupando o espaço.';
+  } else if(nome === 'SecurityError'){
+    motivo = 'o navegador está bloqueando o armazenamento (aba anônima ou bloqueio de cookies/dados do site).';
+  } else {
+    motivo = 'erro '+nome+'.';
+  }
+  toast('Não foi possível salvar automaticamente: '+motivo+' Faça um Backup manual.', 'err');
+}
 function saveState(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE)); }
-  catch(e){ toast('Não foi possível salvar automaticamente (limite do navegador). Faça um Backup manual.', 'err'); }
+  let json;
+  try{ json = JSON.stringify(STATE); }
+  catch(e){ avisarFalhaSalvar(e,'serializar'); return; }
+  try{ localStorage.setItem(STORAGE_KEY, json); return; }
+  catch(e1){
+    /* 1ª tentativa de recuperação: apaga só chaves ANTIGAS desta ferramenta (prefixo gdn_) e tenta de novo */
+    try{
+      const antigas=[]; for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k && k.indexOf('gdn_')===0 && k!==STORAGE_KEY) antigas.push(k); }
+      antigas.forEach(k=>localStorage.removeItem(k));
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.setItem(STORAGE_KEY, json);
+      return;
+    }catch(e2){ avisarFalhaSalvar(e2,'gravar'); }
+  }
 }
 
 function novaOperacao(){
