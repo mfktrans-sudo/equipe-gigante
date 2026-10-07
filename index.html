@@ -573,6 +573,15 @@
     </div>
     <div class="grid cols-4" id="pStats"></div>
   </div>
+  <div class="panel" id="pFilialPanel">
+    <div class="panel-head">
+      <div><h2>Cargas do dia por filial</h2>
+        <div class="desc">Lista <b>Acumulada</b> (todas as filiais, cada PRÉ na coluna da sua filial) e uma lista para cada filial — CAJ-33, CAJ-05 e D-0 (Golden Store) — com doca, onda, placa e região. O nº da carga é o mesmo em todas as listas. Respeita os filtros acima.</div></div>
+      <button class="primary" onclick="exportarCargasFilialExcel()">⬇ Excel Acumulado + filiais</button>
+    </div>
+    <div id="pFilialTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
+    <div id="pFilialTabela"></div>
+  </div>
   <div class="panel"><div class="panel-head"><h2>Docas</h2></div><div id="pDocas" class="grid cols-3"></div></div>
   <div class="panel"><div class="panel-head"><h2>Lista por onda</h2></div><div id="pOndas"></div></div>
 </div>
@@ -616,8 +625,10 @@ function defaultState(){
     config: {
       filiais: [
         {codigo:'33', nome:'CAJ-33', principal:true},
-        {codigo:'05', nome:'CAJ-05', principal:false}
+        {codigo:'05', nome:'CAJ-05', principal:false},
+        {codigo:'D0', nome:'D-0 (Golden Store)', principal:false}
       ],
+      migFilialD0: true,
       unidades: [
         {id:'caj1', nome:'CAJ-1', docaIni:129, docaFim:168, docasIndisponiveis:[], docasExtras:[]}
       ],
@@ -655,13 +666,27 @@ function defaultState(){
 
 let STATE = loadState();
 
+/* Filial D-0 (Golden Store): estados salvos antes dessa filial existir ganham o cadastro uma única vez
+   (se o usuário remover depois, não é recriada). */
+function garantirFilialD0(st){
+  if(!st || !st.config) return;
+  if(!Array.isArray(st.config.filiais)) st.config.filiais = [];
+  if(st.config.migFilialD0) return;
+  if(!st.config.filiais.some(f=>/^d-?0$/i.test(String(f.codigo||'').trim()))){
+    st.config.filiais.push({codigo:'D0', nome:'D-0 (Golden Store)', principal:false});
+  }
+  st.config.migFilialD0 = true;
+}
 function loadState(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
     if(!raw) return defaultState();
     const parsed = JSON.parse(raw);
     const base = defaultState();
-    return Object.assign(base, parsed, {config: Object.assign(base.config, parsed.config||{})});
+    const st = Object.assign(base, parsed, {config: Object.assign(base.config, parsed.config||{})});
+    st.config.migFilialD0 = !!(parsed.config && parsed.config.migFilialD0);   // marca vem do estado salvo, não do padrão
+    garantirFilialD0(st);
+    return st;
   }catch(e){
     console.error('Falha ao carregar estado, usando padrão', e);
     return defaultState();
@@ -1161,12 +1186,13 @@ function renderResumoAuto(res){
 }
 
 // GAN: linhas "  012805  33  15/09/26 CPG3069"
+function normFilialCod(c){ return /^d-?0$/i.test(c) ? 'D0' : c; }   // "D-0", "d0" -> "D0"
 function parseGAN(texto, regiao){
   const out = [];
-  const re = /(\d{5,6})\s+(\d{2})\s+(\d{2}\/\d{2}\/\d{2,4})\s+([A-Z0-9]{6,8})\b/g;
+  const re = /(\d{5,6})\s+(\d{2}|[Dd]-?0)\s+(\d{2}\/\d{2}\/\d{2,4})\s+([A-Z0-9]{6,8})\b/g;
   let m;
   while((m = re.exec(texto)) !== null){
-    out.push({preRomaneio: m[1].replace(/^0+/,'') || '0', filial: m[2], dataEntrega: m[3], placa: m[4], regiao});
+    out.push({preRomaneio: m[1].replace(/^0+/,'') || '0', filial: normFilialCod(m[2]), dataEntrega: m[3], placa: m[4], regiao});
   }
   return out;
 }
@@ -1174,7 +1200,7 @@ function parseGAN(texto, regiao){
 function parseHEBLS(texto){
   const counts = {};
   texto.split(/\r?\n/).forEach(line=>{
-    const m = line.match(/^\s*(\d{2})\s+(\d+)\s+\S+\s+Nota Fiscal.*(?:Pre.Romaneio|Romaneio)\s*:\s*(\d+)/i);
+    const m = line.match(/^\s*(\d{2}|[Dd]-?0)\s+(\d+)\s+\S+\s+Nota Fiscal.*(?:Pre.Romaneio|Romaneio)\s*:\s*(\d+)/i);
     if(m){ const pr = m[3].replace(/^0+/,'') || '0'; counts[pr] = (counts[pr]||0) + 1; }
   });
   return counts;
@@ -1804,6 +1830,7 @@ function importBackup(ev){
     try{
       const parsed = JSON.parse(e.target.result);
       if(!parsed.config || !parsed.cargas){ toast('Arquivo de backup inválido.', 'err'); return; }
+      garantirFilialD0(parsed);
       STATE = parsed;
       saveState();
       renderParametros(); renderCadastro(); renderConsolidado(); renderOrfaos(); renderAlocacao(); renderDashboard();
@@ -1871,6 +1898,7 @@ function renderPainel(){
   if(!STATE.alocacao.length){
     document.getElementById('pStats').innerHTML='';
     elD.innerHTML=elO.innerHTML='<div class="empty">Rode a alocação (aba 4) para ver o painel.</div>';
+    renderCargasFilial();
     return;
   }
   const rows=pFiltrar();
@@ -1922,6 +1950,7 @@ function renderPainel(){
     <div class="table-wrap"><table><thead><tr><th>Placa</th><th>Transportadora</th><th>Motivo</th><th></th></tr></thead><tbody>
     ${pend.map(a=>`<tr><td class="mono">${pEsc(a.placa)}</td><td>${pEsc(a.transportadora||'—')}</td><td>${pEsc(a.motivo||'')}</td><td><button class="small" onclick="abrirAlterarDoca(${STATE.alocacao.indexOf(a)})">Definir doca</button></td></tr>`).join('')}</tbody></table></div>`;
   elO.innerHTML=html||'<div class="empty">Nenhuma carga alocada neste filtro.</div>';
+  renderCargasFilial();
 }
 
 /* =========================================================
@@ -2007,6 +2036,125 @@ function abrirAlterarDoca(idx){
 }
 function fecharAlterarDoca(){ const m=document.getElementById('modalDoca'); if(m) m.remove(); }
 
+
+/* =========================================================
+   CARGAS DO DIA POR FILIAL + ACUMULADO (tela e Excel)
+   Layout igual ao da planilha Cargas_Acumuladas.xlsx:
+   CARGA | PRÉ-ROMANEIO <filial> ... | PLACAS | DOCA <unidade> | REGIÃO | QTD ENTREGA | ONDA | TRANSP.
+   ========================================================= */
+let pFilialSel = 'ACUM';   // 'ACUM' ou o código da filial
+
+function pAlocada(a){ return a.status!=='ALTERAR' && pDoca(a)!=null; }
+
+/* numera TODAS as cargas (sem filtro) por onda > doca, para o nº da carga não mudar com os filtros;
+   cargas sem doca vão no fim */
+function pCargasNumeradas(){
+  const ok=STATE.alocacao.filter(pAlocada).sort((a,b)=>(a.onda-b.onda)||(pDoca(a)-pDoca(b))||(a.transportadora||'').localeCompare(b.transportadora||''));
+  const pend=STATE.alocacao.filter(a=>!pAlocada(a));
+  return ok.concat(pend).map((a,i)=>({n:i+1, a:a, pend:!pAlocada(a)}));
+}
+function pItensFiltrados(){
+  const keep=new Set(pFiltrar());
+  return pCargasNumeradas().filter(it=>keep.has(it.a));
+}
+function pPreVal(lista){
+  const v=lista.map(p=>String(p.preRomaneio));
+  if(!v.length) return '';
+  return (v.length===1 && /^\d+$/.test(v[0])) ? Number(v[0]) : v.join(' / ');
+}
+function pQtdEntregaPres(lista){ return lista.reduce((s,p)=>s+(parseInt(p.qtdEntrega)||0),0); }
+
+/* filialCod = null -> linha do ACUMULADO; senão linha da lista daquela filial */
+function pLinhaCarga(it, filialCod, temOutras){
+  const a=it.a, d=pDoca(a), uNome=(d!=null)?pUnidadeDaDoca(d):null, f=STATE.config.filiais;
+  const conhecidos=new Set(f.map(x=>x.codigo));
+  const pres = filialCod ? a.pres.filter(p=>p.filial===filialCod) : a.pres;
+  const o={'CARGA':it.n};
+  (filialCod ? f.filter(x=>x.codigo===filialCod) : f).forEach(x=>{
+    o['PRÉ-ROMANEIO '+x.nome]=pPreVal(a.pres.filter(p=>p.filial===x.codigo));
+  });
+  if(!filialCod && temOutras) o['PRÉ-ROMANEIO (filial não cadastrada)']=pPreVal(a.pres.filter(p=>!conhecidos.has(p.filial)));
+  o['PLACAS']=a.placa;
+  STATE.config.unidades.forEach(u=>{ o['DOCA '+u.nome]=(d!=null && uNome===u.nome) ? d+' ('+a.onda+'ªONDA)' : ''; });
+  o['REGIÃO']=a.regiao||'';
+  o['QTD ENTREGA']=pQtdEntregaPres(pres);
+  o['ONDA']=(!it.pend && a.onda!=null) ? a.onda+'ªONDA' : '';
+  o['TRANSP.']=a.transportadora||'';
+  if(!filialCod) o['FILIAIS']=Array.from(new Set(a.pres.map(p=>nomeFilial(p.filial)))).join(' + ');
+  else o['FILIAL']=filialCod;
+  o['OBSERVAÇÃO']= it.pend ? ('SEM DOCA'+(a.motivo?' — '+a.motivo:'')) : (a.docaManual!=null ? 'Doca ajustada manualmente' : '');
+  return o;
+}
+function pLinhasLista(items, filialCod){
+  const conhecidos=new Set(STATE.config.filiais.map(x=>x.codigo));
+  const temOutras=!filialCod && items.some(it=>it.a.pres.some(p=>!conhecidos.has(p.filial)));
+  const its = filialCod ? items.filter(it=>it.a.pres.some(p=>p.filial===filialCod)) : items;
+  const rows = its.map(it=>pLinhaCarga(it, filialCod, temOutras));
+  // coluna de observação só aparece se alguma linha tiver conteúdo
+  if(rows.length && rows.every(r=>!r['OBSERVAÇÃO'])) rows.forEach(r=>{ delete r['OBSERVAÇÃO']; });
+  return {rows:rows, pend:its.map(it=>it.pend)};
+}
+
+function pSelecionarFilialLista(cod){ pFilialSel=cod; renderCargasFilial(); }
+
+function renderCargasFilial(){
+  const elT=document.getElementById('pFilialTabs'), elB=document.getElementById('pFilialTabela');
+  if(!elT||!elB) return;
+  if(!STATE.alocacao.length){
+    elT.innerHTML=''; elB.innerHTML='<div class="empty">Rode a alocação (aba 4) para ver as cargas por filial.</div>'; return;
+  }
+  const items=pItensFiltrados();
+  const abas=[{cod:'ACUM', nome:'Acumulado', n:items.length}].concat(
+    STATE.config.filiais.map(f=>({cod:f.codigo, nome:f.nome, n:items.filter(it=>it.a.pres.some(p=>p.filial===f.codigo)).length})));
+  if(!abas.some(x=>x.cod===pFilialSel)) pFilialSel='ACUM';
+  elT.innerHTML=abas.map(x=>`<button class="${x.cod===pFilialSel?'primary':''}" onclick="pSelecionarFilialLista('${pEsc(x.cod)}')">${pEsc(x.nome)} <span style="opacity:.75">(${x.n})</span></button>`).join('');
+  const cod = pFilialSel==='ACUM' ? null : pFilialSel;
+  const {rows,pend} = pLinhasLista(items, cod);
+  if(!rows.length){ elB.innerHTML='<div class="empty">Nenhuma carga desta filial no filtro atual.</div>'; return; }
+  const cols=Object.keys(rows[0]);
+  const mono=/^(CARGA|PRÉ|PLACAS|DOCA|ONDA|FILIAL$)/;
+  const totEnt=rows.reduce((s,r)=>s+(parseInt(r['QTD ENTREGA'])||0),0);
+  elB.innerHTML=`<div style="color:var(--text-2);font-size:12.5px;margin-bottom:8px;">${rows.length} carga(s) · ${totEnt} entregas${pend.some(Boolean)?' · <span style="color:var(--red)">'+pend.filter(Boolean).length+' sem doca (no fim da lista)</span>':''}</div>
+  <div class="table-wrap" style="max-height:560px;overflow-y:auto;"><table><thead><tr>${cols.map(c=>`<th>${pEsc(c)}</th>`).join('')}</tr></thead><tbody>
+  ${rows.map((r,i)=>`<tr${pend[i]?' style="color:var(--red)"':''}>${cols.map(c=>`<td${mono.test(c)?' class="mono"':''}>${pEsc(r[c])}</td>`).join('')}</tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function pNomeAba(nome, usados){
+  let n=String(nome).replace(/[\[\]:*?\/\\]/g,'').trim().slice(0,31)||'Aba', base=n, i=2;
+  while(usados.has(n.toLowerCase())){ n=base.slice(0,28)+' '+(i++); }
+  usados.add(n.toLowerCase()); return n;
+}
+function pAddSheetsFilial(wb){
+  const items=pItensFiltrados(), usados=new Set((wb.SheetNames||[]).map(x=>x.toLowerCase()));
+  const addAba=(nome, filialCod)=>{
+    const {rows}=pLinhasLista(items, filialCod);
+    let ws;
+    if(rows.length){
+      ws=XLSX.utils.json_to_sheet(rows);
+      const cols=Object.keys(rows[0]);
+      ws['!cols']=cols.map(c=>({wch:Math.min(46, Math.max(c.length, ...rows.map(r=>String(r[c]==null?'':r[c]).length))+2)}));
+      ws['!freeze']={xSplit:0,ySplit:1};
+    } else ws=XLSX.utils.aoa_to_sheet([['Nenhuma carga desta filial no filtro atual.']]);
+    XLSX.utils.book_append_sheet(wb, ws, pNomeAba(nome, usados));
+    return rows.length;
+  };
+  const res={acum:addAba('Carga Acumulada', null)};
+  STATE.config.filiais.forEach(f=>{
+    const nomeAba = /^\d+$/.test(String(f.codigo)) ? 'Carga '+f.codigo : 'Carga '+f.nome;
+    res[f.codigo]=addAba(nomeAba, f.codigo);
+  });
+  return res;
+}
+function exportarCargasFilialExcel(){
+  if(typeof XLSX==='undefined'){ toast('Biblioteca de Excel não carregou. Verifique a conexão.','err'); return; }
+  if(!STATE.alocacao.length){ toast('Rode a alocação antes de gerar o Excel.','err'); return; }
+  const wb=XLSX.utils.book_new(), r=pAddSheetsFilial(wb);
+  const ts=new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
+  XLSX.writeFile(wb,`cargas_acumuladas_por_filial_${ts}.xlsx`);
+  toast('Excel gerado: '+r.acum+' carga(s) no acumulado + '+STATE.config.filiais.length+' aba(s) de filial.','ok');
+}
+
 function exportarListaOndasExcel(){
   if(typeof XLSX==='undefined'){ toast('Biblioteca de Excel não carregou. Verifique a conexão.','err'); return; }
   if(!STATE.alocacao.length){ toast('Rode a alocação antes de gerar o Excel.','err'); return; }
@@ -2017,6 +2165,7 @@ function exportarListaOndasExcel(){
     'Prioridade':a.prioridade,'Qtd PRÉs':a.pres.length,'Qtd Entregas':pEntregas(a),'PRÉs (filial·nº·qtd)':pPresTxt(a),
     'Status da onda':statusOnda(a.transportadora,a.onda),'Ajuste manual':a.docaManual!=null?'Sim':'Não'});
   const wb=XLSX.utils.book_new();
+  pAddSheetsFilial(wb);
   const add=(nome,data,cols)=>{ const ws=XLSX.utils.json_to_sheet(data); ws['!cols']=cols.map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,ws,nome.slice(0,31)); };
   const cols=[7,7,10,20,11,14,10,9,12,60,16,13];
   add('Lista por Onda', ok.map(linha), cols);
