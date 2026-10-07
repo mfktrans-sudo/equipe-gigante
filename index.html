@@ -626,9 +626,9 @@ function defaultState(){
       filiais: [
         {codigo:'33', nome:'CAJ-33', principal:true},
         {codigo:'05', nome:'CAJ-05', principal:false},
-        {codigo:'D0', nome:'D-0 (Golden Store)', principal:false}
+        {codigo:'D0', nome:'CAJ-D0', principal:false}
       ],
-      migFilialD0: true,
+      migFilialCAJD0: true,
       unidades: [
         {id:'caj1', nome:'CAJ-1', docaIni:129, docaFim:168, docasIndisponiveis:[], docasExtras:[]}
       ],
@@ -666,16 +666,23 @@ function defaultState(){
 
 let STATE = loadState();
 
-/* Filial D-0 (Golden Store): estados salvos antes dessa filial existir ganham o cadastro uma única vez
-   (se o usuário remover depois, não é recriada). */
+/* Filial D0 = CAJ-D0 (Golden Store). Uma única vez por estado salvo: junta qualquer cadastro parecido
+   (D-0, D0, Golden...) numa só filial "CAJ-D0" e corrige os PREs que apontavam para o cadastro antigo. */
 function garantirFilialD0(st){
   if(!st || !st.config) return;
   if(!Array.isArray(st.config.filiais)) st.config.filiais = [];
-  if(st.config.migFilialD0) return;
-  if(!st.config.filiais.some(f=>/^d-?0$/i.test(String(f.codigo||'').trim()))){
-    st.config.filiais.push({codigo:'D0', nome:'D-0 (Golden Store)', principal:false});
-  }
-  st.config.migFilialD0 = true;
+  if(st.config.migFilialCAJD0) return;
+  const ehD0 = f => /^d[\s-]*0$/i.test(String(f.codigo||'').trim()) || /^d[\s-]*0\b|golden/i.test(String(f.nome||'').trim());
+  const antigos = new Set(st.config.filiais.filter(ehD0).map(f=>String(f.codigo||'').trim()).filter(Boolean));
+  const novo = {codigo:'D0', nome:'CAJ-D0', principal:false}, out = []; let ok = false;
+  st.config.filiais.forEach(f=>{ if(ehD0(f)){ if(!ok){ out.push(novo); ok = true; } } else out.push(f); });
+  if(!ok) out.push(novo);
+  st.config.filiais = out;
+  const remap = x => { if(x && (antigos.has(String(x.filial)) || /^d-?0$/i.test(String(x.filial||'')))) x.filial = 'D0'; };
+  (st.cargas||[]).forEach(c=>(c.pres||[]).forEach(remap));
+  (st.alocacao||[]).forEach(a=>(a.pres||[]).forEach(remap));
+  (st.presOrfaos||[]).forEach(remap);
+  st.config.migFilialCAJD0 = true;
 }
 function loadState(){
   try{
@@ -684,7 +691,7 @@ function loadState(){
     const parsed = JSON.parse(raw);
     const base = defaultState();
     const st = Object.assign(base, parsed, {config: Object.assign(base.config, parsed.config||{})});
-    st.config.migFilialD0 = !!(parsed.config && parsed.config.migFilialD0);   // marca vem do estado salvo, não do padrão
+    st.config.migFilialCAJD0 = !!(parsed.config && parsed.config.migFilialCAJD0);   // marca vem do estado salvo, não do padrão
     garantirFilialD0(st);
     return st;
   }catch(e){
@@ -1297,6 +1304,8 @@ function consolidarUploads(){
     }
   });
 
+  // atualiza os PREs das cargas já alocadas sem refazer a alocação (preserva docas ajustadas à mão)
+  STATE.alocacao.forEach(a=>{ const c=STATE.cargas.find(x=>x.id===a.cargaId); if(c) a.pres=c.pres; });
   saveState();
   renderConsolidado();
   renderOrfaos();
