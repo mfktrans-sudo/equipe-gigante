@@ -222,6 +222,8 @@
   table.mx td.mx-free:hover{background:#22c55e;outline:2px solid #fff;outline-offset:-2px;}
   table.mx td.mx-dup{background:#ffb3b8;}
   table.mx td.mx-adj{box-shadow:inset 0 0 0 2px #f59e0b;}
+  table.mx td.mx-ts{box-shadow:inset 0 0 0 2px #0d9488;}
+  table.mx td.mx-tsres{color:#fff;font-size:11px;box-shadow:inset 0 0 0 2px #0d9488;}
   @media (max-width:1100px){
     .pf-layout{grid-template-columns:1fr;}
     #pFilialPanel.pf-sticky{position:static;box-shadow:none;}
@@ -352,9 +354,9 @@
   <button class="tab-btn active" data-tab="parametros" onclick="switchTab('parametros')">1 · Parâmetros</button>
   <button class="tab-btn" data-tab="cadastro" onclick="switchTab('cadastro')">2 · Cadastro de Placas</button>
   <button class="tab-btn" data-tab="upload" onclick="switchTab('upload')">3 · Upload &amp; Consolidação</button>
-  <button class="tab-btn" data-tab="dashboard" onclick="switchTab('dashboard')">4 · Indicadores</button>
-  <button class="tab-btn" data-tab="painel" onclick="switchTab('painel')">5 · Painel por Doca &amp; Ondas</button>
-  <button class="tab-btn" data-tab="iscas" onclick="switchTab('iscas')">6 · Iscas</button>
+  <button class="tab-btn" data-tab="painel" onclick="switchTab('painel')">4 · Painel por Doca &amp; Ondas</button>
+  <button class="tab-btn" data-tab="iscas" onclick="switchTab('iscas')">5 · Iscas</button>
+  <button class="tab-btn" data-tab="dashboard" onclick="switchTab('dashboard')">6 · Indicadores</button>
   <button class="tab-btn" data-tab="backup" onclick="switchTab('backup')">7 · Backup &amp; Upload</button>
 </div>
 
@@ -423,7 +425,7 @@
 <div class="view" id="view-upload">
 
   <div class="panel">
-    <div class="panel-head"><div><h2>Carregar arquivos</h2><div class="desc">Solte todos os arquivos de uma vez (.txt ou .zip). A ferramenta identifica o tipo de cada um sozinha, pelo conteúdo.</div></div></div>
+    <div class="panel-head"><div><h2>Carregar arquivos</h2><div class="desc">Solte todos os arquivos de uma vez (.txt, .zip e a planilha .xlsx da base de TS São Paulo). A ferramenta identifica o tipo de cada um sozinha, pelo conteúdo. A base de TS pode vir primeiro: ela define a doca/onda das placas que vão junto.</div></div></div>
     <div class="dropzone" onclick="document.getElementById('inpAUTO').click()"
          ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDropAuto(event)">
       <span class="k">Clique ou arraste todos os arquivos aqui</span>múltiplos arquivos misturados · arquivos .zip são extraídos automaticamente
@@ -469,7 +471,7 @@
 
   <div class="panel">
     <div class="panel-head">
-      <div><h2>Consolidar</h2><div class="desc">Junta GAN + Log de NF + Região pela chave Pré-Romaneio/Placa. Se a placa já existir numa carga, o novo PRÉ é adicionado a ela (nunca cria uma carga separada só por ser de outra filial).</div></div>
+      <div><h2>Consolidar</h2><div class="desc">Junta GAN + Log de NF + Região pela chave Pré-Romaneio/Placa e aplica a base de TS São Paulo (doca/onda por placa). Se a placa já existir numa carga, o novo PRÉ é adicionado a ela (nunca cria uma carga separada só por ser de outra filial).</div></div>
       <div style="display:flex;gap:8px;">
         <button class="danger small" onclick="limparUploadsPendentes()">Limpar arquivos carregados</button>
         <button class="primary" onclick="consolidarUploads()">Consolidar →</button>
@@ -477,6 +479,19 @@
       </div>
     </div>
     <div id="uploadSummary" class="empty">Carregue os arquivos acima para ver a prévia aqui.</div>
+  </div>
+
+  <div class="panel" id="panelTS" style="display:none;">
+    <div class="panel-head">
+      <div><h2>TS São Paulo — doca/onda das placas</h2><div class="desc">Os mesmos veículos levam as TS e as cargas desta ferramenta. A doca/onda de cada placa na base TS é a doca/onda em que a carga será alocada (as demais cargas são alocadas em volta). Confira o resultado aqui depois de “Rodar alocação”.</div></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <label style="margin:0;font-size:12px;color:var(--text-2);">Doca das cargas = coluna
+          <select id="tsColuna" onchange="tsMudarColuna(this.value)" style="margin-left:4px;"><option value="doca">DOCA</option><option value="docaTS">DOCA-05</option></select></label>
+        <button class="small danger" onclick="limparTS()">Remover base TS</button>
+      </div>
+    </div>
+    <div id="tsStats"></div>
+    <div class="table-wrap"><table id="tblTS"><thead><tr><th>Seq.</th><th>Loja TS</th><th>Placa</th><th>PRÉ-05</th><th>DOCA-05</th><th>DOCA</th><th>Situação na ferramenta</th></tr></thead><tbody></tbody></table></div>
   </div>
 
   <div class="panel" id="panelOrfaos" style="display:none;">
@@ -741,8 +756,10 @@ function defaultState(){
         {nome:'GALLOG', unidade:'caj1', docaIn:157, docaFim:162, prioridade:21},
         {nome:'HELOG', unidade:'caj1', docaIn:162, docaFim:162, prioridade:22}
       ],
-      cadastroPlacas: []
+      cadastroPlacas: [],
+      tsColuna: 'doca'     // coluna da base TS que define a doca das cargas: 'doca' (DOCA) ou 'docaTS' (DOCA-05)
     },
+    ts: [],               // base TS São Paulo do dia: {placa, loja, pre05[], presOutros[], docaTS:{doca,onda}, doca:{doca,onda}, ...}
     cargas: [],          // {id, placa, transportadora, regiao, territorio, pres:[{preRomaneio,filial,qtdEntrega,dataEntrega}]}
     presOrfaos: [],       // {preRomaneio, qtdEntrega, filial, placaInformada}
     alocacao: [],          // computed by rodarAlocacao(): {cargaId, placa, transportadora, prioridade, onda, doca, docaManual, status, motivo}
@@ -833,8 +850,9 @@ function novaOperacao(){
   STATE.alocacao = [];
   STATE.ondaStatus = {};
   STATE.iscas = [];
+  STATE.ts = [];
   saveState();
-  renderConsolidado(); renderAlocacao(); renderDashboard(); renderIscas();
+  renderConsolidado(); renderAlocacao(); renderDashboard(); renderIscas(); renderTS();
   toast('Operação limpa. Parâmetros e cadastro de placas foram mantidos.', 'ok');
 }
 
@@ -1124,7 +1142,7 @@ function revincularTransportadoras(){
 /* =========================================================
    UPLOAD & PARSERS
    ========================================================= */
-let PENDING = { GAN: [], HEBLS: [], REGIAO: [] };
+let PENDING = { GAN: [], HEBLS: [], REGIAO: [], TS: [] };
 
 function handleDrop(ev, tipo){ ev.preventDefault(); ev.currentTarget.classList.remove('drag'); handleFiles(Array.from(ev.dataTransfer.files), tipo); }
 
@@ -1202,12 +1220,12 @@ function renderFileList(tipo){
   if(el) el.innerHTML = '';
   renderArquivosCarregados();
 }
-const ROTULO_TIPO = {GAN:'GAN', HEBLS:'Log de NF', REGIAO:'Região'};
+const ROTULO_TIPO = {GAN:'GAN', HEBLS:'Log de NF', REGIAO:'Região', TS:'TS São Paulo'};
 function renderArquivosCarregados(){
   const el = document.getElementById('arquivosCarregadosLista');
   if(!el) return;
   const linhas = [];
-  ['GAN','HEBLS','REGIAO'].forEach(tipo=>{
+  ['TS','GAN','HEBLS','REGIAO'].forEach(tipo=>{
     PENDING[tipo].forEach((f,idx)=>{
       linhas.push(`<div class="fitem"><span><b>${escAuto(ROTULO_TIPO[tipo])}</b> · ${escAuto(f.nome)} ${f.regiao?('<span class="mono" style="color:var(--text-2)">('+escAuto(f.regiao)+')</span>'):''}</span><span style="cursor:pointer;color:var(--red)" onclick="removePending('${tipo}',${idx})">remover</span></div>`);
     });
@@ -1217,10 +1235,10 @@ function renderArquivosCarregados(){
 /* nome já carregado em qualquer tipo? (sem diferenciar maiúsculas/minúsculas) */
 function arquivoJaCarregado(nome){
   const k = String(nome||'').trim().toLowerCase();
-  return ['GAN','HEBLS','REGIAO'].some(t=>PENDING[t].some(p=>String(p.nome).trim().toLowerCase()===k));
+  return ['GAN','HEBLS','REGIAO','TS'].some(t=>PENDING[t].some(p=>String(p.nome).trim().toLowerCase()===k));
 }
 function removePending(tipo, idx){ PENDING[tipo].splice(idx,1); renderFileList(tipo); atualizarPreviaUpload(); }
-function limparUploadsPendentes(){ PENDING={GAN:[],HEBLS:[],REGIAO:[]}; var rs=document.getElementById('autoResumo'); if(rs) rs.innerHTML=''; ['GAN','HEBLS','REGIAO'].forEach(renderFileList); atualizarPreviaUpload(); toast('Arquivos carregados limpos.', 'ok'); }
+function limparUploadsPendentes(){ PENDING={GAN:[],HEBLS:[],REGIAO:[],TS:[]}; var rs=document.getElementById('autoResumo'); if(rs) rs.innerHTML=''; ['GAN','HEBLS','REGIAO'].forEach(renderFileList); atualizarPreviaUpload(); toast('Arquivos carregados limpos.', 'ok'); }
 
 /* ---------- UPLOAD ÚNICO: identificação automática do tipo ---------- */
 function escAuto(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -1257,7 +1275,9 @@ async function extrairZipItens(file){
       if(/(^|\/)(__MACOSX|\.DS_Store)/.test(entry.name)) continue;
       try{
         const u8 = await entry.async('uint8array');
-        itens.push({nome: entry.name.split('/').pop(), texto: new TextDecoder('iso-8859-1').decode(u8)});
+        const nomeBase = entry.name.split('/').pop();
+        if(tsEhPlanilha(nomeBase)) itens.push({nome: nomeBase, buf: u8.buffer.slice(u8.byteOffset, u8.byteOffset+u8.byteLength)});
+        else itens.push({nome: nomeBase, texto: new TextDecoder('iso-8859-1').decode(u8)});
       }catch(err){ toast('Falha ao extrair '+entry.name+' do zip.', 'err'); }
     }
     if(!itens.length) toast('O arquivo '+file.name+' (.zip) não contém arquivos aproveitáveis.', 'err');
@@ -1286,12 +1306,24 @@ async function _handleFilesAutoInterno(arquivos){
     if(isZip){
       (await extrairZipItens(file)).forEach(i=>itens.push(i));
     } else {
-      try{ itens.push({nome:file.name, texto: await lerArquivoComoTexto(file)}); }
+      try{
+        if(tsEhPlanilha(file.name)) itens.push({nome:file.name, buf: await file.arrayBuffer()});   // planilha Excel = base TS São Paulo
+        else itens.push({nome:file.name, texto: await lerArquivoComoTexto(file)});
+      }
       catch(err){ toast('Falha ao ler '+file.name, 'err'); }
     }
   }
-  const res = {ok:{GAN:0, HEBLS:0, REGIAO:0}, porNome:[], repetidos:[], naoReconhecidos:[]};
+  const res = {ok:{GAN:0, HEBLS:0, REGIAO:0, TS:0}, porNome:[], repetidos:[], naoReconhecidos:[], ts:[]};
   itens.forEach(it=>{
+    if(it.buf){   // planilha Excel: só é aceita se tiver o layout da base de TS (PLACA + DOCA + LOJA/PRE-05)
+      const linhas = parseTSPlanilha(it.buf);
+      if(!linhas.length){ res.naoReconhecidos.push(it.nome+' (planilha sem as colunas PLACA / DOCA / LOJA da base TS)'); return; }
+      if(arquivoJaCarregado(it.nome)){ res.repetidos.push(it.nome); return; }
+      PENDING.TS.push({nome: it.nome, regiao: linhas.length+' linhas', texto:'', linhas});
+      res.ok.TS++;
+      res.ts.push({nome: it.nome, linhas: linhas.length, placas: new Set(linhas.map(l=>l.placa)).size});
+      return;
+    }
     const det = detectarTipoArquivo(it.nome, it.texto);
     if(!det){ res.naoReconhecidos.push(it.nome); return; }
     // mesmo arquivo solto duas vezes dobraria a contagem de NFs do hebls
@@ -1314,6 +1346,7 @@ function renderResumoAuto(res){
   const lista = arr => arr.map(n=>'<span class="mono">'+escAuto(n)+'</span>').join(', ');
   const total = res.ok.GAN + res.ok.HEBLS + res.ok.REGIAO;
   let h = '';
+  if(res.ts && res.ts.length) h += res.ts.map(t=>box('--teal', `Base TS São Paulo reconhecida: <span class="mono">${escAuto(t.nome)}</span> — ${t.linhas} linha(s), ${t.placas} placa(s). Ao consolidar, a doca/onda de cada placa passa a valer para as cargas que vão junto.`)).join('');
   if(res.porNome.length) h += box('--amber', `Tipo definido só pelo nome (nenhuma linha reconhecida no conteúdo): ${lista(res.porNome)}`);
   if(res.repetidos.length) h += box('--amber', `Não carregado(s) — já existe(m) arquivo(s) com o mesmo nome: ${lista(res.repetidos)}. Remova o existente em “Arquivos carregados” antes de enviar de novo.`);
   if(res.naoReconhecidos.length) h += box('--red', `Não reconhecido(s): ${lista(res.naoReconhecidos)}. Se for de um desses tipos com formato diferente, use o envio manual abaixo.`);
@@ -1360,14 +1393,16 @@ function parseREGIAO(texto, regiao){
 
 function atualizarPreviaUpload(){
   const el = document.getElementById('uploadSummary');
-  const totalGAN = PENDING.GAN.length, totalHEBLS = PENDING.HEBLS.length, totalREGIAO = PENDING.REGIAO.length;
-  if(totalGAN+totalHEBLS+totalREGIAO === 0){ el.className='empty'; el.textContent='Carregue os arquivos acima para ver a prévia aqui.'; return; }
+  const totalGAN = PENDING.GAN.length, totalHEBLS = PENDING.HEBLS.length, totalREGIAO = PENDING.REGIAO.length, totalTS = PENDING.TS.length;
+  if(totalGAN+totalHEBLS+totalREGIAO+totalTS === 0){ el.className='empty'; el.textContent='Carregue os arquivos acima para ver a prévia aqui.'; return; }
   let ganRows=0, heblsCount=0, regiaoRows=0;
   PENDING.GAN.forEach(f=> ganRows += parseGAN(f.texto, f.regiao).length);
   PENDING.HEBLS.forEach(f=> { const c=parseHEBLS(f.texto); heblsCount += Object.values(c).reduce((a,b)=>a+b,0); });
   PENDING.REGIAO.forEach(f=> regiaoRows += parseREGIAO(f.texto, f.regiao).length);
+  let tsRows = 0; PENDING.TS.forEach(f=> tsRows += f.linhas.length);
   el.className = '';
-  el.innerHTML = `<div class="grid cols-3">
+  el.innerHTML = `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));">
+    ${totalTS?`<div class="stat"><div class="num">${tsRows}</div><div class="lbl">linhas da base TS São Paulo</div></div>`:''}
     <div class="stat"><div class="num">${ganRows}</div><div class="lbl">registros Placa/Pré-Romaneio (GAN)</div></div>
     <div class="stat"><div class="num">${heblsCount}</div><div class="lbl">notas fiscais lidas</div></div>
     <div class="stat"><div class="num">${regiaoRows}</div><div class="lbl">linhas de detalhe (Região)</div></div>
@@ -1377,8 +1412,11 @@ function atualizarPreviaUpload(){
 function getCargaPorPlaca(placa){ const k=placaKey(placa); return k ? STATE.cargas.find(c=>placaKey(c.placa)===k) : undefined; }
 
 function consolidarUploads(){
-  const totalArquivos = PENDING.GAN.length + PENDING.HEBLS.length + PENDING.REGIAO.length;
+  const totalArquivos = PENDING.GAN.length + PENDING.HEBLS.length + PENDING.REGIAO.length + PENDING.TS.length;
   if(totalArquivos === 0){ toast('Carregue ao menos um arquivo antes de consolidar.', 'err'); return; }
+
+  // a base de TS São Paulo entra primeiro: ela define a doca/onda que as demais cargas da mesma placa vão usar
+  const tsResumo = PENDING.TS.length ? aplicarTSPendentes() : null;
 
   let ganRecords = [];
   PENDING.GAN.forEach(f=> ganRecords = ganRecords.concat(parseGAN(f.texto, f.regiao)));
@@ -1401,7 +1439,14 @@ function consolidarUploads(){
     return {territorio:best, regiao:info.regiao};
   }
 
-  if(ganRecords.length === 0){ toast('Nenhum registro reconhecido nos arquivos GAN. Verifique o formato do arquivo.', 'err'); return; }
+  if(ganRecords.length === 0){
+    if(tsResumo && !PENDING.HEBLS.length && !PENDING.REGIAO.length){   // só a base TS foi enviada (primeiro passo)
+      renderTS();
+      toast(tsResumo.msg+' Agora carregue as demais bases e consolide de novo.', tsResumo.warn ? 'err' : 'ok');
+      return;
+    }
+    toast('Nenhum registro reconhecido nos arquivos GAN. Verifique o formato do arquivo.', 'err'); return;
+  }
 
   // mapa preRomaneio+filial -> cargaId, para detectar duplicidade
   const presIndex = {};
@@ -1453,12 +1498,14 @@ function consolidarUploads(){
   saveState();
   renderConsolidado();
   renderOrfaos();
+  renderTS();
 
   semTransportadora = STATE.cargas.filter(c=>!c.transportadora).length;
   let msg = `${cargasNovas} carga(s) nova(s), ${presAdicionados} PRÉ(s) adicionado(s).`;
   if(semTransportadora) msg += ` ${semTransportadora} carga(s) com placa sem transportadora cadastrada.`;
   if(duplicidadesDetectadas) msg += ` ${duplicidadesDetectadas} duplicidade(s) ignorada(s) — veja o alerta.`;
-  toast(msg, (semTransportadora||duplicidadesDetectadas) ? 'err' : 'ok');
+  if(tsResumo) msg += ' '+tsResumo.msg;
+  toast(msg, (semTransportadora||duplicidadesDetectadas||(tsResumo&&tsResumo.warn)) ? 'err' : 'ok');
 }
 
 function renderOrfaos(){
@@ -1558,6 +1605,165 @@ function limparCargas(){
    Regra: veículos ÷ docas parametrizadas/disponíveis = nº de ondas.
    As ondas reaproveitam sempre as MESMAS docas da transportadora.
    ========================================================= */
+/* =========================================================
+   BASE TS SÃO PAULO
+   Planilha .xlsx (layout "CARGAS OTIMIZADAS": DATA, SEQ., LOJA, PRE-05, PRÉROMANEIO, DOCA-05, DOCA, ..., PLACA).
+   Os mesmos veículos levam as TS e as cargas desta ferramenta; por isso a doca/onda que consta na base TS
+   para a placa é a doca/onda da carga na ferramenta.
+   ========================================================= */
+function tsEhPlanilha(nome){ return /\.(xlsx|xlsm|xls|ods)$/i.test(String(nome||'')); }
+function tsNormHdr(s){ return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
+function tsParseDoca(v){            // "167 (1° onda)" -> {doca:167, onda:1};  "163" -> {doca:163, onda:null}
+  const t = String(v==null?'':v);
+  const m = t.match(/(\d+)/); if(!m) return null;
+  const o = t.match(/(\d+)\s*[°ºªo]?\s*onda/i);
+  return {doca: parseInt(m[1],10), onda: o ? parseInt(o[1],10) : null};
+}
+function tsParsePres(v){ return String(v==null?'':v).split(/[\/;,\s]+/).map(x=>x.replace(/\D/g,'').replace(/^0+/,'')).filter(Boolean); }
+function tsTexto(v){
+  if(typeof v==='number' && v>20000 && v<80000 && typeof XLSX!=='undefined' && XLSX.SSF){ try{ return XLSX.SSF.format('dd/mm/yyyy', v); }catch(e){} }
+  return String(v==null?'':v).trim();
+}
+function parseTSPlanilha(buf){
+  if(typeof XLSX==='undefined') return [];
+  let wb; try{ wb = XLSX.read(buf, {type:'array'}); }catch(e){ return []; }
+  const out = [];
+  wb.SheetNames.forEach(sn=>{
+    const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sn], {header:1, defval:'', raw:true});
+    let h = -1, col = {};
+    for(let i=0; i<Math.min(aoa.length,15); i++){
+      const m = {}; (aoa[i]||[]).forEach((c,j)=>{ const k = tsNormHdr(c); if(k && m[k]===undefined) m[k] = j; });
+      if(m.PLACA!==undefined && m.DOCA!==undefined && (m.LOJA!==undefined || m.PRE05!==undefined)){ h = i; col = m; break; }
+    }
+    if(h<0) return;
+    const g = (r,k)=> col[k]!==undefined ? r[col[k]] : '';
+    for(let i=h+1; i<aoa.length; i++){
+      const r = aoa[i]; if(!r) continue;
+      const placa = placaKey(g(r,'PLACA')); if(!placa) continue;
+      out.push({
+        data: tsTexto(g(r,'DATA')), seq: g(r,'SEQ'), loja: tsTexto(g(r,'LOJA')), placa,
+        pre05: tsParsePres(g(r,'PRE05')), presOutros: tsParsePres(g(r,'PREROMANEIO')),
+        docaTS: tsParseDoca(g(r,'DOCA05')), doca: tsParseDoca(g(r,'DOCA')),
+        volumes: g(r,'VOLUMES'), qtdNF: g(r,'QTDNF'), cub: g(r,'CUB'), motorista: tsTexto(g(r,'MOTORISTA'))
+      });
+    }
+  });
+  return out;
+}
+/* placa -> {doca, onda (da coluna escolhida), docaTS, lojas[], pre05[], ...}. Entradas sem doca ficam só com os dados da TS. */
+function tsMapaPorPlaca(){
+  const col = (STATE.config && STATE.config.tsColuna)==='docaTS' ? 'docaTS' : 'doca';
+  const m = {};
+  (STATE.ts||[]).forEach(r=>{
+    const k = placaKey(r.placa); if(!k) return;
+    const e = m[k] || (m[k] = {placa:k, doca:null, onda:null, lojas:[], pre05:[], presOutros:[], linhas:[], conflito:false});
+    const d = r[col];
+    if(d && d.doca!=null){
+      if(e.doca==null){ e.doca = d.doca; e.onda = d.onda; }
+      else if(e.doca!==d.doca || e.onda!==d.onda) e.conflito = true;      // mantém a primeira
+    }
+    if(r.loja && e.lojas.indexOf(r.loja)<0) e.lojas.push(r.loja);
+    r.pre05.forEach(x=>{ if(e.pre05.indexOf(x)<0) e.pre05.push(x); });
+    r.presOutros.forEach(x=>{ if(e.presOutros.indexOf(x)<0) e.presOutros.push(x); });
+    e.linhas.push(r);
+  });
+  return m;
+}
+function tsInfoPlaca(placa){ return tsMapaPorPlaca()[placaKey(placa)] || {lojas:[], pre05:[]}; }
+
+function aplicarTSPendentes(){
+  const linhas = [], vistos = new Set(), datas = new Set();
+  PENDING.TS.forEach(f=> f.linhas.forEach(l=>{
+    const k = [l.placa, l.loja, l.pre05.join('/'), l.presOutros.join('/')].join('|');
+    if(vistos.has(k)) return; vistos.add(k); linhas.push(l); if(l.data) datas.add(l.data);
+  }));
+  STATE.ts = linhas;
+  saveState();
+  const m = tsMapaPorPlaca(), placas = Object.keys(m);
+  const comDoca = placas.filter(k=>m[k].doca!=null).length;
+  const conflitos = placas.filter(k=>m[k].conflito);
+  let msg = `Base TS: ${linhas.length} linha(s), ${placas.length} placa(s), ${comDoca} com doca/onda definida.`;
+  if(comDoca<placas.length) msg += ` ${placas.length-comDoca} placa(s) sem doca na coluna escolhida.`;
+  if(conflitos.length) msg += ` Placa(s) com mais de uma doca na base (vale a primeira): ${conflitos.join(', ')}.`;
+  if(datas.size>1) msg += ` Atenção: a base tem mais de uma data (${Array.from(datas).join(', ')}).`;
+  return {msg, placas: placas.length, linhas: linhas.length, warn: !!(comDoca<placas.length || conflitos.length || datas.size>1)};
+}
+
+/* Fixa doca/onda das cargas cujas placas constam na base TS. Reserva também o campo das placas da TS que
+   ainda não têm carga na ferramenta, para nenhuma outra carga ocupar a doca/onda delas. */
+function aplicarDocasTS(resultado, ocupado){
+  const ids = new Set(); let n = 0;
+  const lista = Object.values(tsMapaPorPlaca()).filter(e=>e.doca!=null)
+    .sort((a,b)=>((a.onda||1)-(b.onda||1)) || (a.doca-b.doca) || a.placa.localeCompare(b.placa));
+  lista.forEach(e=>{
+    const c = STATE.cargas.find(x=>placaKey(x.placa)===e.placa);
+    const un = STATE.config.unidades.find(u=>getDocasDisponiveisUnidade(u).includes(e.doca));
+    if(!un){
+      if(c){ ids.add(c.id); resultado.push(baseAlocRow(c, c.transportadora||null, 'ALTERAR', null, 'Doca '+e.doca+' da base TS não existe ou está indisponível nos Parâmetros')); }
+      return;
+    }
+    let onda = e.onda || 1, moveu = false;
+    while(ocupado.has(un.id+'|'+e.doca+'|'+onda) && onda<500){ onda++; moveu = true; }
+    ocupado.add(un.id+'|'+e.doca+'|'+onda);
+    if(!c) return;
+    ids.add(c.id);
+    const row = baseAlocRow(c, c.transportadora||null, 'OK', e.doca, moveu ? ('Base TS: doca '+e.doca+' / '+e.onda+'ª onda já ocupada por outra placa da base — movida para a '+onda+'ª onda') : '', onda);
+    row.ts = true;
+    resultado.push(row); n++;
+  });
+  return {ids, n};
+}
+/* 'doca|onda' -> placa, das placas da base TS que não têm carga na alocação (campo reservado) */
+function tsReservas(){
+  const out = {}, emAloc = new Set((STATE.alocacao||[]).map(a=>placaKey(a.placa)));
+  Object.values(tsMapaPorPlaca()).forEach(e=>{ if(e.doca!=null && !emAloc.has(e.placa)) out[e.doca+'|'+(e.onda||1)] = e.placa; });
+  return out;
+}
+
+function tsMudarColuna(v){
+  STATE.config.tsColuna = (v==='docaTS') ? 'docaTS' : 'doca';
+  saveState(); renderTS();
+  toast('Coluna da base TS alterada. Rode a alocação novamente para aplicar.', 'ok');
+}
+function limparTS(){
+  if(!confirm('Remover a base TS São Paulo desta operação? As cargas voltam a ser alocadas só pelas regras de transportadora (rode a alocação de novo).')) return;
+  STATE.ts = []; PENDING.TS = [];
+  saveState(); renderArquivosCarregados(); atualizarPreviaUpload(); renderTS();
+  toast('Base TS removida. Rode a alocação novamente.', 'ok');
+}
+function renderTS(){
+  const panel = document.getElementById('panelTS'); if(!panel) return;
+  const ts = STATE.ts || [];
+  if(!ts.length){ panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  const sel = document.getElementById('tsColuna'); if(sel) sel.value = (STATE.config.tsColuna==='docaTS') ? 'docaTS' : 'doca';
+  const m = tsMapaPorPlaca(), col = (STATE.config.tsColuna==='docaTS') ? 'docaTS' : 'doca';
+  const fmt = d => d ? (d.doca + (d.onda ? ' ('+d.onda+'ª onda)' : '')) : '—';
+  const jaAlocou = STATE.alocacao.length > 0;
+  let nCarga = 0, nSem = 0, nDiv = 0;
+  const lido = {};
+  const linhas = ts.map(r=>{
+    const k = placaKey(r.placa), e = m[k], carga = STATE.cargas.find(c=>placaKey(c.placa)===k);
+    const a = STATE.alocacao.find(x=>placaKey(x.placa)===k);
+    const d = r[col];
+    let st, cor = 'var(--text-1)';
+    if(!lido[k]){ lido[k] = 1; if(carga) nCarga++; }
+    if(!d){ st = 'Sem doca na coluna escolhida'; cor = 'var(--red)'; }
+    else if(!jaAlocou){ st = carga ? 'Carga encontrada — rode a alocação' : 'Sem carga consolidada para esta placa ainda'; }
+    else if(a && a.status!=='ALTERAR' && pDoca(a)===e.doca && (!e.onda || a.onda===e.onda)){ st = '✓ Alocada: doca '+pDoca(a)+' · '+a.onda+'ª onda'; cor = 'var(--teal)';  }
+    else if(a){ st = '⚠ Divergente: alocada em '+(pDoca(a)!=null?('doca '+pDoca(a)+' · '+a.onda+'ª onda'):'sem doca')+(a.motivo?' — '+a.motivo:''); cor = 'var(--red)'; nDiv++; }
+    else { st = 'Sem carga na ferramenta — doca/onda reservada'; cor = 'var(--amber)'; nSem++; }
+    return `<tr><td class="mono">${pEsc(r.seq)}</td><td>${pEsc(r.loja)}</td><td class="mono">${pEsc(r.placa)}</td><td class="mono">${pEsc(r.pre05.join(' / '))}</td><td class="mono">${pEsc(fmt(r.docaTS))}</td><td class="mono"><b>${pEsc(fmt(r.doca))}</b></td><td style="color:${cor}">${pEsc(st)}</td></tr>`;
+  });
+  const placas = Object.keys(m).length, datas = Array.from(new Set(ts.map(r=>r.data).filter(Boolean)));
+  document.getElementById('tsStats').innerHTML = `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:12px;">`
+    + stat(ts.length,'linhas (lojas TS)') + stat(placas,'placas na base','var(--amber)') + stat(nCarga,'placas com carga na ferramenta','var(--teal)')
+    + (jaAlocou ? stat(Object.values(m).filter(e=>{ const a=STATE.alocacao.find(x=>placaKey(x.placa)===e.placa); return a && a.status!=='ALTERAR' && pDoca(a)===e.doca && (!e.onda||a.onda===e.onda); }).length,'placas conferidas na doca da TS','var(--teal)') : '')
+    + (nDiv ? stat(nDiv,'divergências','var(--red)') : '') + `</div>`
+    + (datas.length ? `<div style="color:var(--text-2);font-size:12px;margin-bottom:8px;">Data da base: ${pEsc(datas.join(', '))}</div>` : '');
+  document.querySelector('#tblTS tbody').innerHTML = linhas.join('');
+}
+
 function prioridadeDaCarga(carga){
   const cad = findCadastroDaPlaca(carga.placa);
   if(cad && cad.prioridadeIndividual != null) return cad.prioridadeIndividual;
@@ -1575,20 +1781,24 @@ function rodarAlocacao(){
   if(nAjustes && !confirm(nAjustes+' carga(s) foram ajustadas manualmente no mapa de docas. Recalcular a alocação descarta esses ajustes. Continuar?')) return;
   revincularTransportadoras();   // garante que placas cadastradas depois da consolidação sejam reconhecidas
 
+  const resultado = [];
+  const ocupado = new Set();   // 'unidade|doca|onda'
+  /* BASE TS SÃO PAULO: as placas que constam na base já têm doca/onda definidas (as TS são as primeiras a
+     entrar na doca). Essas cargas ficam EXATAMENTE nessa doca/onda e o restante é alocado em volta. */
+  const tsPlano = aplicarDocasTS(resultado, ocupado);
   const porTransp = {};
   STATE.cargas.forEach(c=>{
+    if(tsPlano.ids.has(c.id)) return;
     const key = c.transportadora || '__SEM_TRANSPORTADORA__';
     if(!porTransp[key]) porTransp[key] = [];
     porTransp[key].push(c);
   });
 
-  const resultado = [];
   /* REGRA DE ONDA UTILIZADA: uma doca só pode ter UMA carga por onda.
      As cargas são processadas por prioridade (menor número primeiro); cada uma ocupa a
      primeira doca livre da faixa da sua transportadora na menor onda possível. Se a doca
      já está usada naquela onda por outra carga (ex.: duas transportadoras na mesma doca),
      a carga de menor prioridade é lançada para a onda seguinte. */
-  const ocupado = new Set();   // 'unidade|doca|onda'
   const fila = [];
 
   Object.keys(porTransp).forEach(nomeTransp=>{
@@ -1628,13 +1838,13 @@ function rodarAlocacao(){
   STATE.alocacao = resultado;
   saveState();
   atualizarTodasAsAbas();
-  toast('Alocação recalculada: '+resultado.length+' carga(s) processada(s).', 'ok');
+  toast('Alocação recalculada: '+resultado.length+' carga(s) processada(s)'+(tsPlano.n?' — '+tsPlano.n+' com doca/onda fixada pela base TS':'')+'.', 'ok');
 }
 /* Reatualiza todas as telas dependentes: ao rodar a alocação, Consolidação, Alocação, Dashboard,
    Painel por doca/onda, Cargas por filial e Backup ficam prontos, como se o processo já tivesse sido concluído. */
 function atualizarTodasAsAbas(){
   const f = (fn)=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(e){ console.error(fn, e); } };
-  ['renderCadastro','renderConsolidado','renderOrfaos','renderDashboard','renderPainel','renderCargasFilial','renderMatrizDocas','renderIscas','renderBackup','atualizarPreviaUpload'].forEach(f);
+  ['renderCadastro','renderConsolidado','renderOrfaos','renderTS','renderDashboard','renderPainel','renderCargasFilial','renderMatrizDocas','renderIscas','renderBackup','atualizarPreviaUpload'].forEach(f);
 }
 function baseAlocRow(carga, transportadora, status, doca, motivo, onda){
   return {
@@ -1933,7 +2143,7 @@ async function bkLerBuffer(nome, buf){
   const c=bkClassificar(bkParseCSV(txt),nome);
   return c?[c]:ign('não é um backup (arquivos GAN, Log de NF e Região entram na aba 3 · Upload & Consolidação)');
 }
-function bkRenderTudo(){ renderParametros(); renderCadastro(); renderConsolidado(); renderOrfaos(); renderAlocacao(); renderDashboard(); renderIscas(); renderBackup(); }
+function bkRenderTudo(){ renderParametros(); renderCadastro(); renderConsolidado(); renderOrfaos(); renderTS(); renderAlocacao(); renderDashboard(); renderIscas(); renderBackup(); }
 async function bkRestaurarArquivos(fileList){
   const files=Array.from(fileList||[]); if(!files.length) return;
   const log=document.getElementById('bkLog'); log.innerHTML='';
@@ -1974,6 +2184,7 @@ async function bkRestaurarArquivos(fileList){
 ['dragover','drop'].forEach(ev=> window.addEventListener(ev, e=>{ if(e.dataTransfer && Array.from(e.dataTransfer.types||[]).includes('Files')) e.preventDefault(); }));
 document.addEventListener('DOMContentLoaded', ()=>{
   renderArquivosCarregados();
+  renderTS();
   renderParametros();
   renderCadastro();
   renderConsolidado();
@@ -2150,7 +2361,7 @@ function mxOcupantes(doca, onda){
 function renderMatrizDocas(){
   const el = document.getElementById('pMatriz'); if(!el) return;
   if(!STATE.alocacao.length){ el.innerHTML='<div class="empty">Rode a alocação para ver o mapa de docas.</div>'; return; }
-  const docas = mxDocasLinhas(), nO = mxOndasMax();
+  const docas = mxDocasLinhas(), nO = mxOndasMax(), tsRes = tsReservas();
   let h = '<div class="pf-scroll"><table class="mx"><thead><tr><th>DOCA</th>';
   for(let o=1;o<=nO;o++) h += `<th>${o}ª ONDA</th>`;
   h += '</tr></thead><tbody>';
@@ -2158,10 +2369,11 @@ function renderMatrizDocas(){
     h += `<tr><td class="mx-doca">${d}</td>`;
     for(let o=1;o<=nO;o++){
       const oc = mxOcupantes(d,o);
+      if(!oc.length && tsRes[d+'|'+o]){ h += `<td class="mx-cell mx-free mx-tsres" title="Doca ${d} · ${o}ª onda reservada pela base TS (placa ${tsRes[d+'|'+o]}, sem carga na ferramenta). Clique para alocar outra carga aqui." onclick="abrirCelulaMatriz(${d},${o})">TS</td>`; continue; }
       if(!oc.length){ h += `<td class="mx-cell mx-free" title="Doca ${d} · ${o}ª onda — livre. Clique para alocar uma carga aqui." onclick="abrirCelulaMatriz(${d},${o})"></td>`; continue; }
       const tip = oc.map(x=>`${x.a.placa} · ${x.a.transportadora||'sem transportadora'} · ${x.a.pres.length} PRÉ · ${pEntregas(x.a)} ent.`).join('\n');
-      const cls = 'mx-cell mx-busy'+(oc.length>1?' mx-dup':'')+(oc.some(x=>x.a.status==='AJUSTADO')?' mx-adj':'');
-      h += `<td class="${cls}" title="${pEsc(tip)}" onclick="abrirCelulaMatriz(${d},${o})">${oc.length>1?'X'+oc.length:'X'}</td>`;
+      const cls = 'mx-cell mx-busy'+(oc.some(x=>x.a.ts)?' mx-ts':'')+(oc.length>1?' mx-dup':'')+(oc.some(x=>x.a.status==='AJUSTADO')?' mx-adj':'');
+      h += `<td class="${cls}" title="${pEsc(tip+(oc.some(x=>x.a.ts)?'\nDoca/onda definida pela base TS São Paulo':''))}" onclick="abrirCelulaMatriz(${d},${o})">${oc.length>1?'X'+oc.length:'X'}</td>`;
     }
     h += '</tr>';
   });
@@ -2657,6 +2869,7 @@ function pLinhaCarga(it, filialCod, temOutras){
   o['QTD ENTREGA']=pQtdEntregaPres(pres);
   o['ONDA']=(!it.pend && a.onda!=null) ? a.onda+'ªONDA' : '';
   o['TRANSP.']=a.transportadora||'';
+  if((STATE.ts||[]).length){ const t=tsInfoPlaca(a.placa); o['TS SP · LOJAS']=t.lojas.join(' / '); o['TS SP · PRÉ-05']=t.pre05.join(' / '); }
   if(!filialCod) o['FILIAIS']=Array.from(new Set(a.pres.map(p=>nomeFilial(p.filial)))).join(' + ');
   else o['FILIAL']=filialCod;
   o['OBSERVAÇÃO']= it.pend ? ('SEM DOCA'+(a.motivo?' — '+a.motivo:'')) : '';
