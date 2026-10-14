@@ -844,7 +844,8 @@ function saveState(){
 }
 
 function novaOperacao(){
-  if(!confirm('Isso apaga todas as cargas, alocações, iscas e pendências consolidadas (mantém parâmetros e cadastro de placas). Confirmar?')) return;
+  if(!confirm('Isso apaga TODOS os dados da operação: arquivos carregados, base TS, cargas, PRÉs pendentes, alocação, ondas, iscas e filtros. Só os Parâmetros e o Cadastro de placas são mantidos. Confirmar?')) return;
+  // dados da operação (STATE)
   STATE.cargas = [];
   STATE.presOrfaos = [];
   STATE.alocacao = [];
@@ -852,8 +853,19 @@ function novaOperacao(){
   STATE.iscas = [];
   STATE.ts = [];
   saveState();
-  renderConsolidado(); renderAlocacao(); renderDashboard(); renderIscas(); renderTS();
-  toast('Operação limpa. Parâmetros e cadastro de placas foram mantidos.', 'ok');
+  // arquivos carregados na aba 3 (ainda não consolidados) e avisos
+  PENDING = { GAN: [], HEBLS: [], REGIAO: [], TS: [] };
+  UPLOAD_OCUPADO = false;
+  pFilialSel = 'ACUM';
+  const limpaHtml = id=>{ const el=document.getElementById(id); if(el) el.innerHTML=''; };
+  ['autoResumo','iscaArqLog','bkLog'].forEach(limpaHtml);
+  // campos de texto e filtros
+  ['iscaTexto','filtroCargaPlaca'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  ['fTransp','fFilial','pTransp','pFilial','pOnda'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  // redesenha todas as telas já vazias
+  try{ atualizarTodasAsAbas(); }catch(e){ console.error(e); }
+  try{ renderArquivosCarregados(); atualizarPreviaUpload(); renderAlocacao(); }catch(e){ console.error(e); }
+  toast('Operação limpa por completo. Parâmetros e cadastro de placas foram mantidos.', 'ok');
 }
 
 /* =========================================================
