@@ -46,6 +46,9 @@
   .brand h1{font-size:19px;margin:0;font-weight:600;letter-spacing:.2px;}
   .brand .sub{color:var(--text-2);font-size:12.5px;margin-left:4px;}
   .top-actions{display:flex;gap:8px;align-items:center;}
+  .brand .btn-novo-dia{align-self:center;margin-right:14px;padding-right:14px;border-right:1px solid var(--line);border-radius:6px 0 0 6px;}
+  .bk-ok{color:var(--teal);} .bk-err{color:var(--red);} .bk-info{color:var(--text-2);}
+  .filelist div{padding:2px 0;}
 
   button{
     font-family:var(--sans);cursor:pointer;border-radius:6px;border:1px solid var(--line);
@@ -186,6 +189,38 @@
   .cell-chip{font-family:var(--mono);font-weight:700;font-size:12px;}
   .cell-sub{display:block;font-size:10px;color:var(--text-2);font-weight:400;white-space:normal;max-width:140px;margin:0 auto;}
 
+
+  /* ================= PAINEL: tabela + mapa de docas (fixos ao rolar) ================= */
+  :root{--topbar-h:70px;}
+  #view-painel.view{max-width:min(2200px,100%);}
+  #pFilialPanel{--pf-h:max(420px,calc(100vh - var(--topbar-h) - 250px));}
+  #pFilialPanel.pf-sticky{position:sticky;top:calc(var(--topbar-h) + 8px);z-index:20;box-shadow:0 10px 24px rgba(0,0,0,.55);}
+  .pf-layout{display:grid;grid-template-columns:minmax(0,1fr) 410px;gap:18px;align-items:start;}
+  .pf-left,.pf-right{min-width:0;}
+  .pf-scroll{max-height:var(--pf-h,calc(52vh - 40px));overflow:auto;}
+  #pFilialTabela .table-wrap{max-height:var(--pf-h,calc(52vh - 40px)) !important;}
+  #pFilialTabela .table-wrap thead th{position:sticky;top:0;z-index:2;background:var(--bg-2);}
+  .mx-title{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px;margin-bottom:4px;}
+  .mx-leg{font-size:11.5px;color:var(--text-2);display:flex;gap:6px;align-items:center;}
+  .mx-sw{display:inline-block;width:16px;height:16px;border:1px solid #000;font-style:normal;font-weight:700;font-size:11px;line-height:14px;text-align:center;color:#000;background:#fff;}
+  .mx-sw.free{background:#16a34a;margin-left:6px;}
+  .mx-hint{font-size:11.5px;color:var(--text-2);margin-bottom:8px;}
+  table.mx{border-collapse:collapse;width:100%;font-size:12px;background:#fff;color:#000;}
+  table.mx th,table.mx td{border:1px solid #000;text-align:center;padding:0;height:24px;white-space:nowrap;}
+  table.mx thead th{background:#fff;color:#000;font-weight:800;font-size:11.5px;padding:4px 6px;position:sticky;top:0;z-index:3;}
+  table.mx td.mx-doca{background:#ececec;color:#000;font-weight:800;position:sticky;left:0;z-index:1;padding:0 10px;}
+  table.mx td.mx-cell{cursor:pointer;font-weight:800;font-size:13px;min-width:62px;}
+  table.mx td.mx-busy{background:#fff;color:#000;}
+  table.mx td.mx-busy:hover{background:#ffe9a8;}
+  table.mx td.mx-free{background:#16a34a;}
+  table.mx td.mx-free:hover{background:#22c55e;outline:2px solid #fff;outline-offset:-2px;}
+  table.mx td.mx-dup{background:#ffb3b8;}
+  table.mx td.mx-adj{box-shadow:inset 0 0 0 2px #f59e0b;}
+  @media (max-width:1100px){
+    .pf-layout{grid-template-columns:1fr;}
+    #pFilialPanel.pf-sticky{position:static;box-shadow:none;}
+  }
+
   /* ================= LOGIN SCREEN ================= */
   #loginScreen{
     position:fixed;inset:0;z-index:1000;
@@ -292,16 +327,13 @@
 
 <div class="topbar">
   <div class="brand">
+    <button class="small danger btn-novo-dia" onclick="novaOperacao()" title="Apaga cargas, alocações e pendências do dia">Novo dia / limpar operação</button>
     <img class="logo-img" data-reuse-logo="1" alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="Equipe Gigante">
     <span class="mark">GDN</span>
     <h1>Central de Docas</h1>
     <span class="sub">Gigantes da Noite · CAJ-33 como operação principal, com PRÉs de outras filiais vinculados</span>
   </div>
   <div class="top-actions">
-    <button class="small" onclick="exportBackup()">Backup</button>
-    <button class="small" onclick="document.getElementById('restoreInput').click()">Restaurar</button>
-    <input type="file" id="restoreInput" accept=".json" style="display:none" onchange="importBackup(event)">
-    <button class="small danger" onclick="novaOperacao()">Novo dia / limpar operação</button>
     <span class="user-chip">
       <span class="who" id="userEmail">—</span>
       <button class="small ghost" onclick="fazerLogout()">Sair</button>
@@ -313,26 +345,14 @@
   <button class="tab-btn active" data-tab="parametros" onclick="switchTab('parametros')">1 · Parâmetros</button>
   <button class="tab-btn" data-tab="cadastro" onclick="switchTab('cadastro')">2 · Cadastro de Placas</button>
   <button class="tab-btn" data-tab="upload" onclick="switchTab('upload')">3 · Upload &amp; Consolidação</button>
-  <button class="tab-btn" data-tab="alocacao" onclick="switchTab('alocacao')">4 · Alocação de Docas</button>
-  <button class="tab-btn" data-tab="dashboard" onclick="switchTab('dashboard')">5 · Indicadores</button>
-  <button class="tab-btn" data-tab="painel" onclick="switchTab('painel')">6 · Painel por Doca &amp; Ondas</button>
+  <button class="tab-btn" data-tab="dashboard" onclick="switchTab('dashboard')">4 · Indicadores</button>
+  <button class="tab-btn" data-tab="painel" onclick="switchTab('painel')">5 · Painel por Doca &amp; Ondas</button>
+  <button class="tab-btn" data-tab="iscas" onclick="switchTab('iscas')">6 · Iscas</button>
+  <button class="tab-btn" data-tab="backup" onclick="switchTab('backup')">7 · Backup &amp; Upload</button>
 </div>
 
 <!-- ================= TAB 1: PARAMETROS ================= -->
 <div class="view active" id="view-parametros">
-
-  <div class="panel">
-    <div class="panel-head">
-      <div>
-        <h2>Filiais / Empresas</h2>
-        <div class="desc">O CAJ-33 é a operação principal e concentra a maior parte dos volumes. PRÉs de outras filiais (ex.: CAJ-05) que aparecem dentro de uma carga do CAJ-33 continuam na mesma carga — apenas são identificados por filial. Cadastre aqui qualquer filial/empresa nova sem precisar mexer no restante da ferramenta.</div>
-      </div>
-      <button class="primary small" onclick="addFilial()">+ Filial</button>
-    </div>
-    <div class="table-wrap">
-      <table id="tblFiliais"><thead><tr><th>Código (como aparece no arquivo)</th><th>Nome</th><th>Operação principal?</th><th></th></tr></thead><tbody></tbody></table>
-    </div>
-  </div>
 
   <div class="panel">
     <div class="panel-head">
@@ -360,7 +380,7 @@
     </div>
   </div>
 
-  <div class="footer-note">Parâmetros salvos automaticamente no navegador. Use Backup para guardar uma cópia externa (.json).</div>
+  <div class="footer-note">Parâmetros salvos automaticamente no navegador. Use a aba 7 · Backup &amp; Upload para guardar uma cópia externa.</div>
 </div>
 
 <!-- ================= TAB 2: CADASTRO PLACAS ================= -->
@@ -401,11 +421,15 @@
          ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDropAuto(event)">
       <span class="k">Clique ou arraste todos os arquivos aqui</span>múltiplos arquivos misturados · arquivos .zip são extraídos automaticamente
     </div>
-    <input type="file" id="inpAUTO" multiple style="display:none" onchange="handleFilesAuto(event.target.files); this.value=''">
+    <input type="file" id="inpAUTO" multiple style="display:none" onchange="handleFilesAuto(Array.from(event.target.files)); this.value=''">
     <div id="autoResumo" style="margin-top:12px;"></div>
   </div>
 
-  <div style="display:none"><div id="listGAN"></div><div id="listHEBLS"></div><div id="listREGIAO"></div></div>
+  <div class="panel" id="panelArquivosCarregados">
+    <div class="panel-head"><div><h2>Arquivos carregados</h2><div class="desc">Um arquivo com o mesmo nome de um já carregado não é aceito: remova o existente aqui antes de enviar de novo.</div></div></div>
+    <div id="arquivosCarregadosLista"><div class="empty">Nenhum arquivo carregado.</div></div>
+    <div style="display:none"><div id="listGAN"></div><div id="listHEBLS"></div><div id="listREGIAO"></div></div>
+  </div>
 
   <div class="panel">
     <details>
@@ -416,21 +440,21 @@
                ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event,'GAN')">
             <span class="k">Forçar como GAN</span>.txt ou .zip
           </div>
-          <input type="file" id="inpGAN" multiple style="display:none" onchange="handleFiles(event.target.files,'GAN'); this.value=''">
+          <input type="file" id="inpGAN" multiple style="display:none" onchange="handleFiles(Array.from(event.target.files),'GAN'); this.value=''">
         </div>
         <div>
           <div class="dropzone" onclick="document.getElementById('inpHEBLS').click()"
                ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event,'HEBLS')">
             <span class="k">Forçar como Log de NF</span>.txt ou .zip
           </div>
-          <input type="file" id="inpHEBLS" multiple style="display:none" onchange="handleFiles(event.target.files,'HEBLS'); this.value=''">
+          <input type="file" id="inpHEBLS" multiple style="display:none" onchange="handleFiles(Array.from(event.target.files),'HEBLS'); this.value=''">
         </div>
         <div>
           <div class="dropzone" onclick="document.getElementById('inpREGIAO').click()"
                ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event,'REGIAO')">
             <span class="k">Forçar como Região</span>.txt ou .zip
           </div>
-          <input type="file" id="inpREGIAO" multiple style="display:none" onchange="handleFiles(event.target.files,'REGIAO'); this.value=''">
+          <input type="file" id="inpREGIAO" multiple style="display:none" onchange="handleFiles(Array.from(event.target.files),'REGIAO'); this.value=''">
         </div>
       </div>
     </details>
@@ -442,6 +466,7 @@
       <div style="display:flex;gap:8px;">
         <button class="danger small" onclick="limparUploadsPendentes()">Limpar arquivos carregados</button>
         <button class="primary" onclick="consolidarUploads()">Consolidar →</button>
+        <button class="primary" onclick="rodarAlocacao()" title="Calcula docas e ondas e atualiza todas as abas">Rodar alocação ▶</button>
       </div>
     </div>
     <div id="uploadSummary" class="empty">Carregue os arquivos acima para ver a prévia aqui.</div>
@@ -477,33 +502,6 @@
 </div>
 
 <!-- ================= TAB 4: ALOCACAO ================= -->
-<div class="view" id="view-alocacao">
-  <div class="panel">
-    <div class="panel-head">
-      <div><h2>Motor de alocação</h2>
-        <div class="desc">Para cada transportadora: ordena as cargas por prioridade, preenche a 1ª onda usando só as docas parametrizadas e disponíveis; quando as cargas excedem a quantidade de docas, cria automaticamente a 2ª onda reaproveitando as mesmas docas, depois a 3ª, e assim por diante. A última onda não precisa estar completa.</div>
-      </div>
-      <button class="primary" onclick="rodarAlocacao()">Rodar alocação</button>
-    </div>
-    <div class="grid cols-4" id="alocStats"></div>
-  </div>
-
-  <div class="panel">
-    <div class="panel-head">
-      <div><h2 id="alocacaoTituloView">Mapa de docas — visão unificada</h2><div class="desc" id="alocacaoDescView">Todas as docas da unidade, lado a lado, cruzadas com as ondas — independente da transportadora. Use para enxergar rapidamente docas ociosas (oportunidade de realocação) e conflitos de doca dupla. O filtro por transportadora abaixo funciona como recorte pontual, não como estrutura principal.</div></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        <div class="view-toggle">
-          <button id="btnViewUnificado" class="active" onclick="setAlocacaoView('unificado')">Unificado</button>
-          <button id="btnViewTransp" onclick="setAlocacaoView('transportadora')">Por transportadora</button>
-        </div>
-        <select id="filtroTransp" onchange="renderAlocacao()"><option value="">Todas transportadoras</option></select>
-        <select id="filtroFilial" onchange="renderAlocacao()"><option value="">Todas filiais</option></select>
-      </div>
-    </div>
-    <div id="alocacaoBody"></div>
-  </div>
-</div>
-
 <!-- ================= TAB 5: DASHBOARD ================= -->
 <div class="view" id="view-dashboard">
 
@@ -562,12 +560,12 @@
   <div class="panel">
     <div class="panel-head">
       <div><h2>Painel de cargas por doca</h2>
-        <div class="desc">Cada cartão é uma doca; dentro dele, as cargas de cada onda. Usa a alocação já calculada (doca manual tem prioridade sobre a sugerida).</div></div>
+        <div class="desc">Filtros e totais da alocação já calculada (doca manual tem prioridade sobre a sugerida).</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <select id="pTransp" onchange="renderPainel()"></select>
         <select id="pFilial" onchange="renderPainel()"></select>
         <select id="pOnda" onchange="renderPainel()"></select>
-        <label style="display:flex;gap:5px;align-items:center;margin:0;"><input type="checkbox" id="pLivres" onchange="renderPainel()"> mostrar docas livres</label>
+        <button class="primary" onclick="rodarAlocacao()">Rodar alocação ▶</button>
         <button class="primary" onclick="exportarListaOndasExcel()">⬇ Gerar Excel da lista</button>
       </div>
     </div>
@@ -577,14 +575,87 @@
     <div class="panel-head">
       <div><h2>Cargas do dia por filial</h2>
         <div class="desc">Lista <b>Acumulada</b> (todas as filiais, cada PRÉ na coluna da sua filial) e uma lista para cada filial — CAJ-33, CAJ-05 e D-0 (Golden Store) — com doca, onda, placa e região. O nº da carga é o mesmo em todas as listas. Respeita os filtros acima.</div></div>
-      <button class="primary" onclick="exportarCargasFilialExcel()">⬇ Excel Acumulado + filiais</button>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <label style="display:flex;gap:5px;align-items:center;margin:0;" title="Mantém a tabela e o mapa de docas visíveis ao rolar a página"><input type="checkbox" id="pFixar" checked onchange="pAplicarFixar()"> 📌 fixar ao rolar</label>
+        <button class="primary" onclick="exportarCargasFilialExcel()">⬇ Excel Acumulado + filiais</button>
+      </div>
     </div>
-    <div id="pFilialTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
-    <div id="pFilialTabela"></div>
+    <div class="pf-layout">
+      <div class="pf-left">
+        <div id="pFilialTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
+        <div id="pFilialTabela"></div>
+      </div>
+      <div class="pf-right">
+        <div class="mx-title"><b>Mapa de docas × ondas</b>
+          <span class="mx-leg"><i class="mx-sw busy">X</i> ocupada <i class="mx-sw free"></i> livre</span></div>
+        <div class="mx-hint">Clique em qualquer campo para mover a carga para outra doca/onda ou alocar uma carga ali.</div>
+        <div id="pMatriz"></div>
+      </div>
+    </div>
   </div>
-  <div class="panel"><div class="panel-head"><h2>Docas</h2></div><div id="pDocas" class="grid cols-3"></div></div>
-  <div class="panel"><div class="panel-head"><h2>Lista por onda</h2></div><div id="pOndas"></div></div>
 </div>
+
+<!-- ================= TAB 6: ISCAS ================= -->
+<div class="view" id="view-iscas">
+  <div class="panel">
+    <div class="panel-head"><div><h2>Iscas com rastreador</h2>
+      <div class="desc">Informe cada isca pela <b>placa</b> em que ela vai sair ou pela <b>doca</b>. A ferramenta procura no arquivo já carregado (cargas e alocação) e vincula a isca à carga, à doca e à onda. Toda isca precisa sair em uma placa que esteja no arquivo — placas ou docas que não existem nele são recusadas. Se a carga mudar de doca no Painel, a isca acompanha a placa.</div></div></div>
+    <div class="grid cols-2" style="align-items:start;">
+      <div>
+        <label>Uma por linha — placa ou doca</label>
+        <textarea id="iscaTexto" rows="6" style="width:100%" placeholder="TBA4J30&#10;EWJ6E19&#10;doca 129&#10;150 2   (= doca 150, 2ª onda)"></textarea>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+          <button class="primary" onclick="adicionarIscas()">Vincular iscas</button>
+          <button class="danger" onclick="limparIscas()">Limpar todas</button></div>
+      </div>
+      <div class="grid cols-2" id="iscaStats"></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-head"><div><h2>Iscas vinculadas</h2><div class="desc">Ordem = sequência de impressão: docas da menor para a maior (e, na mesma doca, da 1ª onda em diante).</div></div></div>
+    <div id="iscaTabela"></div>
+  </div>
+  <div class="panel">
+    <div class="panel-head"><div><h2>Etiqueta Zebra</h2><div class="desc">Cada etiqueta é dividida exatamente ao meio por uma linha de corte/dobra, com a placa da isca em destaque nas duas metades. Padrão: 100 × 150 mm (4×6 pol).</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <button class="primary" onclick="iscaBaixarZPL()">⬇ Baixar ZPL (Zebra)</button>
+        <button class="primary" onclick="iscaImprimir()">🖨 Imprimir / salvar PDF</button></div></div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
+      <div><label>Largura (mm)</label><input id="iscaLarg" type="number" min="30" max="300" style="width:90px" onchange="iscaSalvarCfg()"></div>
+      <div><label>Altura (mm)</label><input id="iscaAlt" type="number" min="30" max="400" style="width:90px" onchange="iscaSalvarCfg()"></div>
+      <div><label>Resolução</label><select id="iscaDpi" onchange="iscaSalvarCfg()"><option value="203">203 dpi (8 dots/mm)</option><option value="300">300 dpi (12 dots/mm)</option></select></div>
+      <label style="display:flex;gap:6px;align-items:center;margin:0 0 6px;"><input type="checkbox" id="iscaInfo" onchange="iscaSalvarCfg()"> mostrar doca, onda e transportadora</label>
+    </div>
+    <div id="iscaPreview"></div>
+  </div>
+</div>
+
+<!-- ================= TAB 7: BACKUP & UPLOAD ================= -->
+<div class="view" id="view-backup">
+  <div class="panel">
+    <div class="panel-head"><div><h2>Backup</h2><div class="desc">Baixe uma cópia dos dados da ferramenta. Eles já ficam salvos automaticamente no navegador, mas o backup é a cópia de segurança fora dele.</div></div></div>
+    <div id="bkResumo" class="grid cols-4" style="margin-bottom:14px;"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="primary" onclick="bkExportar('json')">⬇ JSON (completo)</button>
+      <button class="primary" onclick="bkExportar('xlsx')">⬇ Excel (.xlsx)</button>
+      <button class="primary" onclick="bkExportar('zip')">⬇ ZIP (JSON + Excel + CSVs)</button>
+      <button onclick="bkExportar('csv')">⬇ CSV (só cargas e PREs)</button>
+    </div>
+    <div class="desc" style="margin-top:10px;max-width:none;">JSON, Excel e ZIP guardam tudo (parâmetros, cadastro de placas, cargas, pendências e alocação) e podem ser restaurados por completo. O CSV guarda apenas cargas e PREs, em uma planilha simples.</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><div><h2>Upload / restaurar backup</h2><div class="desc">Aceita backup em qualquer formato: .json, .xlsx / .xls / .ods, .csv / .tsv, .txt ou .zip. Antes de substituir os dados atuais a ferramenta pede confirmação.</div></div></div>
+    <div class="dropzone" onclick="document.getElementById('bkInput').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="event.preventDefault();this.classList.remove('drag');bkRestaurarArquivos(event.dataTransfer.files)">
+      <span class="k">Clique ou arraste o arquivo de backup aqui</span>JSON · Excel · CSV · TXT · ZIP
+    </div>
+    <input type="file" id="bkInput" multiple style="display:none" onchange="bkRestaurarArquivos(this.files); this.value=''">
+    <div id="bkLog" class="filelist" style="margin-top:12px;"></div>
+    <div class="desc" style="margin-top:10px;max-width:none;">Os arquivos de operação (GAN, Log de NF e Região) continuam sendo carregados na aba 3 · Upload &amp; Consolidação.</div>
+  </div>
+</div>
+
 
 <script>
 /* =========================================================
@@ -660,6 +731,7 @@ function defaultState(){
     cargas: [],          // {id, placa, transportadora, regiao, territorio, pres:[{preRomaneio,filial,qtdEntrega,dataEntrega}]}
     presOrfaos: [],       // {preRomaneio, qtdEntrega, filial, placaInformada}
     alocacao: [],          // computed by rodarAlocacao(): {cargaId, placa, transportadora, prioridade, onda, doca, docaManual, status, motivo}
+    iscas: [],              // {id, tipo:'placa'|'doca', placa, docaInformada, ondaInformada, entrada}
     ondaStatus: {}          // key `${transportadora}__${onda}` -> 'Aguardando'|'Em preparação'|'Em carregamento'|'Parcial'|'Concluída'
   };
 }
@@ -720,7 +792,7 @@ function avisarFalhaSalvar(e, ctx){
   } else {
     motivo = 'erro '+nome+'.';
   }
-  toast('Não foi possível salvar automaticamente: '+motivo+' Faça um Backup manual.', 'err');
+  toast('Não foi possível salvar automaticamente: '+motivo+' Faça um backup manual na aba 7 · Backup & Upload.', 'err');
 }
 function saveState(){
   let json;
@@ -740,13 +812,14 @@ function saveState(){
 }
 
 function novaOperacao(){
-  if(!confirm('Isso apaga todas as cargas, alocações e pendências consolidadas (mantém parâmetros e cadastro de placas). Confirmar?')) return;
+  if(!confirm('Isso apaga todas as cargas, alocações, iscas e pendências consolidadas (mantém parâmetros e cadastro de placas). Confirmar?')) return;
   STATE.cargas = [];
   STATE.presOrfaos = [];
   STATE.alocacao = [];
   STATE.ondaStatus = {};
+  STATE.iscas = [];
   saveState();
-  renderConsolidado(); renderAlocacao(); renderDashboard();
+  renderConsolidado(); renderAlocacao(); renderDashboard(); renderIscas();
   toast('Operação limpa. Parâmetros e cadastro de placas foram mantidos.', 'ok');
 }
 
@@ -772,8 +845,9 @@ function switchTab(tab){
   if(tab==='parametros') renderParametros();
   if(tab==='cadastro') renderCadastro();
   if(tab==='upload') { renderConsolidado(); renderOrfaos(); }
-  if(tab==='alocacao') renderAlocacao();
   if(tab==='dashboard') renderDashboard();
+  if(tab==='backup') renderBackup();
+  if(tab==='iscas') renderIscas();
 }
 
 /* =========================================================
@@ -787,36 +861,6 @@ function isFilialPrincipal(codigo){
   const f = STATE.config.filiais.find(f=>f.codigo===codigo);
   return f ? !!f.principal : false;
 }
-function renderFiliais(){
-  const tbody = document.querySelector('#tblFiliais tbody');
-  tbody.innerHTML = '';
-  STATE.config.filiais.forEach((f,idx)=>{
-    const tr = document.createElement('tr');
-    tr.className = 'editable-row';
-    tr.innerHTML = `
-      <td><input class="mono" value="${f.codigo}" onchange="updateFilial(${idx},'codigo',this.value)"></td>
-      <td><input value="${f.nome}" onchange="updateFilial(${idx},'nome',this.value)"></td>
-      <td><input type="checkbox" ${f.principal?'checked':''} onchange="setFilialPrincipal(${idx}, this.checked)"></td>
-      <td><button class="danger small" onclick="removeFilial(${idx})">×</button></td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-function addFilial(){
-  STATE.config.filiais.push({codigo:'', nome:'Nova filial', principal:false});
-  saveState(); renderFiliais();
-}
-function updateFilial(idx, field, val){ STATE.config.filiais[idx][field] = val; saveState(); }
-function setFilialPrincipal(idx, checked){
-  if(checked) STATE.config.filiais.forEach((f,i)=> f.principal = (i===idx));
-  else STATE.config.filiais[idx].principal = false;
-  saveState(); renderFiliais();
-}
-function removeFilial(idx){
-  STATE.config.filiais.splice(idx,1);
-  saveState(); renderFiliais();
-}
-
 /* =========================================================
    PARÂMETROS — UNIDADES / DOCAS
    ========================================================= */
@@ -867,8 +911,6 @@ function removeUnidade(idx){
 }
 
 function renderParametros(){
-  renderFiliais();
-
   const uWrap = document.getElementById('unidadesList');
   uWrap.innerHTML = '';
   STATE.config.unidades.forEach((u, idx)=>{
@@ -981,38 +1023,87 @@ function renderCadastro(){
     });
   if(STATE.config.cadastroPlacas.length===0){ tbody.innerHTML = '<tr><td colspan="4" class="empty">Nenhuma placa cadastrada ainda.</td></tr>'; }
 }
-function addCadastroRow(){ STATE.config.cadastroPlacas.push({placa:'', transportadora:'', prioridadeIndividual:null}); saveState(); renderCadastro(); }
+/* chave de comparação: maiúsculas, sem espaços/hífens (TBA-4J30 = tba4j30 = TBA4J30) */
+function placaKey(p){ return String(p||'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
+function placaExiste(placa, ignorarIdx){
+  const k = placaKey(placa); if(!k) return false;
+  return STATE.config.cadastroPlacas.some((c,i)=> i!==ignorarIdx && placaKey(c.placa)===k);
+}
+function addCadastroRow(){
+  // não acumula linhas em branco: reaproveita a que já existe
+  const idxVazio = STATE.config.cadastroPlacas.findIndex(c=>!placaKey(c.placa));
+  if(idxVazio>=0){
+    document.getElementById('cadastroFiltro').value='';
+    renderCadastro();
+    const inp = document.querySelectorAll('#tblCadastro tbody tr')[idxVazio];
+    if(inp){ const i = inp.querySelector('input'); if(i) i.focus(); }
+    toast('Já existe uma linha em branco — preencha a placa nela.', 'err');
+    return;
+  }
+  STATE.config.cadastroPlacas.push({placa:'', transportadora:'', prioridadeIndividual:null}); saveState();
+  document.getElementById('cadastroFiltro').value='';
+  renderCadastro();
+  const rows = document.querySelectorAll('#tblCadastro tbody tr');
+  const last = rows[rows.length-1]; if(last){ const i = last.querySelector('input'); if(i) i.focus(); }
+}
 function updateCadastro(idx, field, val){
+  if(field==='placa'){
+    val = String(val||'').trim().toUpperCase();
+    if(placaExiste(val, idx)){
+      toast('A placa '+val+' já está cadastrada. Não é possível duplicar.', 'err');
+      renderCadastro();   // devolve o valor anterior no campo
+      return;
+    }
+  }
   STATE.config.cadastroPlacas[idx][field] = val;
   saveState();
   // reaplica transportadora nas cargas já existentes com essa placa
   if(field==='transportadora' || field==='placa'){
-    const c = STATE.config.cadastroPlacas[idx];
-    STATE.cargas.forEach(carga=>{ if(carga.placa===c.placa) carga.transportadora = c.transportadora; });
+    revincularTransportadoras();
     saveState();
   }
 }
 function removeCadastro(idx){ STATE.config.cadastroPlacas.splice(idx,1); saveState(); renderCadastro(); }
 function processCadastroPaste(){
   const text = document.getElementById('cadastroPasteText').value;
-  let count = 0;
+  let count = 0; const repetidas = [];
   text.split(/\r?\n/).forEach(line=>{
     line = line.trim(); if(!line) return;
     const parts = line.split(/[;,\t]+/).map(s=>s.trim());
     if(parts.length>=2 && parts[0]){
-      STATE.config.cadastroPlacas.push({placa:parts[0].toUpperCase(), transportadora:parts[1].toUpperCase(), prioridadeIndividual: parts[2]?parseInt(parts[2]):null});
+      const placa = parts[0].toUpperCase();
+      if(placaExiste(placa, -1)){ repetidas.push(placa); return; }   // já cadastrada (ou repetida na própria lista)
+      STATE.config.cadastroPlacas.push({placa, transportadora:parts[1].toUpperCase(), prioridadeIndividual: parts[2]?parseInt(parts[2]):null});
       count++;
     }
   });
+  revincularTransportadoras();
   saveState();
   document.getElementById('cadastroPasteText').value = '';
   document.getElementById('cadastroPaste').style.display='none';
   renderCadastro();
-  toast(count + ' placa(s) importada(s).', 'ok');
+  if(repetidas.length){
+    const lista = Array.from(new Set(repetidas));
+    toast(count+' placa(s) importada(s). '+lista.length+' ignorada(s) por já existir: '+lista.slice(0,5).join(', ')+(lista.length>5?'…':''), count?'ok':'err');
+  } else toast(count + ' placa(s) importada(s).', 'ok');
+}
+function findCadastroDaPlaca(placa){
+  const k = placaKey(placa); if(!k) return null;
+  return STATE.config.cadastroPlacas.find(c=>placaKey(c.placa)===k) || null;
 }
 function findTransportadoraDaPlaca(placa){
-  const c = STATE.config.cadastroPlacas.find(c=>c.placa===placa);
-  return c ? c.transportadora : null;
+  const c = findCadastroDaPlaca(placa);
+  return (c && c.transportadora) ? c.transportadora : null;
+}
+/* O cadastro Placa→Transportadora é a fonte da verdade: reaplica em TODAS as cargas já consolidadas
+   (inclusive as criadas antes de a placa ser cadastrada). Retorna quantas cargas foram atualizadas. */
+function revincularTransportadoras(){
+  let n = 0;
+  STATE.cargas.forEach(carga=>{
+    const t = findTransportadoraDaPlaca(carga.placa);
+    if(t && carga.transportadora !== t){ carga.transportadora = t; n++; }
+  });
+  return n;
 }
 
 /* =========================================================
@@ -1020,7 +1111,7 @@ function findTransportadoraDaPlaca(placa){
    ========================================================= */
 let PENDING = { GAN: [], HEBLS: [], REGIAO: [] };
 
-function handleDrop(ev, tipo){ ev.preventDefault(); ev.currentTarget.classList.remove('drag'); handleFiles(ev.dataTransfer.files, tipo); }
+function handleDrop(ev, tipo){ ev.preventDefault(); ev.currentTarget.classList.remove('drag'); handleFiles(Array.from(ev.dataTransfer.files), tipo); }
 
 function lerArquivoComoTexto(file){
   return new Promise((resolve, reject)=>{
@@ -1032,7 +1123,9 @@ function lerArquivoComoTexto(file){
 }
 
 function adicionarPendente(tipo, nome, texto){
+  if(arquivoJaCarregado(nome)){ toast('O arquivo '+nome+' já está carregado. Remova-o antes de enviar novamente.', 'err'); return false; }
   PENDING[tipo].push({nome, regiao: extrairRegiaoDoNome(nome), texto});
+  return true;
 }
 
 async function processarZip(file, tipo){
@@ -1091,13 +1184,25 @@ function extrairRegiaoDoNome(nome){
 }
 function renderFileList(tipo){
   const el = document.getElementById('list'+tipo);
-  el.innerHTML = '';
-  PENDING[tipo].forEach((f,idx)=>{
-    const div = document.createElement('div');
-    div.className = 'fitem';
-    div.innerHTML = `<span>${f.nome} ${f.regiao?('<span class="mono" style="color:var(--text-2)">('+f.regiao+')</span>'):''}</span><span style="cursor:pointer;color:var(--red)" onclick="removePending('${tipo}',${idx})">remover</span>`;
-    el.appendChild(div);
+  if(el) el.innerHTML = '';
+  renderArquivosCarregados();
+}
+const ROTULO_TIPO = {GAN:'GAN', HEBLS:'Log de NF', REGIAO:'Região'};
+function renderArquivosCarregados(){
+  const el = document.getElementById('arquivosCarregadosLista');
+  if(!el) return;
+  const linhas = [];
+  ['GAN','HEBLS','REGIAO'].forEach(tipo=>{
+    PENDING[tipo].forEach((f,idx)=>{
+      linhas.push(`<div class="fitem"><span><b>${escAuto(ROTULO_TIPO[tipo])}</b> · ${escAuto(f.nome)} ${f.regiao?('<span class="mono" style="color:var(--text-2)">('+escAuto(f.regiao)+')</span>'):''}</span><span style="cursor:pointer;color:var(--red)" onclick="removePending('${tipo}',${idx})">remover</span></div>`);
+    });
   });
+  el.innerHTML = linhas.length ? linhas.join('') : '<div class="empty">Nenhum arquivo carregado.</div>';
+}
+/* nome já carregado em qualquer tipo? (sem diferenciar maiúsculas/minúsculas) */
+function arquivoJaCarregado(nome){
+  const k = String(nome||'').trim().toLowerCase();
+  return ['GAN','HEBLS','REGIAO'].some(t=>PENDING[t].some(p=>String(p.nome).trim().toLowerCase()===k));
 }
 function removePending(tipo, idx){ PENDING[tipo].splice(idx,1); renderFileList(tipo); atualizarPreviaUpload(); }
 function limparUploadsPendentes(){ PENDING={GAN:[],HEBLS:[],REGIAO:[]}; var rs=document.getElementById('autoResumo'); if(rs) rs.innerHTML=''; ['GAN','HEBLS','REGIAO'].forEach(renderFileList); atualizarPreviaUpload(); toast('Arquivos carregados limpos.', 'ok'); }
@@ -1147,11 +1252,19 @@ async function extrairZipItens(file){
   return itens;
 }
 
-function handleDropAuto(ev){ ev.preventDefault(); ev.currentTarget.classList.remove('drag'); handleFilesAuto(ev.dataTransfer.files); }
+function handleDropAuto(ev){ ev.preventDefault(); ev.currentTarget.classList.remove('drag'); handleFilesAuto(Array.from(ev.dataTransfer.files)); }
 
+let UPLOAD_OCUPADO = false;
 async function handleFilesAuto(fileList){
-  const arquivos = Array.from(fileList);
+  const arquivos = Array.from(fileList || []);
   if(!arquivos.length) return;
+  if(UPLOAD_OCUPADO){ toast('Aguarde o término da leitura anterior.', 'err'); return; }
+  UPLOAD_OCUPADO = true;
+  try{ await _handleFilesAutoInterno(arquivos); }
+  catch(err){ console.error(err); toast('Erro ao carregar os arquivos: '+(err&&err.message?err.message:err), 'err'); }
+  finally{ UPLOAD_OCUPADO = false; }
+}
+async function _handleFilesAutoInterno(arquivos){
   const itens = [];
   for(const file of arquivos){
     const isZip = /\.zip$/i.test(file.name) || file.type === 'application/zip' || file.type === 'application/x-zip-compressed';
@@ -1167,8 +1280,8 @@ async function handleFilesAuto(fileList){
     const det = detectarTipoArquivo(it.nome, it.texto);
     if(!det){ res.naoReconhecidos.push(it.nome); return; }
     // mesmo arquivo solto duas vezes dobraria a contagem de NFs do hebls
-    if(PENDING[det.tipo].some(p=>p.nome===it.nome && p.texto===it.texto)){ res.repetidos.push(it.nome); return; }
-    adicionarPendente(det.tipo, it.nome, it.texto);
+    if(arquivoJaCarregado(it.nome)){ res.repetidos.push(it.nome); return; }
+    PENDING[det.tipo].push({nome: it.nome, regiao: extrairRegiaoDoNome(it.nome), texto: it.texto});
     res.ok[det.tipo]++;
     if(det.porNome) res.porNome.push(it.nome);
   });
@@ -1187,7 +1300,7 @@ function renderResumoAuto(res){
   const total = res.ok.GAN + res.ok.HEBLS + res.ok.REGIAO;
   let h = '';
   if(res.porNome.length) h += box('--amber', `Tipo definido só pelo nome (nenhuma linha reconhecida no conteúdo): ${lista(res.porNome)}`);
-  if(res.repetidos.length) h += box('--amber', `Ignorado(s), já estava(m) carregado(s): ${lista(res.repetidos)}`);
+  if(res.repetidos.length) h += box('--amber', `Não carregado(s) — já existe(m) arquivo(s) com o mesmo nome: ${lista(res.repetidos)}. Remova o existente em “Arquivos carregados” antes de enviar de novo.`);
   if(res.naoReconhecidos.length) h += box('--red', `Não reconhecido(s): ${lista(res.naoReconhecidos)}. Se for de um desses tipos com formato diferente, use o envio manual abaixo.`);
   el.innerHTML = h;
 }
@@ -1196,10 +1309,10 @@ function renderResumoAuto(res){
 function normFilialCod(c){ return /^d-?0$/i.test(c) ? 'D0' : c; }   // "D-0", "d0" -> "D0"
 function parseGAN(texto, regiao){
   const out = [];
-  const re = /(\d{5,6})\s+(\d{2}|[Dd]-?0)\s+(\d{2}\/\d{2}\/\d{2,4})\s+([A-Z0-9]{6,8})\b/g;
+  const re = /(\d{5,6})\s+(\d{2}|[Dd]-?0)\s+(\d{2}\/\d{2}\/\d{2,4})\s+([A-Za-z0-9]{3}-?[A-Za-z0-9]{3,5})\b/g;
   let m;
   while((m = re.exec(texto)) !== null){
-    out.push({preRomaneio: m[1].replace(/^0+/,'') || '0', filial: normFilialCod(m[2]), dataEntrega: m[3], placa: m[4], regiao});
+    out.push({preRomaneio: m[1].replace(/^0+/,'') || '0', filial: normFilialCod(m[2]), dataEntrega: m[3], placa: placaKey(m[4]), regiao});
   }
   return out;
 }
@@ -1212,12 +1325,21 @@ function parseHEBLS(texto){
   });
   return counts;
 }
+// filial de cada PRÉ no log de NF (primeira coluna) — usada para pré-preencher os PRÉs sem placa
+function parseHEBLSFiliais(texto){
+  const out = {};
+  texto.split(/\r?\n/).forEach(line=>{
+    const m = line.match(/^\s*(\d{2}|[Dd]-?0)\s+(\d+)\s+\S+\s+Nota Fiscal.*(?:Pre.Romaneio|Romaneio)\s*:\s*(\d+)/i);
+    if(m){ const pr = m[3].replace(/^0+/,'') || '0'; if(!out[pr]) out[pr] = normFilialCod(m[1]); }
+  });
+  return out;
+}
 // Região: linhas "GAJ0314   334005    3 73"
 function parseREGIAO(texto, regiao){
   const out = [];
   const re = /^(\S{5,9})\s+(\S+)\s+(\d+)\s+(\d+)\s*$/gm;
   let m;
-  while((m = re.exec(texto)) !== null){ out.push({placa:m[1], codigo:m[2], seq:parseInt(m[3]), valor:parseInt(m[4]), regiao}); }
+  while((m = re.exec(texto)) !== null){ out.push({placa:placaKey(m[1]), codigo:m[2], seq:parseInt(m[3]), valor:parseInt(m[4]), regiao}); }
   return out;
 }
 
@@ -1237,7 +1359,7 @@ function atualizarPreviaUpload(){
   </div>`;
 }
 
-function getCargaPorPlaca(placa){ return STATE.cargas.find(c=>c.placa===placa); }
+function getCargaPorPlaca(placa){ const k=placaKey(placa); return k ? STATE.cargas.find(c=>placaKey(c.placa)===k) : undefined; }
 
 function consolidarUploads(){
   const totalArquivos = PENDING.GAN.length + PENDING.HEBLS.length + PENDING.REGIAO.length;
@@ -1257,7 +1379,7 @@ function consolidarUploads(){
     });
   });
   function territorioDaPlaca(placa){
-    const info = regiaoPorPlaca[placa];
+    const info = regiaoPorPlaca[placaKey(placa)];
     if(!info) return {territorio:null, regiao:null};
     let best=null, bestCount=-1;
     Object.entries(info.valores).forEach(([v,c])=>{ if(c>bestCount){best=v;bestCount=c;} });
@@ -1275,7 +1397,7 @@ function consolidarUploads(){
   ganRecords.forEach(g=>{
     const key = g.preRomaneio+'__'+g.filial;
     // já existe esse PRÉ em OUTRA placa? -> duplicidade
-    if(presIndex[key] && presIndex[key] !== g.placa){
+    if(presIndex[key] && placaKey(presIndex[key]) !== placaKey(g.placa)){
       duplicidadesDetectadas++;
       return;
     }
@@ -1283,7 +1405,6 @@ function consolidarUploads(){
     if(!carga){
       const terr = territorioDaPlaca(g.placa);
       const transportadora = findTransportadoraDaPlaca(g.placa);
-      if(!transportadora) semTransportadora++;
       carga = {id:'c'+Date.now()+Math.random().toString(36).slice(2,7), placa:g.placa, transportadora, regiao:(g.regiao||terr.regiao), territorio:terr.territorio, pres:[]};
       STATE.cargas.push(carga);
       cargasNovas++;
@@ -1298,11 +1419,19 @@ function consolidarUploads(){
   // PRÉs sem placa: preRomaneios do hebls que não apareceram em nenhum GAN
   const preRomaneiosComPlaca = new Set(ganRecords.map(g=>g.preRomaneio));
   STATE.cargas.forEach(c=> c.pres.forEach(p=> preRomaneiosComPlaca.add(p.preRomaneio)));
+  const heblsFilial = {};
+  PENDING.HEBLS.forEach(f=>{ const m=parseHEBLSFiliais(f.texto); Object.keys(m).forEach(k=>{ if(!heblsFilial[k]) heblsFilial[k]=m[k]; }); });
+  // remove pendências antigas que agora já têm placa (ex.: consolidação anterior feita sem o GAN)
+  STATE.presOrfaos = STATE.presOrfaos.filter(o=> !preRomaneiosComPlaca.has(o.preRomaneio));
   Object.keys(heblsMap).forEach(pr=>{
     if(!preRomaneiosComPlaca.has(pr) && !STATE.presOrfaos.find(o=>o.preRomaneio===pr)){
-      STATE.presOrfaos.push({preRomaneio:pr, qtdEntrega:heblsMap[pr], filial:'', placaInformada:''});
+      STATE.presOrfaos.push({preRomaneio:pr, qtdEntrega:heblsMap[pr], filial:heblsFilial[pr]||'', placaInformada:''});
     }
   });
+  // placas cadastradas depois (ou com grafia diferente) passam a valer nas cargas existentes
+  revincularTransportadoras();
+  // se a qtd de entregas veio no log de NF, atualiza também PRÉs já consolidados
+  STATE.cargas.forEach(c=> c.pres.forEach(p=>{ if(heblsMap[p.preRomaneio]!=null) p.qtdEntrega = heblsMap[p.preRomaneio]; }));
 
   // atualiza os PREs das cargas já alocadas sem refazer a alocação (preserva docas ajustadas à mão)
   STATE.alocacao.forEach(a=>{ const c=STATE.cargas.find(x=>x.id===a.cargaId); if(c) a.pres=c.pres; });
@@ -1310,8 +1439,9 @@ function consolidarUploads(){
   renderConsolidado();
   renderOrfaos();
 
+  semTransportadora = STATE.cargas.filter(c=>!c.transportadora).length;
   let msg = `${cargasNovas} carga(s) nova(s), ${presAdicionados} PRÉ(s) adicionado(s).`;
-  if(semTransportadora) msg += ` ${semTransportadora} sem transportadora cadastrada.`;
+  if(semTransportadora) msg += ` ${semTransportadora} carga(s) com placa sem transportadora cadastrada.`;
   if(duplicidadesDetectadas) msg += ` ${duplicidadesDetectadas} duplicidade(s) ignorada(s) — veja o alerta.`;
   toast(msg, (semTransportadora||duplicidadesDetectadas) ? 'err' : 'ok');
 }
@@ -1339,10 +1469,11 @@ function updateOrfaoFilial(idx, val){ STATE.presOrfaos[idx].filial = val; saveSt
 function resolverOrfao(idx){
   const o = STATE.presOrfaos[idx];
   if(!o.placaInformada || !o.filial){ toast('Informe placa e filial antes de vincular.', 'err'); return; }
-  let carga = getCargaPorPlaca(o.placaInformada);
+  const placaOrf = placaKey(o.placaInformada);
+  let carga = getCargaPorPlaca(placaOrf);
   if(!carga){
-    const transportadora = findTransportadoraDaPlaca(o.placaInformada);
-    carga = {id:'c'+Date.now()+Math.random().toString(36).slice(2,7), placa:o.placaInformada, transportadora, regiao:null, territorio:null, pres:[]};
+    const transportadora = findTransportadoraDaPlaca(placaOrf);
+    carga = {id:'c'+Date.now()+Math.random().toString(36).slice(2,7), placa:placaOrf, transportadora, regiao:null, territorio:null, pres:[]};
     STATE.cargas.push(carga);
   }
   carga.pres.push({preRomaneio:o.preRomaneio, filial:o.filial, qtdEntrega:o.qtdEntrega, dataEntrega:null});
@@ -1402,7 +1533,7 @@ function renderConsolidado(){
 }
 function limparCargas(){
   if(!confirm('Remover todas as cargas consolidadas e a alocação?')) return;
-  STATE.cargas = []; STATE.alocacao = []; STATE.presOrfaos = []; STATE.ondaStatus = {};
+  STATE.cargas = []; STATE.alocacao = []; STATE.presOrfaos = []; STATE.ondaStatus = {}; STATE.iscas = [];
   saveState();
   renderConsolidado(); renderOrfaos(); renderAlocacao();
 }
@@ -1413,7 +1544,7 @@ function limparCargas(){
    As ondas reaproveitam sempre as MESMAS docas da transportadora.
    ========================================================= */
 function prioridadeDaCarga(carga){
-  const cad = STATE.config.cadastroPlacas.find(c=>c.placa===carga.placa);
+  const cad = findCadastroDaPlaca(carga.placa);
   if(cad && cad.prioridadeIndividual != null) return cad.prioridadeIndividual;
   const t = STATE.config.transportadoras.find(t=>t.nome===carga.transportadora);
   return t ? t.prioridade : 999;
@@ -1425,6 +1556,9 @@ function menorPreRomaneio(carga){
 
 function rodarAlocacao(){
   if(STATE.cargas.length===0){ toast('Não há cargas consolidadas.', 'err'); return; }
+  const nAjustes = STATE.alocacao.filter(a=>a.status==='AJUSTADO').length;
+  if(nAjustes && !confirm(nAjustes+' carga(s) foram ajustadas manualmente no mapa de docas. Recalcular a alocação descarta esses ajustes. Continuar?')) return;
+  revincularTransportadoras();   // garante que placas cadastradas depois da consolidação sejam reconhecidas
 
   const porTransp = {};
   STATE.cargas.forEach(c=>{
@@ -1478,8 +1612,14 @@ function rodarAlocacao(){
 
   STATE.alocacao = resultado;
   saveState();
-  renderAlocacao();
+  atualizarTodasAsAbas();
   toast('Alocação recalculada: '+resultado.length+' carga(s) processada(s).', 'ok');
+}
+/* Reatualiza todas as telas dependentes: ao rodar a alocação, Consolidação, Alocação, Dashboard,
+   Painel por doca/onda, Cargas por filial e Backup ficam prontos, como se o processo já tivesse sido concluído. */
+function atualizarTodasAsAbas(){
+  const f = (fn)=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(e){ console.error(fn, e); } };
+  ['renderCadastro','renderConsolidado','renderOrfaos','renderDashboard','renderPainel','renderCargasFilial','renderMatrizDocas','renderIscas','renderBackup','atualizarPreviaUpload'].forEach(f);
 }
 function baseAlocRow(carga, transportadora, status, doca, motivo, onda){
   return {
@@ -1490,217 +1630,11 @@ function baseAlocRow(carga, transportadora, status, doca, motivo, onda){
 }
 
 function statusOnda(transp, onda){ return STATE.ondaStatus[transp+'__'+onda] || 'Aguardando'; }
-function setStatusOnda(transp, onda, val){ STATE.ondaStatus[transp+'__'+onda] = val; saveState(); renderDashboard(); }
+function setStatusOnda(transp, onda, val){ STATE.ondaStatus[transp+'__'+onda] = val; saveState(); renderDashboard(); if(typeof renderPainel==='function') renderPainel(); }
 
-let alocacaoView = 'unificado'; // 'unificado' | 'transportadora'
-function setAlocacaoView(v){
-  alocacaoView = v;
-  document.getElementById('btnViewUnificado').classList.toggle('active', v==='unificado');
-  document.getElementById('btnViewTransp').classList.toggle('active', v==='transportadora');
-  document.getElementById('alocacaoTituloView').textContent = v==='unificado' ? 'Mapa de docas — visão unificada' : 'Resultado por transportadora e onda';
-  document.getElementById('alocacaoDescView').textContent = v==='unificado'
-    ? 'Todas as docas da unidade, lado a lado, cruzadas com as ondas — independente da transportadora. Use para enxergar rapidamente docas ociosas (oportunidade de realocação) e conflitos de doca dupla. O filtro por transportadora abaixo funciona como recorte pontual, não como estrutura principal.'
-    : 'Clique no nome da transportadora para abrir/fechar. Ajuste a doca manualmente se precisar — o status muda para "Ajustado". Defina o status operacional de cada onda.';
-  renderAlocacao();
-}
-
-function renderAlocacao(){
-  // popular filtros
-  const selTransp = document.getElementById('filtroTransp');
-  const nomesTransp = Array.from(new Set(STATE.alocacao.map(a=>a.transportadora).filter(Boolean))).sort();
-  const curTransp = selTransp.value;
-  selTransp.innerHTML = '<option value="">Todas transportadoras</option>' + nomesTransp.map(n=>`<option value="${n}" ${n===curTransp?'selected':''}>${n}</option>`).join('');
-  const selFilial = document.getElementById('filtroFilial');
-  const curFilial = selFilial.value;
-  selFilial.innerHTML = '<option value="">Todas filiais</option>' + STATE.config.filiais.map(f=>`<option value="${f.codigo}" ${f.codigo===curFilial?'selected':''}>${f.nome}</option>`).join('');
-
-  const filtroTransp = selTransp.value, filtroFilial = selFilial.value;
-
-  const total = STATE.alocacao.length;
-  const ok = STATE.alocacao.filter(a=>a.status==='OK').length;
-  const alterar = STATE.alocacao.filter(a=>a.status==='ALTERAR').length;
-  const ajustado = STATE.alocacao.filter(a=>a.status==='AJUSTADO').length;
-  document.getElementById('alocStats').innerHTML = `
-    <div class="stat"><div class="num">${total}</div><div class="lbl">cargas processadas</div></div>
-    <div class="stat"><div class="num" style="color:var(--teal)">${ok}</div><div class="lbl">alocadas OK</div></div>
-    <div class="stat"><div class="num" style="color:var(--red)">${alterar}</div><div class="lbl">pendências</div></div>
-    <div class="stat"><div class="num" style="color:var(--text-1)">${ajustado}</div><div class="lbl">ajustadas manualmente</div></div>
-  `;
-
-  const body = document.getElementById('alocacaoBody');
-  if(STATE.alocacao.length===0){ body.innerHTML = '<div class="empty">Rode a alocação para ver o resultado.</div>'; return; }
-
-  const rowsFiltradas = STATE.alocacao.filter(a=>{
-    if(filtroTransp && a.transportadora!==filtroTransp) return false;
-    if(filtroFilial && !a.pres.some(p=>p.filial===filtroFilial)) return false;
-    return true;
-  });
-
-  if(alocacaoView==='unificado'){
-    renderAlocacaoUnificada(body, rowsFiltradas, filtroTransp);
-    return;
-  }
-
-  renderAlocacaoPorTransportadora(body, rowsFiltradas);
-}
-
-/* =========================================================
-   ALOCAÇÃO — VISÃO UNIFICADA (mapa doca x onda, todas transportadoras juntas)
-   ========================================================= */
-function renderAlocacaoUnificada(body, rows, filtroTransp){
-  // universo de docas: faixas parametrizadas das transportadoras (respeitando o filtro), dentro das docas disponíveis da unidade
-  const transpConsideradas = STATE.config.transportadoras.filter(t=> !filtroTransp || t.nome===filtroTransp);
-  const docaSet = new Set();
-  transpConsideradas.forEach(t=>{
-    const unidade = STATE.config.unidades.find(u=>u.id===t.unidade);
-    const docasUnidade = unidade ? new Set(getDocasDisponiveisUnidade(unidade)) : null;
-    for(let d=t.docaIn; d<=t.docaFim; d++){ if(!docasUnidade || docasUnidade.has(d)) docaSet.add(d); }
-  });
-  // garante que docas usadas de fato na alocação também apareçam, mesmo sem faixa parametrizada visível no filtro atual
-  rows.forEach(r=>{ const d = r.docaManual!=null?r.docaManual:r.docaSugerida; if(d!=null) docaSet.add(d); });
-
-  const docas = Array.from(docaSet).sort((a,b)=>a-b);
-  const maxOnda = Math.max(0, ...rows.map(r=>r.onda||0));
-
-  if(docas.length===0 || maxOnda===0){
-    body.innerHTML = '<div class="empty">Sem docas/ondas para exibir com o filtro atual. Rode a alocação ou ajuste o filtro.</div>';
-    return;
-  }
-
-  // monta índice doca+onda -> cargas
-  const idx = {};
-  let conflitos = 0;
-  rows.forEach(r=>{
-    const d = r.docaManual!=null?r.docaManual:r.docaSugerida;
-    if(d==null || !r.onda) return;
-    const key = d+'__'+r.onda;
-    if(!idx[key]) idx[key] = [];
-    idx[key].push(r);
-  });
-  Object.values(idx).forEach(arr=>{ if(arr.length>1) conflitos++; });
-
-  let html = `<div class="matrix-legend">
-    <span class="lg-item"><span class="lg-swatch" style="background:var(--bg-1);"></span> Doca ocupada na onda</span>
-    <span class="lg-item"><span class="lg-swatch" style="background:rgba(47,217,185,.14);border-color:var(--teal);"></span> Doca ociosa/disponível na onda</span>
-    <span class="lg-item"><span class="lg-swatch" style="background:rgba(255,93,102,.22);border-color:var(--red);"></span> Conflito — mais de uma carga na mesma doca/onda</span>
-    ${conflitos>0 ? `<span style="color:var(--red);font-weight:600;">${conflitos} conflito(s) detectado(s)</span>` : ''}
-  </div>`;
-
-  html += '<div class="doca-matrix-wrap"><table class="doca-matrix"><thead><tr><th class="col-doca">Doca</th>';
-  for(let o=1;o<=maxOnda;o++) html += `<th>${o}ª Onda</th>`;
-  html += '</tr></thead><tbody>';
-
-  docas.forEach(d=>{
-    html += `<tr><td class="doca-label">${d}</td>`;
-    for(let o=1;o<=maxOnda;o++){
-      const matches = idx[d+'__'+o] || [];
-      if(matches.length===0){
-        html += `<td class="cell-idle"><span class="cell-inner" title="Doca ${d} livre na ${o}ª onda">livre</span></td>`;
-      } else if(matches.length===1){
-        const r = matches[0];
-        const badgeColor = r.status==='OK' ? 'var(--teal)' : (r.status==='AJUSTADO' ? 'var(--text-1)' : 'var(--red)');
-        html += `<td class="cell-busy"><span class="cell-inner" title="${r.transportadora||'Sem transportadora'} · ${r.placa} · prioridade ${r.prioridade}${r.motivo?(' · '+r.motivo):''}">
-          <span class="cell-chip" style="color:${badgeColor}">${r.placa}</span>
-          <span class="cell-sub">${r.transportadora||'—'}</span>
-        </span></td>`;
-      } else {
-        const lista = matches.map(r=>`${r.placa} (${r.transportadora||'—'})`).join(' + ');
-        html += `<td class="cell-conflict"><span class="cell-inner" title="Conflito: ${lista}">
-          <span class="cell-chip" style="color:var(--red)">${matches.length}x</span>
-          <span class="cell-sub">${lista}</span>
-        </span></td>`;
-      }
-    }
-    html += '</tr>';
-  });
-  html += '</tbody></table></div>';
-
-  body.innerHTML = html;
-}
-
-/* =========================================================
-   ALOCAÇÃO — VISÃO POR TRANSPORTADORA (agrupada, filtro pontual)
-   ========================================================= */
-function renderAlocacaoPorTransportadora(body, rows){
-  const porTransp = {};
-  rows.forEach(a=>{
-    const key = a.transportadora || 'Sem transportadora';
-    if(!porTransp[key]) porTransp[key] = [];
-    porTransp[key].push(a);
-  });
-
-  body.innerHTML = '';
-  Object.keys(porTransp).sort().forEach(transp=>{
-    const rows = porTransp[transp];
-    const cfg = STATE.config.transportadoras.find(t=>t.nome===transp);
-    const maxOnda = Math.max(0, ...rows.map(r=>r.onda||0));
-    const det = document.createElement('details');
-    det.className = 'carrier-group';
-    det.open = true;
-    const okCount = rows.filter(r=>r.status==='OK').length;
-    const altCount = rows.filter(r=>r.status==='ALTERAR').length;
-    det.innerHTML = `<summary><span>${transp} ${cfg?`<span style="color:var(--text-2);font-weight:400;font-size:12px;">(docas ${cfg.docaIn}–${cfg.docaFim})</span>`:''}</span>
-      <span style="font-weight:400;font-size:12px;color:var(--text-2);">${rows.length} carga(s) · ${maxOnda||0} onda(s) · <span style="color:var(--teal)">${okCount} OK</span> · <span style="color:var(--red)">${altCount} pendente(s)</span></span></summary>`;
-    const bodyDiv = document.createElement('div');
-    bodyDiv.className = 'body';
-
-    if(maxOnda>0){
-      for(let onda=1; onda<=maxOnda; onda++){
-        const rowsOnda = rows.filter(r=>r.onda===onda);
-        const wb = document.createElement('div');
-        wb.className = 'wave-block';
-        const statusAtual = statusOnda(transp, onda);
-        wb.innerHTML = `<div class="wave-block-head">
-          <div><span class="title">${onda}ª Onda</span><span class="sub">${rowsOnda.length} veículo(s)</span></div>
-          <select onchange="setStatusOnda('${transp.replace(/'/g,"\\'")}', ${onda}, this.value)">
-            ${['Aguardando','Em preparação','Em carregamento','Parcial','Concluída'].map(s=>`<option value="${s}" ${s===statusAtual?'selected':''}>${s}</option>`).join('')}
-          </select>
-        </div>`;
-        const tbl = document.createElement('table');
-        tbl.innerHTML = `<thead><tr><th>Status</th><th>Placa</th><th>Prioridade</th><th>PRÉs (filial · nº)</th><th>Doca sugerida</th><th>Doca (ajuste manual)</th><th>Motivo</th></tr></thead><tbody></tbody>`;
-        const tbody = tbl.querySelector('tbody');
-        rowsOnda.forEach(a=>{
-          const realIdx = STATE.alocacao.indexOf(a);
-          const badgeClass = a.status==='OK' ? 'ok' : (a.status==='AJUSTADO' ? 'neutral' : 'alert');
-          const presHtml = a.pres.map(p=>`<span class="pre-chip ${isFilialPrincipal(p.filial)?'f-principal':'f-outra'}">${nomeFilial(p.filial)}·${p.preRomaneio}</span>`).join(' ');
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td><span class="badge ${badgeClass}">${a.status}</span></td>
-            <td class="mono">${a.placa}</td>
-            <td>${a.prioridade}</td>
-            <td style="white-space:normal;">${presHtml}</td>
-            <td class="mono">${a.docaSugerida!=null?a.docaSugerida:'—'}</td>
-            <td><input type="number" placeholder="—" value="${a.docaManual!=null?a.docaManual:''}" style="width:80px" onchange="ajustarDocaManual(${realIdx}, this.value)"></td>
-            <td style="white-space:normal;max-width:220px;color:var(--text-2);font-size:12px;">${a.motivo||''}</td>
-          `;
-          tbody.appendChild(tr);
-        });
-        wb.appendChild(tbl);
-        bodyDiv.appendChild(wb);
-      }
-    } else {
-      // sem onda (ex: sem transportadora / sem doca parametrizada)
-      const tbl = document.createElement('table');
-      tbl.innerHTML = `<thead><tr><th>Status</th><th>Placa</th><th>PRÉs (filial · nº)</th><th>Motivo</th></tr></thead><tbody></tbody>`;
-      const tbody = tbl.querySelector('tbody');
-      rows.forEach(a=>{
-        const presHtml = a.pres.map(p=>`<span class="pre-chip ${isFilialPrincipal(p.filial)?'f-principal':'f-outra'}">${nomeFilial(p.filial)}·${p.preRomaneio}</span>`).join(' ');
-        tbody.innerHTML += `<tr><td><span class="badge alert">${a.status}</span></td><td class="mono">${a.placa}</td><td style="white-space:normal;">${presHtml}</td><td style="color:var(--text-2);font-size:12px;">${a.motivo||''}</td></tr>`;
-      });
-      bodyDiv.appendChild(tbl);
-    }
-
-    det.appendChild(bodyDiv);
-    body.appendChild(det);
-  });
-}
-function ajustarDocaManual(idx, val){
-  const a = STATE.alocacao[idx];
-  if(val===''){ a.docaManual = null; a.status = a.docaSugerida!=null ? 'OK' : 'ALTERAR'; }
-  else { a.docaManual = parseInt(val); a.status = 'AJUSTADO'; }
-  saveState();
-  renderAlocacao();
-}
+/* A antiga aba “Alocação de Docas” foi removida: o mapa doca × onda agora fica no Painel (aba 5). */
+function renderAlocacao(){ /* sem tela própria; o Painel é atualizado por renderPainel() */ }
+window.ajustarDocaManual=function(){};
 
 /* =========================================================
    DASHBOARD / INDICADORES
@@ -1822,38 +1756,209 @@ function stat(num, lbl, color){
 /* =========================================================
    BACKUP / RESTAURAÇÃO
    ========================================================= */
-function exportBackup(){
-  const blob = new Blob([JSON.stringify(STATE, null, 2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
-  a.href = url; a.download = `backup_central_docas_${ts}.json`; a.click();
-  URL.revokeObjectURL(url);
-  toast('Backup gerado.', 'ok');
+const BK_COLS_PRES=['Placa','Transportadora','Região','Território','Filial','Pré-Romaneio','Qtd. Entrega','Data Entrega'];
+const BK_COLS_ORF=['Pré-Romaneio','Qtd. Entrega','Placa informada','Filial'];
+function bkTs(){ return new Date().toISOString().slice(0,19).replace(/[:T]/g,'-'); }
+function bkBaixar(blob, nome){
+  const url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download=nome; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
-function importBackup(ev){
-  const file = ev.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = (e)=>{
-    try{
-      const parsed = JSON.parse(e.target.result);
-      if(!parsed.config || !parsed.cargas){ toast('Arquivo de backup inválido.', 'err'); return; }
-      garantirFilialD0(parsed);
-      STATE = parsed;
-      saveState();
-      renderParametros(); renderCadastro(); renderConsolidado(); renderOrfaos(); renderAlocacao(); renderDashboard();
-      toast('Backup restaurado com sucesso.', 'ok');
-    }catch(err){ toast('Não foi possível ler o arquivo de backup.', 'err'); }
-  };
-  reader.readAsText(file);
-  ev.target.value = '';
+function bkLinhasPres(){
+  const rows=[];
+  (STATE.cargas||[]).forEach(c=>{
+    const pres=(c.pres&&c.pres.length)?c.pres:[null];
+    pres.forEach(p=>rows.push({'Placa':c.placa||'','Transportadora':c.transportadora||'','Região':c.regiao||'','Território':c.territorio==null?'':c.territorio,
+      'Filial':p?(p.filial==null?'':p.filial):'','Pré-Romaneio':p?(p.preRomaneio==null?'':String(p.preRomaneio)):'','Qtd. Entrega':p?(p.qtdEntrega==null?'':p.qtdEntrega):'','Data Entrega':p?(p.dataEntrega==null?'':p.dataEntrega):''}));
+  });
+  return rows;
+}
+function bkLinhasOrfaos(){
+  return (STATE.presOrfaos||[]).map(o=>({'Pré-Romaneio':o.preRomaneio==null?'':String(o.preRomaneio),'Qtd. Entrega':o.qtdEntrega==null?'':o.qtdEntrega,'Placa informada':o.placaInformada||'','Filial':o.filial==null?'':o.filial}));
+}
+function bkLinhasAloc(){
+  return (STATE.alocacao||[]).map(a=>({'Placa':a.placa||'','Transportadora':a.transportadora||'','Prioridade':a.prioridade==null?'':a.prioridade,'Onda':a.onda==null?'':a.onda,
+    'Doca':a.doca==null?'':a.doca,'Doca manual':a.docaManual==null?'':a.docaManual,'Status':a.status||'','Motivo':a.motivo||''}));
+}
+function bkFlat(arr){
+  return (arr||[]).map(o=>{
+    if(o===null||typeof o!=='object') return {Valor:o};
+    const r={}; Object.keys(o).forEach(k=>{ const v=o[k]; r[k]=(v!==null&&typeof v==='object')?JSON.stringify(v):v; }); return r;
+  });
+}
+function bkCSV(rows, cols){
+  cols=cols||(rows[0]?Object.keys(rows[0]):[]);
+  const q=v=>{ v=v==null?'':String(v); return /[";\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  return [cols.map(q).join(';')].concat(rows.map(r=>cols.map(c=>q(r[c])).join(';'))).join('\r\n');
+}
+function bkXlsxBuf(){
+  const wb=XLSX.utils.book_new();
+  const add=(nome,rows,cols)=>{ const ws=rows.length?XLSX.utils.json_to_sheet(rows):XLSX.utils.aoa_to_sheet([cols||['(vazio)']]); XLSX.utils.book_append_sheet(wb,ws,nome.slice(0,31)); };
+  add('Cargas e PREs',bkLinhasPres(),BK_COLS_PRES);
+  add('Pendências',bkLinhasOrfaos(),BK_COLS_ORF);
+  add('Alocação',bkLinhasAloc(),['Placa','Transportadora','Prioridade','Onda','Doca','Doca manual','Status','Motivo']);
+  add('Transportadoras',bkFlat(STATE.config&&STATE.config.transportadoras),['nome']);
+  add('Unidades',bkFlat(STATE.config&&STATE.config.unidades),['nome']);
+  add('Filiais',bkFlat(STATE.config&&STATE.config.filiais),['codigo']);
+  add('Placas cadastradas',bkFlat(STATE.config&&STATE.config.cadastroPlacas),['placa']);
+  const j=JSON.stringify(STATE), aoa=[['backup_json (não editar — usado na restauração)']];
+  for(let i=0;i<j.length;i+=30000) aoa.push([j.slice(i,i+30000)]);
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(aoa),'_backup');
+  return XLSX.write(wb,{bookType:'xlsx',type:'array'});
+}
+async function bkExportar(fmt){
+  const ts=bkTs();
+  try{
+    if(fmt==='json'){
+      bkBaixar(new Blob([JSON.stringify(STATE,null,2)],{type:'application/json'}),`backup_central_docas_${ts}.json`);
+    } else if(fmt==='xlsx'){
+      if(typeof XLSX==='undefined'){ toast('Biblioteca de Excel não carregou. Verifique a conexão.','err'); return; }
+      bkBaixar(new Blob([bkXlsxBuf()],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),`backup_central_docas_${ts}.xlsx`);
+    } else if(fmt==='csv'){
+      bkBaixar(new Blob(['\uFEFF'+bkCSV(bkLinhasPres(),BK_COLS_PRES)],{type:'text/csv;charset=utf-8'}),`backup_cargas_pres_${ts}.csv`);
+    } else if(fmt==='zip'){
+      if(typeof JSZip==='undefined' || typeof XLSX==='undefined'){ toast('Biblioteca de ZIP/Excel não carregou. Verifique a conexão.','err'); return; }
+      const z=new JSZip();
+      z.file('backup_central_docas.json',JSON.stringify(STATE,null,2));
+      z.file('backup_central_docas.xlsx',bkXlsxBuf());
+      z.file('cargas_pres.csv','\uFEFF'+bkCSV(bkLinhasPres(),BK_COLS_PRES));
+      z.file('pendencias.csv','\uFEFF'+bkCSV(bkLinhasOrfaos(),BK_COLS_ORF));
+      z.file('alocacao.csv','\uFEFF'+bkCSV(bkLinhasAloc(),['Placa','Transportadora','Prioridade','Onda','Doca','Doca manual','Status','Motivo']));
+      bkBaixar(await z.generateAsync({type:'blob'}),`backup_central_docas_${ts}.zip`);
+    } else return;
+    toast('Backup gerado ('+fmt.toUpperCase()+').','ok');
+  }catch(e){ console.error(e); toast('Não foi possível gerar o backup: '+(e.message||e),'err'); }
+}
+function exportBackup(){ bkExportar('json'); }
+
+function renderBackup(){
+  const el=document.getElementById('bkResumo'); if(!el) return;
+  const pres=(STATE.cargas||[]).reduce((n,c)=>n+((c.pres||[]).length),0);
+  const kb=Math.round(JSON.stringify(STATE).length/1024);
+  el.innerHTML=stat((STATE.cargas||[]).length,'Cargas')+stat(pres,'PREs nas cargas')+stat((STATE.presOrfaos||[]).length,'PREs pendentes')+stat(kb+' KB','Tamanho do backup');
+}
+
+/* ---------- leitura de qualquer formato ---------- */
+function bkNorm(k){ return String(k==null?'':k).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(); }
+function bkNum(v){ const n=Number(String(v==null?'':v).replace(',','.')); return isNaN(n)?0:n; }
+function bkDecode(buf){
+  let t=new TextDecoder('utf-8').decode(buf);
+  if(t.indexOf('\uFFFD')>=0){ try{ t=new TextDecoder('windows-1252').decode(buf); }catch(e){} }
+  return t.replace(/^\uFEFF/,'');
+}
+function bkParseCSV(txt){
+  const l1=(txt.split(/\r?\n/,1)[0])||'';
+  const cnt=c=>l1.split(c).length-1;
+  const sep=[';','\t',',','|'].reduce((b,c)=>cnt(c)>cnt(b)?c:b,';');
+  const out=[]; let row=[], cur='', q=false;
+  for(let i=0;i<txt.length;i++){
+    const ch=txt[i];
+    if(q){ if(ch==='"'){ if(txt[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=ch; }
+    else if(ch==='"') q=true;
+    else if(ch===sep){ row.push(cur); cur=''; }
+    else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&txt[i+1]==='\n') i++; row.push(cur); cur=''; out.push(row); row=[]; }
+    else cur+=ch;
+  }
+  if(cur!==''||row.length){ row.push(cur); out.push(row); }
+  return out.filter(r=>r.some(c=>String(c).trim()!==''));
+}
+function bkEstadoValido(o){ return !!(o && typeof o==='object' && o.config && Array.isArray(o.cargas)); }
+function bkClassificar(aoa, nome){
+  if(!aoa || aoa.length<1) return null;
+  const hdr=aoa[0].map(bkNorm), idx=n=>hdr.indexOf(n), rows=aoa.slice(1);
+  const iPre=Math.max(idx('pre romaneio'),idx('preromaneio')), iPla=idx('placa'), iInf=idx('placa informada');
+  const cel=(r,i)=>i>=0?String(r[i]==null?'':r[i]).trim():'';
+  if(iPre>=0 && iInf>=0){
+    const orfaos=rows.map(r=>({preRomaneio:cel(r,iPre),qtdEntrega:bkNum(cel(r,idx('qtd entrega'))),filial:cel(r,idx('filial')),placaInformada:cel(r,iInf)})).filter(o=>o.preRomaneio);
+    return {tipo:'orfaos',nome,orfaos};
+  }
+  if(iPre>=0 && iPla>=0){
+    const g=new Map();
+    rows.forEach(r=>{
+      const placa=cel(r,iPla); if(!placa) return;
+      let c=g.get(placa);
+      if(!c){ c={id:'c'+Date.now()+Math.random().toString(36).slice(2,7)+g.size,placa,transportadora:'',regiao:null,territorio:null,pres:[]}; g.set(placa,c); }
+      if(!c.transportadora) c.transportadora=cel(r,idx('transportadora'));
+      if(!c.regiao) c.regiao=cel(r,idx('regiao'))||null;
+      if(c.territorio==null){ const t=cel(r,idx('territorio')); if(t!=='') c.territorio=isNaN(Number(t))?t:Number(t); }
+      const pre=cel(r,iPre);
+      if(pre) c.pres.push({preRomaneio:pre,filial:cel(r,idx('filial')),qtdEntrega:bkNum(cel(r,idx('qtd entrega'))),dataEntrega:cel(r,idx('data entrega'))||null});
+    });
+    return {tipo:'cargas',nome,cargas:Array.from(g.values())};
+  }
+  return null;
+}
+async function bkLerBuffer(nome, buf){
+  const base=nome.split('/').pop(), ext=(base.split('.').pop()||'').toLowerCase();
+  const ign=m=>[{tipo:'ignorado',nome,motivo:m}];
+  if(ext==='zip'){
+    if(typeof JSZip==='undefined') return ign('biblioteca de ZIP não carregou');
+    const zip=await JSZip.loadAsync(buf), out=[];
+    const nomes=Object.keys(zip.files).filter(n=>!zip.files[n].dir && n.indexOf('__MACOSX')<0 && n.split('/').pop().charAt(0)!=='.');
+    for(const n of nomes){ out.push(...await bkLerBuffer(nome+'/'+n, await zip.files[n].async('arraybuffer'))); }
+    return out.length?out:ign('ZIP vazio');
+  }
+  if(['xlsx','xls','xlsm','xlsb','ods'].indexOf(ext)>=0){
+    if(typeof XLSX==='undefined') return ign('biblioteca de Excel não carregou');
+    const wb=XLSX.read(buf,{type:'array'});
+    const sh=n=>XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:'',raw:true});
+    if(wb.Sheets['_backup']){
+      const txt=sh('_backup').slice(1).map(r=>String(r[0]==null?'':r[0])).join('');
+      try{ const o=JSON.parse(txt); if(bkEstadoValido(o)) return [{tipo:'estado',nome,estado:o}]; }catch(e){}
+    }
+    const out=[];
+    wb.SheetNames.forEach(n=>{ if(n==='_backup') return; const c=bkClassificar(sh(n),nome+' ['+n+']'); if(c) out.push(c); });
+    return out.length?out:ign('planilha sem as colunas de cargas/PREs (Placa, Pré-Romaneio…)');
+  }
+  const txt=bkDecode(buf), t=txt.trim();
+  if(t.charAt(0)==='{'||t.charAt(0)==='['){
+    try{ const o=JSON.parse(t); return bkEstadoValido(o)?[{tipo:'estado',nome,estado:o}]:ign('JSON não tem a estrutura de backup desta ferramenta'); }
+    catch(e){ return ign('JSON inválido'); }
+  }
+  const c=bkClassificar(bkParseCSV(txt),nome);
+  return c?[c]:ign('não é um backup (arquivos GAN, Log de NF e Região entram na aba 3 · Upload & Consolidação)');
+}
+function bkRenderTudo(){ renderParametros(); renderCadastro(); renderConsolidado(); renderOrfaos(); renderAlocacao(); renderDashboard(); renderIscas(); renderBackup(); }
+async function bkRestaurarArquivos(fileList){
+  const files=Array.from(fileList||[]); if(!files.length) return;
+  const log=document.getElementById('bkLog'); log.innerHTML='';
+  const add=(t,cls)=>{ const d=document.createElement('div'); d.className=cls||''; d.textContent=t; log.appendChild(d); };
+  let cands=[];
+  for(const f of files){
+    try{ cands=cands.concat(await bkLerBuffer(f.name, await f.arrayBuffer())); }
+    catch(e){ console.error(e); cands.push({tipo:'ignorado',nome:f.name,motivo:'erro ao ler ('+(e.message||e)+')'}); }
+  }
+  const est=cands.find(c=>c.tipo==='estado');
+  const car=cands.find(c=>c.tipo==='cargas'), orf=cands.find(c=>c.tipo==='orfaos');
+  if(est){
+    const o=est.estado;
+    if(!confirm('Restaurar o backup "'+est.nome+'"?\n\nIsso SUBSTITUI todos os dados atuais (parâmetros, cadastro de placas, cargas, pendências e alocação).')){ add('Restauração cancelada.','bk-info'); return; }
+    const base=defaultState(), st=Object.assign(base,o,{config:Object.assign(base.config,o.config||{})});
+    st.config.migFilialCAJD0=!!(o.config&&o.config.migFilialCAJD0);
+    garantirFilialD0(st);
+    STATE=st; saveState(); bkRenderTudo();
+    add('✓ Backup completo restaurado: '+est.nome+' ('+st.cargas.length+' cargas).','bk-ok');
+    toast('Backup restaurado com sucesso.','ok');
+  } else if(car || orf){
+    if(!confirm('Importar cargas e PREs de "'+(car||orf).nome+'"?\n\nIsso SUBSTITUI as cargas e pendências atuais e zera a alocação (rode a alocação de novo). Parâmetros e cadastro de placas são mantidos.')){ add('Importação cancelada.','bk-info'); return; }
+    if(car){ STATE.cargas=car.cargas; STATE.alocacao=[]; STATE.ondaStatus={}; }
+    if(orf){ STATE.presOrfaos=orf.orfaos; }
+    saveState(); bkRenderTudo();
+    if(car) add('✓ '+car.cargas.length+' carga(s) importada(s) de '+car.nome+'. Rode a alocação novamente.','bk-ok');
+    if(orf) add('✓ '+orf.orfaos.length+' PRÉ(s) pendente(s) importado(s) de '+orf.nome+'.','bk-ok');
+    toast('Dados importados. Rode a alocação novamente.','ok');
+  } else {
+    toast('Nenhum backup reconhecido nos arquivos enviados.','err');
+  }
+  cands.filter(c=>c.tipo==='ignorado').forEach(c=>add('✕ '+c.nome+' — '+c.motivo,'bk-err'));
 }
 
 /* =========================================================
    INIT
    ========================================================= */
+['dragover','drop'].forEach(ev=> window.addEventListener(ev, e=>{ if(e.dataTransfer && Array.from(e.dataTransfer.types||[]).includes('Files')) e.preventDefault(); }));
 document.addEventListener('DOMContentLoaded', ()=>{
+  renderArquivosCarregados();
   renderParametros();
   renderCadastro();
   renderConsolidado();
@@ -1903,63 +2008,20 @@ function renderPainel(){
   for(let i=1;i<=maxO;i++) oo+=`<option value="${i}" ${(''+i)===cO?'selected':''}>${i}ª Onda</option>`;
   sO.innerHTML=oo;
 
-  const elD=document.getElementById('pDocas'), elO=document.getElementById('pOndas');
   if(!STATE.alocacao.length){
     document.getElementById('pStats').innerHTML='';
-    elD.innerHTML=elO.innerHTML='<div class="empty">Rode a alocação (aba 4) para ver o painel.</div>';
-    renderCargasFilial();
+    renderCargasFilial(); renderMatrizDocas();
     return;
   }
   const rows=pFiltrar();
   const alocadas=rows.filter(a=>a.status!=='ALTERAR' && pDoca(a)!=null);
   const pend=rows.filter(a=>a.status==='ALTERAR' || pDoca(a)==null);
-
-  // agrupar por doca
-  const porDoca={};
-  alocadas.forEach(a=>{ (porDoca[pDoca(a)] = porDoca[pDoca(a)] || []).push(a); });
-  let docas=Object.keys(porDoca).map(Number);
-  if(document.getElementById('pLivres').checked){
-    STATE.config.unidades.forEach(u=>getDocasDisponiveisUnidade(u).forEach(d=>{ if(!docas.includes(d)) docas.push(d); }));
-  }
-  docas.sort((a,b)=>a-b);
-
+  const docasUso=new Set(alocadas.map(pDoca));
   document.getElementById('pStats').innerHTML=[
-    stat(rows.length,'cargas no filtro'), stat(Object.keys(porDoca).length,'docas em uso','var(--amber)'),
+    stat(rows.length,'cargas no filtro'), stat(docasUso.size,'docas em uso','var(--amber)'),
     stat(new Set(alocadas.map(a=>a.onda)).size,'ondas','var(--teal)'), stat(pend.length,'pendências','var(--red)')
   ].join('').replace(/stat mini/g,'stat');
-
-  elD.innerHTML = docas.length ? docas.map(d=>{
-    const lista=(porDoca[d]||[]).slice().sort((a,b)=>(a.onda-b.onda)||a.prioridade-b.prioridade);
-    const transps=Array.from(new Set(lista.map(a=>a.transportadora)));
-    const conflito=lista.some(a=>lista.some(b=>b!==a && b.onda===a.onda));
-    const ondas={}; lista.forEach(a=>(ondas[a.onda]=ondas[a.onda]||[]).push(a));
-    const corpo=lista.length ? Object.keys(ondas).map(o=>`
-      <div style="margin-top:8px;"><span class="badge neutral">${o}ª onda</span> <span style="color:var(--text-2);font-size:11.5px;">${pEsc(statusOnda(ondas[o][0].transportadora,+o))}</span>
-      ${ondas[o].map(a=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dashed var(--line);font-size:12.5px;">
-        <span><b class="mono">${pEsc(a.placa)}</b> <span style="color:var(--text-2)">${pEsc(a.transportadora)}</span></span>
-        <span style="color:var(--text-1)">${a.pres.length} PRÉ · ${pEntregas(a)} ent. <button class="small ghost" style="margin-left:6px;padding:2px 7px;" title="Alterar doca" onclick="abrirAlterarDoca(${STATE.alocacao.indexOf(a)})">✎</button></span></div>`).join('')}</div>`).join('')
-      : '<div style="color:var(--text-2);font-size:12.5px;margin-top:8px;">Livre</div>';
-    return `<div class="stat" style="${lista.length?'':'opacity:.6;'}">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;">
-        <div class="num" style="font-size:20px;">Doca ${d}</div>
-        <div>${conflito?'<span class="badge alert">doca dupla na onda</span>':lista.length?'<span class="badge ok">'+lista.length+' carga(s)</span>':'<span class="badge neutral">livre</span>'}</div></div>
-      <div class="lbl">${pEsc(pUnidadeDaDoca(d))}${transps.length?' · '+pEsc(transps.join(', ')):''}</div>${corpo}</div>`;
-  }).join('') : '<div class="empty">Nenhuma carga alocada neste filtro.</div>';
-
-  // lista por onda
-  const porOnda={}; alocadas.forEach(a=>(porOnda[a.onda]=porOnda[a.onda]||[]).push(a));
-  let html=Object.keys(porOnda).map(Number).sort((a,b)=>a-b).map(o=>{
-    const l=porOnda[o].slice().sort((a,b)=>pDoca(a)-pDoca(b)||(a.transportadora||'').localeCompare(b.transportadora||''));
-    return `<h3 style="font-size:14px;margin:16px 0 8px;color:var(--amber);">${o}ª Onda <span style="color:var(--text-2);font-weight:400;">— ${l.length} carga(s) · ${l.reduce((s,a)=>s+pEntregas(a),0)} entregas</span></h3>
-    <div class="table-wrap"><table><thead><tr><th>Doca</th><th>Transportadora</th><th>Placa</th><th>Região</th><th>PRÉs</th><th>Entregas</th><th>Status da onda</th><th></th></tr></thead><tbody>
-    ${l.map(a=>`<tr><td class="mono">${pDoca(a)}</td><td>${pEsc(a.transportadora)}</td><td class="mono">${pEsc(a.placa)}</td><td>${pEsc(a.regiao||'—')}</td><td>${a.pres.length}</td><td>${pEntregas(a)}</td><td>${pEsc(statusOnda(a.transportadora,o))}</td><td><button class="small" onclick="abrirAlterarDoca(${STATE.alocacao.indexOf(a)})">Alterar doca</button></td></tr>`).join('')}
-    </tbody></table></div>`;
-  }).join('');
-  if(pend.length) html+=`<h3 style="font-size:14px;margin:16px 0 8px;color:var(--red);">Pendências — ${pend.length} carga(s)</h3>
-    <div class="table-wrap"><table><thead><tr><th>Placa</th><th>Transportadora</th><th>Motivo</th><th></th></tr></thead><tbody>
-    ${pend.map(a=>`<tr><td class="mono">${pEsc(a.placa)}</td><td>${pEsc(a.transportadora||'—')}</td><td>${pEsc(a.motivo||'')}</td><td><button class="small" onclick="abrirAlterarDoca(${STATE.alocacao.indexOf(a)})">Definir doca</button></td></tr>`).join('')}</tbody></table></div>`;
-  elO.innerHTML=html||'<div class="empty">Nenhuma carga alocada neste filtro.</div>';
-  renderCargasFilial();
+  renderCargasFilial(); renderMatrizDocas();
 }
 
 /* =========================================================
@@ -1985,6 +2047,7 @@ function aplicarDoca(idx, doca, onda, silencioso){
     if(!silencioso && !confirm(`A doca ${doca} já está ocupada na ${onda}ª onda pela placa ${oc.placa} (${oc.transportadora||'—'}).\n\nLançar esta carga (${a.placa}) para a ${nova}ª onda?`)) return false;
     onda=nova;
   }
+  mxMarcarOrigem(a);
   a.docaManual=doca; a.onda=onda; a.status='AJUSTADO'; a.motivo='';
   saveState(); renderAlocacao(); renderPainel();
   if(document.getElementById('view-dashboard').classList.contains('active')) renderDashboard();
@@ -2043,6 +2106,394 @@ function abrirAlterarDoca(idx){
     if(aplicarDoca(idx,d,o,true)) fecharAlterarDoca();
   };
 }
+
+/* =========================================================
+   MAPA DE DOCAS × ONDAS (editável) — fica ao lado da lista "Cargas do dia por filial"
+   Branco com X = doca ocupada naquela onda · Verde = livre. Clique para mover/alocar.
+   ========================================================= */
+function pAplicarFixar(){
+  const on = document.getElementById('pFixar');
+  const panel = document.getElementById('pFilialPanel');
+  if(panel) panel.classList.toggle('pf-sticky', !on || on.checked);
+}
+function pAjustarOffsetFixo(){
+  const t = document.querySelector('.topbar');
+  if(t) document.documentElement.style.setProperty('--topbar-h', t.offsetHeight+'px');
+}
+window.addEventListener('resize', pAjustarOffsetFixo);
+document.addEventListener('DOMContentLoaded', ()=>{ pAjustarOffsetFixo(); pAplicarFixar(); setTimeout(pAjustarOffsetFixo,300); });
+
+function mxOndasMax(){ return Math.max(5, ...STATE.alocacao.map(a=>a.onda||0)); }
+function mxDocasLinhas(){
+  const set = new Set(docasTodas());                       // docas cadastradas nos Parâmetros (já sem as indisponíveis)
+  STATE.alocacao.forEach(a=>{ const d=pDoca(a); if(a.status!=='ALTERAR' && d!=null) set.add(d); });
+  return Array.from(set).sort((x,y)=>x-y);
+}
+function mxOcupantes(doca, onda){
+  return STATE.alocacao.map((a,i)=>({a,i})).filter(o=>o.a.status!=='ALTERAR' && pDoca(o.a)===doca && o.a.onda===onda);
+}
+function renderMatrizDocas(){
+  const el = document.getElementById('pMatriz'); if(!el) return;
+  if(!STATE.alocacao.length){ el.innerHTML='<div class="empty">Rode a alocação para ver o mapa de docas.</div>'; return; }
+  const docas = mxDocasLinhas(), nO = mxOndasMax();
+  let h = '<div class="pf-scroll"><table class="mx"><thead><tr><th>DOCA</th>';
+  for(let o=1;o<=nO;o++) h += `<th>${o}ª ONDA</th>`;
+  h += '</tr></thead><tbody>';
+  docas.forEach(d=>{
+    h += `<tr><td class="mx-doca">${d}</td>`;
+    for(let o=1;o<=nO;o++){
+      const oc = mxOcupantes(d,o);
+      if(!oc.length){ h += `<td class="mx-cell mx-free" title="Doca ${d} · ${o}ª onda — livre. Clique para alocar uma carga aqui." onclick="abrirCelulaMatriz(${d},${o})"></td>`; continue; }
+      const tip = oc.map(x=>`${x.a.placa} · ${x.a.transportadora||'sem transportadora'} · ${x.a.pres.length} PRÉ · ${pEntregas(x.a)} ent.`).join('\n');
+      const cls = 'mx-cell mx-busy'+(oc.length>1?' mx-dup':'')+(oc.some(x=>x.a.status==='AJUSTADO')?' mx-adj':'');
+      h += `<td class="${cls}" title="${pEsc(tip)}" onclick="abrirCelulaMatriz(${d},${o})">${oc.length>1?'X'+oc.length:'X'}</td>`;
+    }
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  el.innerHTML = h;
+}
+
+/* move/troca a carga idx para (doca, onda). Se o destino estiver ocupado, as duas cargas trocam de lugar. */
+function mxMoverCarga(idx, doca, onda){
+  const a = STATE.alocacao[idx]; if(!a) return false;
+  if(!docasTodas().includes(doca)){ toast('Doca '+doca+' não existe ou está indisponível.','err'); return false; }
+  const dOld = pDoca(a), oOld = a.onda;
+  const oc = mxOcupantes(doca, onda).find(x=>x.i!==idx);
+  if(oc){
+    if(dOld==null || a.status==='ALTERAR'){ toast('Destino ocupado por '+oc.a.placa+'. Escolha um campo livre (verde) para esta carga.','err'); return false; }
+    mxMarcarOrigem(oc.a);
+    oc.a.docaManual = dOld; oc.a.onda = oOld; oc.a.status='AJUSTADO'; oc.a.motivo='';
+  }
+  mxMarcarOrigem(a);
+  a.docaManual = doca; a.onda = onda; a.status='AJUSTADO'; a.motivo='';
+  saveState(); renderPainel();
+  if(document.getElementById('view-dashboard').classList.contains('active')) renderDashboard();
+  toast(oc ? `Troca feita: ${a.placa} → doca ${doca}/${onda}ª onda · ${oc.a.placa} → doca ${dOld}/${oOld}ª onda.` : `Carga ${a.placa}: doca ${doca}, ${onda}ª onda.`,'ok');
+  return true;
+}
+function mxDesalocar(idx){
+  const a = STATE.alocacao[idx]; if(!a) return;
+  mxMarcarOrigem(a);
+  a.docaManual=null; a.docaSugerida=null; a.status='ALTERAR'; a.motivo='Removida da doca manualmente'; a.onda=null;
+  saveState(); renderPainel();
+  toast('Carga '+a.placa+' ficou sem doca (pendência).','ok');
+}
+
+function abrirCelulaMatriz(doca, onda){
+  fecharAlterarDoca();
+  const oc = mxOcupantes(doca, onda);
+  const docas = docasTodas(), nO = mxOndasMax()+1;   // +1 permite abrir uma nova onda
+  const ov = document.createElement('div'); ov.id='modalDoca';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  let corpo;
+  if(oc.length){
+    corpo = `<div class="panel-head"><h2>Doca ${doca} · ${onda}ª onda</h2></div>
+      ${oc.length>1?`<div style="margin-bottom:10px;"><label>Carga neste campo (doca dupla)</label><select id="mxSel" style="width:100%">${oc.map((x,k)=>`<option value="${k}">${pEsc(x.a.placa)} — ${pEsc(x.a.transportadora||'—')}</option>`).join('')}</select></div>`:''}
+      <div id="mxInfo" style="font-size:13px;color:var(--text-1);margin-bottom:12px;"></div>
+      <label>Digite a doca de destino</label>
+      <input id="mxDoca" type="number" list="mxDocasList" inputmode="numeric" placeholder="ex.: 150 (atual: ${doca})" style="width:100%" autocomplete="off">
+      <datalist id="mxDocasList">${docas.map(d=>`<option value="${d}"></option>`).join('')}</datalist>
+      <div id="mxOndaBox" style="margin-top:12px;"></div>
+      <div id="mxHint" style="margin:10px 0;font-size:12.5px;min-height:34px;"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+        <button class="danger small" id="mxDes">Deixar sem doca</button>
+        <button id="mxCan">Cancelar</button><button class="primary" id="mxOk" disabled>Mover</button></div>`;
+  } else {
+    const lista = STATE.alocacao.map((a,i)=>({a,i})).sort((x,y)=>(x.a.status==='ALTERAR'?0:1)-(y.a.status==='ALTERAR'?0:1) || String(x.a.placa).localeCompare(String(y.a.placa)));
+    corpo = `<div class="panel-head"><h2>Doca ${doca} · ${onda}ª onda <span class="badge ok">livre</span></h2></div>
+      <div style="margin-bottom:12px;"><label>Alocar a carga</label><select id="mxCarga" style="width:100%">
+        ${lista.map(x=>{ const d=pDoca(x.a); return `<option value="${x.i}">${pEsc(x.a.placa)} — ${pEsc(x.a.transportadora||'sem transportadora')} · ${d!=null&&x.a.status!=='ALTERAR'?('hoje: doca '+d+' / '+x.a.onda+'ª onda'):'sem doca'}</option>`; }).join('')}</select></div>
+      <div style="margin:8px 0 12px;font-size:12.5px;color:var(--teal);">A carga escolhida sai da posição atual e passa para este campo.</div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;"><button id="mxCan">Cancelar</button><button class="primary" id="mxOk">Alocar aqui</button></div>`;
+  }
+  ov.innerHTML = `<div class="panel" style="width:460px;max-width:100%;margin:0;">${corpo}</div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click',e=>{ if(e.target===ov) fecharAlterarDoca(); });
+  document.getElementById('mxCan').onclick = fecharAlterarDoca;
+
+  if(oc.length){
+    const cur = ()=> oc[parseInt((document.getElementById('mxSel')||{value:0}).value)||0];
+    let ondaSel = null;
+    const ok = document.getElementById('mxOk'), hint = document.getElementById('mxHint'), box = document.getElementById('mxOndaBox');
+    const docaDigitada = ()=>{ const v=document.getElementById('mxDoca').value.trim(); return v===''?null:parseInt(v); };
+    const info = ()=>{ const x=cur(); document.getElementById('mxInfo').innerHTML = `<b class="mono">${pEsc(x.a.placa)}</b> · ${pEsc(x.a.transportadora||'sem transportadora')}<br>${pEsc(x.a.regiao||'—')} · ${x.a.pres.length} PRÉ · ${pEntregas(x.a)} entregas`; };
+    const resumo = ()=>{
+      const d = docaDigitada(), x = cur();
+      ok.disabled = true; ok.textContent = 'Mover';
+      if(d==null){ hint.innerHTML=''; return; }
+      if(ondaSel==null){ hint.innerHTML='<span style="color:var(--text-2)">Escolha a onda para a doca '+d+'.</span>'; return; }
+      if(d===doca && ondaSel===onda){ hint.innerHTML='<span style="color:var(--text-2)">É a posição atual — escolha outra doca e/ou onda.</span>'; return; }
+      const outro = mxOcupantes(d,ondaSel).find(y=>y.i!==x.i);
+      hint.innerHTML = outro ? `<span style="color:var(--amber)">Doca ${d} · ${ondaSel}ª onda está ocupada por <b>${pEsc(outro.a.placa)}</b> (${pEsc(outro.a.transportadora||'—')}). As duas cargas vão <b>trocar de lugar</b>.</span>`
+                             : `<span style="color:var(--teal)">Doca ${d} livre na ${ondaSel}ª onda.</span>`;
+      ok.textContent = outro ? 'Trocar de lugar' : 'Mover'; ok.disabled = false;
+    };
+    const montaOndas = ()=>{
+      const d = docaDigitada(); ondaSel = null;
+      if(d==null){ box.innerHTML=''; resumo(); return; }
+      if(!docas.includes(d)){ box.innerHTML=''; hint.innerHTML=`<span style="color:var(--red)">A doca ${d} não existe ou está indisponível nos Parâmetros.</span>`; ok.disabled=true; return; }
+      const x = cur();
+      box.innerHTML = `<label>Em qual onda da doca ${d}?</label><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">`+
+        Array.from({length:nO},(_,k)=>k+1).map(o=>{
+          const outro = mxOcupantes(d,o).find(y=>y.i!==x.i), atual = (d===doca && o===onda);
+          const st = atual ? '<span style="color:var(--text-2)">posição atual</span>' : outro ? `<span style="color:var(--amber)">ocupada · ${pEsc(outro.a.placa)}</span>` : '<span style="color:var(--teal)">livre</span>';
+          return `<button type="button" data-o="${o}" style="text-align:left;padding:7px 9px;line-height:1.25;"><b>${o}ª onda</b><br><span style="font-size:11.5px">${st}</span></button>`;
+        }).join('')+'</div>';
+      box.querySelectorAll('button[data-o]').forEach(b=>b.onclick=()=>{
+        ondaSel = parseInt(b.dataset.o);
+        box.querySelectorAll('button[data-o]').forEach(z=>z.classList.toggle('primary', z===b));
+        resumo();
+      });
+      resumo();
+    };
+    document.getElementById('mxDoca').oninput = montaOndas;
+    const sel=document.getElementById('mxSel'); if(sel) sel.onchange=()=>{ info(); montaOndas(); };
+    info();
+    document.getElementById('mxDes').onclick = ()=>{ mxDesalocar(cur().i); fecharAlterarDoca(); };
+    ok.onclick = ()=>{ if(ondaSel!=null && mxMoverCarga(cur().i, docaDigitada(), ondaSel)) fecharAlterarDoca(); };
+    setTimeout(()=>document.getElementById('mxDoca').focus(),30);
+  } else {
+    document.getElementById('mxOk').onclick = ()=>{
+      if(mxMoverCarga(parseInt(document.getElementById('mxCarga').value), doca, onda)) fecharAlterarDoca();
+    };
+  }
+}
+
+
+/* =========================================================
+   ISCAS COM RASTREADOR
+   A isca é identificada pela PLACA em que vai sair (que obrigatoriamente está no arquivo carregado).
+   Pode ser informada pela placa ou pela doca; a ferramenta vincula à carga/doca/onda da alocação
+   e gera as etiquetas Zebra na ordem das docas (menor → maior).
+   ========================================================= */
+function iscaCfg(){
+  STATE.config.etiquetaIsca = Object.assign({larg:100, alt:150, dpi:203, info:true}, STATE.config.etiquetaIsca||{});
+  return STATE.config.etiquetaIsca;
+}
+function iscaSalvarCfg(){
+  const c = iscaCfg();
+  c.larg = Math.min(300, Math.max(30, parseFloat(document.getElementById('iscaLarg').value)||100));
+  c.alt  = Math.min(400, Math.max(30, parseFloat(document.getElementById('iscaAlt').value)||150));
+  c.dpi  = parseInt(document.getElementById('iscaDpi').value)||203;
+  c.info = document.getElementById('iscaInfo').checked;
+  saveState(); renderIscas();
+}
+
+/* "TBA4J30", "tba-4j30", "doca 129", "150 2" (doca 150, 2ª onda) … uma por linha */
+function iscaParseLinhas(texto){
+  const out = [];
+  String(texto||'').split(/\r?\n|;/).forEach(raw=>{
+    const orig = raw.trim(); if(!orig) return;
+    const u = orig.toUpperCase().replace(/\bDOCA\b|\bONDA\b|ª|º|°/g,' ').replace(/\s+/g,' ').trim();
+    const m = u.match(/\b[A-Z0-9]{3}-?[A-Z0-9]{4}\b/);
+    if(m && /[A-Z]/.test(m[0])){ out.push({tipo:'placa', placa:placaKey(m[0]), texto:orig}); return; }
+    const nums = u.match(/\d+/g);
+    if(nums && nums.length){ out.push({tipo:'doca', doca:parseInt(nums[0]), onda:nums[1]?parseInt(nums[1]):null, texto:orig}); return; }
+    out.push({invalida:true, texto:orig});
+  });
+  return out;
+}
+function iscaCandidatos(isca){
+  return STATE.alocacao.filter(a=> a.status!=='ALTERAR' && pDoca(a)===isca.docaInformada && (isca.ondaInformada==null || a.onda===isca.ondaInformada))
+    .sort((x,y)=>(x.onda||0)-(y.onda||0));
+}
+/* vínculo calculado AO VIVO: se a doca/onda da carga mudar no mapa, a isca acompanha a placa */
+function iscaVinculo(isca){
+  if(!isca.placa){
+    const c = iscaCandidatos(isca);
+    return c.length ? {st:'escolher', cands:c} : {st:'docasemcarga'};
+  }
+  const k = placaKey(isca.placa);
+  const row = STATE.alocacao.find(a=>placaKey(a.placa)===k);
+  if(row){
+    const d = pDoca(row), semDoca = row.status==='ALTERAR' || d==null;
+    return {st: semDoca?'semdoca':'ok', row, doca: semDoca?null:d, onda: semDoca?null:row.onda};
+  }
+  const car = getCargaPorPlaca(isca.placa);
+  if(car) return {st:'semalocacao', carga:car};
+  return {st:'naoachou'};
+}
+function iscaOrdenadas(){
+  const ls = (STATE.iscas||[]).map(isca=>({isca, v:iscaVinculo(isca)}));
+  const rank = x => x.v.st==='ok' ? 0 : (x.v.st==='semdoca'||x.v.st==='semalocacao') ? 1 : 2;
+  const num = (v)=> v==null ? 1e9 : v;
+  return ls.sort((a,b)=> rank(a)-rank(b) || num(a.v.doca)-num(b.v.doca) || num(a.v.onda)-num(b.v.onda) || String(a.isca.placa).localeCompare(String(b.isca.placa)));
+}
+function iscaEtiquetas(){
+  return iscaOrdenadas().filter(x=>['ok','semdoca','semalocacao'].includes(x.v.st)).map((x,i)=>{
+    const r = x.v.row, car = x.v.carga;
+    return {n:i+1, placa:(r&&r.placa)||(car&&car.placa)||x.isca.placa, doca:x.v.doca!=null?x.v.doca:null, onda:x.v.onda!=null?x.v.onda:null,
+            transp:(r&&r.transportadora)||(car&&car.transportadora)||''};
+  });
+}
+
+function adicionarIscas(){
+  STATE.iscas = STATE.iscas || [];
+  const ta = document.getElementById('iscaTexto');
+  const itens = iscaParseLinhas(ta.value);
+  if(!itens.length){ toast('Digite ao menos uma placa ou doca.','err'); return; }
+  if(!STATE.alocacao.length && !STATE.cargas.length){ toast('Carregue o arquivo e rode a alocação antes de vincular iscas.','err'); return; }
+  let add = 0; const dup=[], naoAchou=[], invalidas=[], escolher=[];
+  itens.forEach(it=>{
+    if(it.invalida){ invalidas.push(it.texto); return; }
+    const isca = {id:'i'+Date.now()+Math.random().toString(36).slice(2,6), tipo:it.tipo, placa:'', docaInformada:null, ondaInformada:null, entrada:it.texto};
+    if(it.tipo==='placa'){
+      isca.placa = it.placa;
+      const v = iscaVinculo(isca);
+      if(v.st==='naoachou'){ naoAchou.push(it.placa); return; }
+    } else {
+      isca.docaInformada = it.doca; isca.ondaInformada = it.onda;
+      const c = iscaCandidatos(isca);
+      if(!c.length){ naoAchou.push('doca '+it.doca+(it.onda?' / '+it.onda+'ª onda':'')); return; }
+      if(c.length===1) isca.placa = c[0].placa; else escolher.push(it.texto);
+    }
+    if(isca.placa && STATE.iscas.some(x=>placaKey(x.placa)===placaKey(isca.placa))){ dup.push(isca.placa); return; }
+    STATE.iscas.push(isca); add++;
+  });
+  saveState(); ta.value = '';
+  renderIscas();
+  const partes = [add+' isca(s) vinculada(s).'];
+  if(escolher.length) partes.push('Doca com mais de uma carga: escolha a placa na tabela.');
+  if(dup.length) partes.push('Já cadastrada(s): '+dup.join(', ')+'.');
+  if(naoAchou.length) partes.push('Não estão no arquivo carregado: '+naoAchou.join(', ')+'.');
+  if(invalidas.length) partes.push('Linha(s) ignorada(s): '+invalidas.join(', ')+'.');
+  toast(partes.join(' '), (naoAchou.length||invalidas.length||dup.length)?'err':'ok');
+}
+function iscaEscolher(id, placa){
+  const isca = STATE.iscas.find(x=>x.id===id); if(!isca || !placa) return;
+  if(STATE.iscas.some(x=>x!==isca && placaKey(x.placa)===placaKey(placa))){ toast('A placa '+placa+' já possui isca.','err'); renderIscas(); return; }
+  isca.placa = placa; saveState(); renderIscas();
+}
+function removerIsca(id){ STATE.iscas = STATE.iscas.filter(x=>x.id!==id); saveState(); renderIscas(); }
+function limparIscas(){
+  if(!(STATE.iscas||[]).length) return;
+  if(!confirm('Remover todas as iscas cadastradas?')) return;
+  STATE.iscas = []; saveState(); renderIscas();
+}
+
+function renderIscas(){
+  const tb = document.getElementById('iscaTabela'); if(!tb) return;
+  const c = iscaCfg();
+  document.getElementById('iscaLarg').value = c.larg; document.getElementById('iscaAlt').value = c.alt;
+  document.getElementById('iscaDpi').value = c.dpi;   document.getElementById('iscaInfo').checked = !!c.info;
+  const ls = iscaOrdenadas(), et = iscaEtiquetas();
+  const pend = ls.filter(x=>!['ok'].includes(x.v.st)).length;
+  document.getElementById('iscaStats').innerHTML =
+    `<div class="stat"><div class="num">${ls.length}</div><div class="lbl">iscas cadastradas</div></div>
+     <div class="stat"><div class="num" style="color:var(--teal)">${ls.filter(x=>x.v.st==='ok').length}</div><div class="lbl">vinculadas a carga e doca</div></div>
+     <div class="stat"><div class="num" style="color:var(--amber)">${et.length}</div><div class="lbl">etiquetas prontas</div></div>
+     <div class="stat"><div class="num" style="color:var(--red)">${pend}</div><div class="lbl">com pendência</div></div>`;
+  if(!ls.length){ tb.innerHTML = '<div class="empty">Nenhuma isca cadastrada.</div>'; document.getElementById('iscaPreview').innerHTML=''; return; }
+  let n = 0;
+  const badge = v => ({
+    ok:'<span class="badge ok">vinculada</span>',
+    semdoca:'<span class="badge alert">carga sem doca</span>',
+    semalocacao:'<span class="badge alert">rode a alocação</span>',
+    naoachou:'<span class="badge alert">placa não está no arquivo</span>',
+    docasemcarga:'<span class="badge alert">doca sem carga</span>',
+    escolher:'<span class="badge neutral">escolha a carga</span>'}[v.st]);
+  tb.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Ordem</th><th>Placa</th><th>Doca</th><th>Onda</th><th>Transportadora</th><th>Região</th><th>Informada</th><th>Status</th><th></th></tr></thead><tbody>
+    ${ls.map(x=>{
+      const v = x.v, r = v.row||{}, car = v.carga||{}, imp = ['ok','semdoca','semalocacao'].includes(v.st);
+      const ord = imp ? (++n) : '—';
+      const placaCel = v.st==='escolher'
+        ? `<select onchange="iscaEscolher('${x.isca.id}',this.value)"><option value="">Escolha a carga…</option>${v.cands.map(a=>`<option value="${pEsc(a.placa)}">${pEsc(a.placa)} — ${pEsc(a.transportadora||'—')} · ${a.onda}ª onda</option>`).join('')}</select>`
+        : `<b class="mono">${pEsc(x.isca.placa)}</b>`;
+      return `<tr${imp&&v.st==='ok'?'':' style="color:var(--text-1)"'}>
+        <td class="mono">${ord}</td><td>${placaCel}</td>
+        <td class="mono">${v.doca!=null?v.doca:(v.st==='escolher'?x.isca.docaInformada:'—')}</td>
+        <td class="mono">${v.onda!=null?v.onda+'ª':(v.st==='escolher'&&x.isca.ondaInformada?x.isca.ondaInformada+'ª':'—')}</td>
+        <td>${pEsc(r.transportadora||car.transportadora||'—')}</td><td>${pEsc(r.regiao||car.regiao||'—')}</td>
+        <td style="color:var(--text-2)">${pEsc(x.isca.entrada||'')}</td><td>${badge(v)}</td>
+        <td><button class="small ghost" onclick="removerIsca('${x.isca.id}')">remover</button></td></tr>`;
+    }).join('')}</tbody></table></div>`;
+  iscaRenderPreview(et);
+}
+
+/* ---------- etiqueta: tamanho dos textos (mm), igual para tela, impressão e ZPL ---------- */
+function iscaMedidas(larg, alt, placaLen, info){
+  const half = alt/2;
+  return {
+    half,
+    fsTit: Math.min(half*0.11, larg*0.07),
+    fsPlaca: Math.min(larg*0.9/(Math.max(placaLen,5)*0.62), half*0.45),
+    fsInfo: Math.min(half*0.11, larg*0.055),
+    yTit: half*0.07, yPlaca: half*(info?0.25:0.30), yInfo: half*0.78
+  };
+}
+function iscaTextoInfo(e){
+  return (e.doca!=null ? 'DOCA '+e.doca+' | ONDA '+e.onda : 'SEM DOCA') + (e.transp ? ' | '+e.transp : '');
+}
+function iscaLabelHTML(e, c, px){   // px = pixels por mm (prévia) ou 0 para usar mm (impressão)
+  const m = iscaMedidas(c.larg, c.alt, e.placa.length, c.info);
+  const u = v => px ? (v*px).toFixed(1)+'px' : v.toFixed(2)+'mm';
+  const W = u(c.larg), H = u(c.alt);
+  const meia = (borda)=>`<div class="mhalf" style="position:relative;flex:1 1 0;min-height:0;${borda?`border-top:${px?'1px':'0.4mm'} dashed #000;`:''}overflow:hidden;">
+      <div style="position:absolute;left:0;right:0;top:${u(m.yTit)};text-align:center;font-weight:700;letter-spacing:.2em;font-size:${u(m.fsTit)};line-height:1;">ISCA</div>
+      <div style="position:absolute;left:0;right:0;top:${u(m.yPlaca)};text-align:center;font-weight:900;font-size:${u(m.fsPlaca)};line-height:1;white-space:nowrap;">${pEsc(e.placa)}</div>
+      ${c.info?`<div style="position:absolute;left:0;right:0;top:${u(m.yInfo)};text-align:center;font-weight:700;font-size:${u(m.fsInfo)};line-height:1;white-space:nowrap;overflow:hidden;">${pEsc(iscaTextoInfo(e))}</div>`:''}
+    </div>`;
+  return `<div class="lbl" style="width:${W};height:${H};box-sizing:border-box;display:flex;flex-direction:column;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;overflow:hidden;">${meia(false)}${meia(true)}</div>`;
+}
+function iscaRenderPreview(et){
+  const el = document.getElementById('iscaPreview'); if(!el) return;
+  const c = iscaCfg();
+  if(!et.length){ el.innerHTML = '<div class="empty">Nenhuma etiqueta pronta ainda.</div>'; return; }
+  const px = 150 / c.larg;
+  el.innerHTML = `<div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">Prévia — ${et.length} etiqueta(s), na ordem de impressão (doca menor → maior). Cada etiqueta é dividida exatamente ao meio, com a placa nas duas metades.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:14px;max-height:480px;overflow:auto;padding:4px;">
+    ${et.map(e=>`<div><div style="font-size:11px;color:var(--text-2);margin-bottom:3px;">#${e.n}</div><div style="border:1px solid var(--line);">${iscaLabelHTML(e,c,px)}</div></div>`).join('')}</div>`;
+}
+
+/* ---------- ZPL (Zebra) ---------- */
+function iscaZPL(){
+  const c = iscaCfg(), et = iscaEtiquetas(); if(!et.length) return '';
+  const dpmm = c.dpi/25.4, W = Math.round(c.larg*dpmm), H = Math.round(c.alt*dpmm), half = Math.floor(H/2);
+  const san = t => String(t==null?'':t).replace(/[\^~\\]/g,' ');
+  let z = '';
+  et.forEach(e=>{
+    const m = iscaMedidas(c.larg, c.alt, e.placa.length, c.info), d = v => Math.max(1, Math.round(v*dpmm));
+    z += '^XA\n^CI28\n^PW'+W+'\n^LL'+H+'\n^LH0,0\n';
+    z += '^FO0,'+(half-2)+'^GB'+W+',4,4^FS\n';             // linha exatamente na metade
+    [0, half].forEach(off=>{
+      z += `^FO0,${off+d(m.yTit)}^A0N,${d(m.fsTit)},${d(m.fsTit)}^FB${W},1,0,C,0^FDISCA^FS\n`;
+      z += `^FO0,${off+d(m.yPlaca)}^A0N,${d(m.fsPlaca)},${d(m.fsPlaca)}^FB${W},1,0,C,0^FD${san(e.placa)}^FS\n`;
+      if(c.info){
+        const maxCh = Math.max(8, Math.floor(W/(d(m.fsInfo)*0.62)));
+        z += `^FO0,${off+d(m.yInfo)}^A0N,${d(m.fsInfo)},${d(m.fsInfo)}^FB${W},1,0,C,0^FD${san(iscaTextoInfo(e)).slice(0,maxCh)}^FS\n`;
+      }
+    });
+    z += '^PQ1,0,1,N\n^XZ\n';
+  });
+  return z;
+}
+function iscaBaixarZPL(){
+  const z = iscaZPL(); if(!z){ toast('Não há etiquetas prontas para gerar.','err'); return; }
+  const ts = new Date().toISOString().slice(0,10);
+  bkBaixar(new Blob([z],{type:'text/plain;charset=utf-8'}), 'iscas_zebra_'+ts+'.zpl');
+  toast(iscaEtiquetas().length+' etiqueta(s) geradas em ZPL (ordem: doca menor → maior).','ok');
+}
+function iscaImprimir(){
+  const et = iscaEtiquetas(); if(!et.length){ toast('Não há etiquetas prontas para imprimir.','err'); return; }
+  const c = iscaCfg();
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Iscas — etiquetas</title><style>
+    @page{size:${c.larg}mm ${c.alt}mm;margin:0}
+    html,body{margin:0;padding:0;background:#fff}
+    .lbl{page-break-after:always;break-after:page}
+    .lbl:last-child{page-break-after:auto;break-after:auto}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  </style></head><body>${et.map(e=>iscaLabelHTML(e,c,0)).join('')}</body></html>`;
+  const w = window.open('','_blank');
+  if(w){ w.document.open(); w.document.write(html); w.document.close(); w.focus(); setTimeout(()=>w.print(),400); }
+  else {
+    const fr = document.createElement('iframe'); fr.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    document.body.appendChild(fr);
+    const d = fr.contentWindow.document; d.open(); d.write(html); d.close();
+    setTimeout(()=>{ fr.contentWindow.focus(); fr.contentWindow.print(); setTimeout(()=>fr.remove(),60000); },400);
+  }
+}
+
 function fecharAlterarDoca(){ const m=document.getElementById('modalDoca'); if(m) m.remove(); }
 
 
@@ -2074,6 +2525,19 @@ function pPreVal(lista){
 function pQtdEntregaPres(lista){ return lista.reduce((s,p)=>s+(parseInt(p.qtdEntrega)||0),0); }
 
 /* filialCod = null -> linha do ACUMULADO; senão linha da lista daquela filial */
+/* guarda a posição ORIGINAL (doca/onda) na primeira alteração manual, para mostrar o que mudou */
+function mxMarcarOrigem(a){
+  if(a.origDoca===undefined){ a.origDoca = (a.status==='ALTERAR') ? null : (pDoca(a)!=null?pDoca(a):null); a.origOnda = (a.status==='ALTERAR') ? null : (a.onda!=null?a.onda:null); }
+}
+function pAlteracaoTxt(a){
+  if(a.origDoca===undefined) return '';
+  const semDoca = a.status==='ALTERAR' || pDoca(a)==null;
+  const dNow = semDoca ? null : pDoca(a), oNow = semDoca ? null : (a.onda!=null?a.onda:null);
+  const p=[];
+  if(dNow!==a.origDoca) p.push('Doca '+(a.origDoca!=null?a.origDoca:'—')+' → '+(dNow!=null?dNow:'sem doca'));
+  if(oNow!==a.origOnda) p.push('Onda '+(a.origOnda!=null?a.origOnda+'ª':'—')+' → '+(oNow!=null?oNow+'ª':'—'));
+  return p.length ? 'SIM · '+p.join(' · ') : '';
+}
 function pLinhaCarga(it, filialCod, temOutras){
   const a=it.a, d=pDoca(a), uNome=(d!=null)?pUnidadeDaDoca(d):null, f=STATE.config.filiais;
   const conhecidos=new Set(f.map(x=>x.codigo));
@@ -2091,7 +2555,8 @@ function pLinhaCarga(it, filialCod, temOutras){
   o['TRANSP.']=a.transportadora||'';
   if(!filialCod) o['FILIAIS']=Array.from(new Set(a.pres.map(p=>nomeFilial(p.filial)))).join(' + ');
   else o['FILIAL']=filialCod;
-  o['OBSERVAÇÃO']= it.pend ? ('SEM DOCA'+(a.motivo?' — '+a.motivo:'')) : (a.docaManual!=null ? 'Doca ajustada manualmente' : '');
+  o['OBSERVAÇÃO']= it.pend ? ('SEM DOCA'+(a.motivo?' — '+a.motivo:'')) : '';
+  o['ALTERADO']= pAlteracaoTxt(a);   // sempre por último
   return o;
 }
 function pLinhasLista(items, filialCod){
@@ -2110,7 +2575,7 @@ function renderCargasFilial(){
   const elT=document.getElementById('pFilialTabs'), elB=document.getElementById('pFilialTabela');
   if(!elT||!elB) return;
   if(!STATE.alocacao.length){
-    elT.innerHTML=''; elB.innerHTML='<div class="empty">Rode a alocação (aba 4) para ver as cargas por filial.</div>'; return;
+    elT.innerHTML=''; elB.innerHTML='<div class="empty">Rode a alocação (botão “Rodar alocação” na aba 3 · Upload &amp; Consolidação) para ver as cargas por filial.</div>'; return;
   }
   const items=pItensFiltrados();
   const abas=[{cod:'ACUM', nome:'Acumulado', n:items.length}].concat(
@@ -2121,11 +2586,12 @@ function renderCargasFilial(){
   const {rows,pend} = pLinhasLista(items, cod);
   if(!rows.length){ elB.innerHTML='<div class="empty">Nenhuma carga desta filial no filtro atual.</div>'; return; }
   const cols=Object.keys(rows[0]);
+  const rotulo=c=>String(c).replace(/^PRÉ-ROMANEIO\s+(?:CAJ-?)?/,'PRÉ-');   // só na tela; o Excel mantém o nome completo
   const mono=/^(CARGA|PRÉ|PLACAS|DOCA|ONDA|FILIAL$)/;
   const totEnt=rows.reduce((s,r)=>s+(parseInt(r['QTD ENTREGA'])||0),0);
   elB.innerHTML=`<div style="color:var(--text-2);font-size:12.5px;margin-bottom:8px;">${rows.length} carga(s) · ${totEnt} entregas${pend.some(Boolean)?' · <span style="color:var(--red)">'+pend.filter(Boolean).length+' sem doca (no fim da lista)</span>':''}</div>
-  <div class="table-wrap" style="max-height:560px;overflow-y:auto;"><table><thead><tr>${cols.map(c=>`<th>${pEsc(c)}</th>`).join('')}</tr></thead><tbody>
-  ${rows.map((r,i)=>`<tr${pend[i]?' style="color:var(--red)"':''}>${cols.map(c=>`<td${mono.test(c)?' class="mono"':''}>${pEsc(r[c])}</td>`).join('')}</tr>`).join('')}
+  <div class="table-wrap" style="overflow:auto;"><table><thead><tr>${cols.map(c=>`<th>${pEsc(rotulo(c))}</th>`).join('')}</tr></thead><tbody>
+  ${rows.map((r,i)=>`<tr${pend[i]?' style="color:var(--red)"':''}>${cols.map(c=>`<td${mono.test(c)?' class="mono"':''}${(c==='ALTERADO'&&r[c])?' style="color:var(--amber);font-weight:600;"':''}>${pEsc(r[c])}</td>`).join('')}</tr>`).join('')}
   </tbody></table></div>`;
 }
 
