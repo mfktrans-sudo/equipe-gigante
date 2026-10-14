@@ -607,6 +607,15 @@
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
           <button class="primary" onclick="adicionarIscas()">Vincular iscas</button>
           <button class="danger" onclick="limparIscas()">Limpar todas</button></div>
+        <label style="margin-top:14px;display:block;">Ou suba um arquivo com as placas / docas</label>
+        <div class="dropzone" id="iscaDrop" onclick="document.getElementById('iscaFile').click()"
+             ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')"
+             ondrop="event.preventDefault();this.classList.remove('drag');iscaArquivos(event.dataTransfer.files)">
+          <b>Clique ou arraste o arquivo aqui</b>
+          <div class="desc">Aceita qualquer formato: XLSX, XLS, XLSM, XLSB, ODS, CSV, TSV, TXT, JSON, XML, HTML, DOCX, ZIP (com vários arquivos dentro) e outros arquivos de texto. Pode enviar vários de uma vez.</div>
+          <input type="file" id="iscaFile" multiple style="display:none" onchange="iscaArquivos(this.files);this.value=''">
+        </div>
+        <div id="iscaArqLog" class="desc" style="margin-top:6px;"></div>
       </div>
       <div class="grid cols-2" id="iscaStats"></div>
     </div>
@@ -2329,11 +2338,15 @@ function iscaEtiquetas(){
 }
 
 function adicionarIscas(){
-  STATE.iscas = STATE.iscas || [];
   const ta = document.getElementById('iscaTexto');
-  const itens = iscaParseLinhas(ta.value);
-  if(!itens.length){ toast('Digite ao menos uma placa ou doca.','err'); return; }
-  if(!STATE.alocacao.length && !STATE.cargas.length){ toast('Carregue o arquivo e rode a alocação antes de vincular iscas.','err'); return; }
+  if(adicionarIscasDeTexto(ta.value)) ta.value = '';
+}
+/* mesma lógica da digitação — usada também pelo envio de arquivo */
+function adicionarIscasDeTexto(texto, origem){
+  STATE.iscas = STATE.iscas || [];
+  const itens = iscaParseLinhas(texto);
+  if(!itens.length){ toast(origem?'Nenhuma placa ou doca encontrada em '+origem+'.':'Digite ao menos uma placa ou doca.','err'); return false; }
+  if(!STATE.alocacao.length && !STATE.cargas.length){ toast('Carregue o arquivo e rode a alocação antes de vincular iscas.','err'); return false; }
   let add = 0; const dup=[], naoAchou=[], invalidas=[], escolher=[];
   itens.forEach(it=>{
     if(it.invalida){ invalidas.push(it.texto); return; }
@@ -2351,7 +2364,7 @@ function adicionarIscas(){
     if(isca.placa && STATE.iscas.some(x=>placaKey(x.placa)===placaKey(isca.placa))){ dup.push(isca.placa); return; }
     STATE.iscas.push(isca); add++;
   });
-  saveState(); ta.value = '';
+  saveState();
   renderIscas();
   const partes = [add+' isca(s) vinculada(s).'];
   if(escolher.length) partes.push('Doca com mais de uma carga: escolha a placa na tabela.');
@@ -2359,6 +2372,91 @@ function adicionarIscas(){
   if(naoAchou.length) partes.push('Não estão no arquivo carregado: '+naoAchou.join(', ')+'.');
   if(invalidas.length) partes.push('Linha(s) ignorada(s): '+invalidas.join(', ')+'.');
   toast(partes.join(' '), (naoAchou.length||invalidas.length||dup.length)?'err':'ok');
+  return true;
+}
+
+/* ===== Envio de arquivo na aba Iscas (qualquer formato) ===== */
+const ISCA_PLACA_CEL = /^[A-Z0-9]{3}-?[A-Z0-9]{4}$/;
+function iscaCelPlaca(c){ const u=String(c==null?'':c).trim().toUpperCase(); return ISCA_PLACA_CEL.test(u) && /[A-Z]/.test(u) && /\d/.test(u) ? u : null; }
+/* tabela (linhas x colunas) -> linhas de texto no formato aceito por iscaParseLinhas */
+function iscaTabelaParaLinhas(aoa){
+  const out=[];
+  (aoa||[]).forEach(r=>{
+    const cels=(r||[]).map(c=>String(c==null?'':c).trim()).filter(c=>c!=='');
+    if(!cels.length) return;
+    const placas=cels.map(iscaCelPlaca).filter(Boolean);
+    if(placas.length){ placas.forEach(p=>out.push(p)); return; }
+    /* sem placa: linha só de número = doca (e 2º número = onda) */
+    if(/^\d{1,4}$/.test(cels[0].replace(/\.0+$/,'')) && cels.length<=2 && cels.every(c=>/^\d{1,4}(\.0+)?$/.test(c))){
+      out.push(cels.map(c=>c.replace(/\.0+$/,'')).join(' ')); return; }
+    const m=cels[0].match(/^doca\s*\d+/i); if(m) out.push(cels.slice(0,2).join(' '));
+  });
+  return out;
+}
+function iscaJsonStrings(o, out){
+  if(o==null) return out;
+  if(Array.isArray(o)) o.forEach(x=>iscaJsonStrings(x,out));
+  else if(typeof o==='object') Object.keys(o).forEach(k=>iscaJsonStrings(o[k],out));
+  else out.push(String(o));
+  return out;
+}
+function iscaTextoParaLinhas(txt){
+  const t=txt.trim();
+  if(t.charAt(0)==='{'||t.charAt(0)==='['){
+    try{ return iscaTabelaParaLinhas(iscaJsonStrings(JSON.parse(t),[]).map(x=>[x])); }catch(e){}
+  }
+  if(/^\s*<[?!a-z]/i.test(t) && /<\/?[a-z][^>]*>/i.test(t)){
+    const limpo=t.replace(/<(script|style)[\s\S]*?<\/\1>/gi,' ').replace(/<\/(tr|p|div|li|br|row|w:p)>|<br\s*\/?>/gi,'\n').replace(/<\/(td|th|cell|v|w:t)>/gi,'\t').replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&');
+    return iscaTabelaParaLinhas(bkParseCSV(limpo));
+  }
+  /* texto/CSV/TSV: cada linha é analisada (placa em qualquer coluna; "150 2" = doca 150, onda 2) */
+  const linhas=[];
+  bkParseCSV(txt).forEach(r=>{
+    const cels=r.map(c=>String(c).trim()).filter(Boolean);
+    const placas=cels.map(iscaCelPlaca).filter(Boolean);
+    if(placas.length) placas.forEach(p=>linhas.push(p));
+    else if(cels.length===1) linhas.push(cels[0]);
+    else linhas.push(...iscaTabelaParaLinhas([cels]));
+  });
+  return linhas;
+}
+async function iscaLerBuffer(nome, buf){
+  const base=nome.split('/').pop(), ext=(base.split('.').pop()||'').toLowerCase();
+  if(ext==='zip' || ext==='docx' || ext==='odt'){
+    if(typeof JSZip==='undefined') throw new Error('biblioteca de ZIP não carregou');
+    const zip=await JSZip.loadAsync(buf);
+    if(ext!=='zip'){
+      const f=zip.files[ext==='docx'?'word/document.xml':'content.xml']; if(!f) throw new Error('documento sem conteúdo');
+      const xml=await f.async('string');
+      return iscaTextoParaLinhas(xml.replace(/<\/(w:p|text:p)>/g,'\n').replace(/<[^>]+>/g,''));
+    }
+    const out=[], nomes=Object.keys(zip.files).filter(n=>!zip.files[n].dir && n.indexOf('__MACOSX')<0 && n.split('/').pop().charAt(0)!=='.');
+    for(const n of nomes){ try{ out.push(...await iscaLerBuffer(nome+'/'+n, await zip.files[n].async('arraybuffer'))); }catch(e){} }
+    return out;
+  }
+  const planilha=['xlsx','xls','xlsm','xlsb','ods','fods','numbers','dbf'].indexOf(ext)>=0;
+  const bytes=new Uint8Array(buf);
+  const binario = bytes.length>3 && (bytes[0]===0x50&&bytes[1]===0x4B || bytes[0]===0xD0&&bytes[1]===0xCF); /* zip/OLE2 sem extensão conhecida */
+  if(planilha || binario){
+    if(typeof XLSX==='undefined') throw new Error('biblioteca de Excel não carregou');
+    const wb=XLSX.read(buf,{type:'array'}), out=[];
+    wb.SheetNames.forEach(n=>{ out.push(...iscaTabelaParaLinhas(XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:'',raw:false}))); });
+    return out;
+  }
+  if(ext==='pdf' || /^(png|jpe?g|gif|bmp|webp|tiff?|heic|mp[34]|avi|mov|exe|dll)$/.test(ext)) throw new Error('formato sem texto legível (exporte para XLSX, CSV ou TXT)');
+  return iscaTextoParaLinhas(bkDecode(buf));
+}
+async function iscaArquivos(fileList){
+  const files=Array.from(fileList||[]); if(!files.length) return;
+  const log=document.getElementById('iscaArqLog'), linhas=[], falhas=[], lidos=[];
+  if(log) log.textContent='Lendo '+files.length+' arquivo(s)…';
+  for(const f of files){
+    try{ const l=await iscaLerBuffer(f.name, await f.arrayBuffer()); linhas.push(...l); lidos.push(f.name+' ('+l.length+')'); }
+    catch(e){ falhas.push(f.name+': '+(e&&e.message||'erro ao ler')); }
+  }
+  if(log) log.textContent=(lidos.length?'Lido: '+lidos.join(', ')+'. ':'')+(falhas.length?'Não foi possível ler: '+falhas.join('; ')+'.':'');
+  if(!linhas.length){ toast(falhas.length?'Não foi possível ler o arquivo: '+falhas.join('; '):'Nenhuma placa ou doca encontrada no arquivo.','err'); return; }
+  adicionarIscasDeTexto(linhas.join('\n'), 'arquivo');
 }
 function iscaEscolher(id, placa){
   const isca = STATE.iscas.find(x=>x.id===id); if(!isca || !placa) return;
