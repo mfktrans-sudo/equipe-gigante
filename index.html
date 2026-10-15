@@ -215,12 +215,19 @@
   table.mx th,table.mx td{border:1px solid #000;text-align:center;padding:0;height:24px;white-space:nowrap;}
   table.mx thead th{background:#fff;color:#000;font-weight:800;font-size:11.5px;padding:4px 6px;position:sticky;top:0;z-index:3;}
   table.mx td.mx-doca{background:#ececec;color:#000;font-weight:800;position:sticky;left:0;z-index:1;padding:0 10px;}
-  table.mx td.mx-cell{cursor:pointer;font-weight:800;font-size:13px;min-width:62px;}
+  table.mx td.mx-cell{cursor:pointer;font-weight:800;font-size:13px;min-width:78px;white-space:nowrap;}
   table.mx td.mx-busy{background:#fff;color:#000;}
   table.mx td.mx-busy:hover{background:#ffe9a8;}
   table.mx td.mx-free{background:#16a34a;}
   table.mx td.mx-free:hover{background:#22c55e;outline:2px solid #fff;outline-offset:-2px;}
   table.mx td.mx-dup{background:#ffb3b8;}
+  table.mx td.mx-busy{cursor:grab;user-select:none;-webkit-user-select:none;}
+  table.mx td.mx-dragsrc{opacity:.35;}
+  table.mx td.mx-drop{outline:3px solid var(--amber);outline-offset:-3px;background:#ffd36b !important;}
+  table.mx td.mx-drop.mx-busy::after{content:'⇄';color:#000;font-size:11px;margin-left:3px;}
+  body.mx-arrastando, body.mx-arrastando *{cursor:grabbing !important;user-select:none !important;}
+  #mxGhost{position:fixed;z-index:9999;pointer-events:none;background:var(--amber);color:#1a1200;font-weight:800;font-size:12px;
+    padding:5px 10px;border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,.5);white-space:nowrap;transform:translate(10px,10px);}
   table.mx td.mx-adj{box-shadow:inset 0 0 0 2px #f59e0b;}
   table.mx td.mx-ts{box-shadow:inset 0 0 0 2px #0d9488;}
   table.mx td.mx-tsres{color:#fff;font-size:11px;box-shadow:inset 0 0 0 2px #0d9488;}
@@ -290,7 +297,14 @@
   .brand .logo-img{
     width:108px;height:100px;object-fit:cover;object-position:50% 47.8%;border-radius:10px;
     filter:drop-shadow(0 3px 10px rgba(245,166,35,.35));
+    animation:logoPulse 2.2s ease-in-out infinite;
+    transform-origin:center;
   }
+  @keyframes logoPulse{
+    0%,100%{transform:scale(1);filter:drop-shadow(0 3px 10px rgba(245,166,35,.25));}
+    50%{transform:scale(1.06);filter:drop-shadow(0 3px 18px rgba(245,166,35,.70));}
+  }
+  @media (prefers-reduced-motion:reduce){ .brand .logo-img{animation:none;} }
 
   /* ================= MARCA D'ÁGUA ================= */
   #watermark{
@@ -474,8 +488,7 @@
       <div><h2>Consolidar</h2><div class="desc">Junta GAN + Log de NF + Região pela chave Pré-Romaneio/Placa e aplica a base de TS São Paulo (doca/onda por placa). Se a placa já existir numa carga, o novo PRÉ é adicionado a ela (nunca cria uma carga separada só por ser de outra filial).</div></div>
       <div style="display:flex;gap:8px;">
         <button class="danger small" onclick="limparUploadsPendentes()">Limpar arquivos carregados</button>
-        <button class="primary" onclick="consolidarUploads()">Consolidar →</button>
-        <button class="primary" onclick="rodarAlocacao()" title="Calcula docas e ondas e atualiza todas as abas">Rodar alocação ▶</button>
+        <button class="primary" onclick="consolidarUploads()" title="Consolida os arquivos, calcula docas e ondas e abre o Painel (passo 4)">Consolidar e alocar →</button>
       </div>
     </div>
     <div id="uploadSummary" class="empty">Carregue os arquivos acima para ver a prévia aqui.</div>
@@ -608,8 +621,8 @@
       </div>
       <div class="pf-right">
         <div class="mx-title"><b>Mapa de docas × ondas</b>
-          <span class="mx-leg"><i class="mx-sw busy">X</i> ocupada <i class="mx-sw free"></i> livre</span></div>
-        <div class="mx-hint">Clique em qualquer campo para mover a carga para outra doca/onda ou alocar uma carga ali.</div>
+          <span class="mx-leg"><i class="mx-sw busy" style="width:auto;padding:0 3px;">VM</i> carga da ferramenta <i class="mx-sw busy" style="width:auto;padding:0 3px;">VM + TS</i> carga que também está na base TS <i class="mx-sw free" style="width:auto;padding:0 3px;color:#fff;">TS</i> só base TS <i class="mx-sw free"></i> livre</span></div>
+        <div class="mx-hint">Arraste uma carga (campo com VM) e solte na doca/onda desejada — se o destino estiver ocupado, as duas trocam de lugar. Ou clique em qualquer campo para mover digitando a doca/onda.</div>
         <div id="pMatriz"></div>
       </div>
     </div>
@@ -641,6 +654,7 @@
       <div class="grid cols-2" id="iscaStats"></div>
     </div>
   </div>
+  <div class="panel" id="insPanel" style="display:none"></div>
   <div class="panel">
     <div class="panel-head"><div><h2>Iscas vinculadas</h2><div class="desc">Ordem = sequência de impressão: docas da menor para a maior (e, na mesma doca, da 1ª onda em diante).</div></div></div>
     <div id="iscaTabela"></div>
@@ -850,7 +864,7 @@ function novaOperacao(){
   STATE.presOrfaos = [];
   STATE.alocacao = [];
   STATE.ondaStatus = {};
-  STATE.iscas = [];
+  STATE.iscas = []; STATE.insercao = null;
   STATE.ts = [];
   saveState();
   // arquivos carregados na aba 3 (ainda não consolidados) e avisos
@@ -1376,12 +1390,31 @@ function parseGAN(texto, regiao){
   }
   return out;
 }
+/* Linhas do log de NF que o Roadshow marca como "já consta em romaneio" são sujeira de dias anteriores:
+   não entram na contagem de entregas e não geram PRÉ sem placa. */
+const HEBLS_RE_LINHA = /^\s*(\d{2}|[Dd]-?0)\s+(\d+)\s+\S+\s+Nota Fiscal.*(?:Pre.Romaneio|Romaneio)\s*:\s*(\d+)/i;
+function heblsLinhaJaRomaneada(line){
+  const t = String(line||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  return /ja\s+(consta|existe|esta|foi|incluid|romanead)/i.test(t)      // "já consta em romaneio", "já existe...", "já está..."
+      || /consta\s+(em|no|na)\s+(o\s+|um\s+)?(pre.?)?romaneio/i.test(t)
+      || /ja\s+(em|no)\s+(pre.?)?romaneio/i.test(t);
+}
+// PRÉs que o log marca como já romaneados (e que não têm nenhuma linha "normal" no log)
+function parseHEBLSJaRomaneados(texto){
+  const ign = {}, norm = {};
+  String(texto||'').split(/\r?\n/).forEach(line=>{
+    const m = line.match(HEBLS_RE_LINHA); if(!m) return;
+    const pr = m[3].replace(/^0+/,'') || '0';
+    if(heblsLinhaJaRomaneada(line)) ign[pr] = true; else norm[pr] = true;
+  });
+  return Object.keys(ign).filter(pr=>!norm[pr]);
+}
 // hebls: linhas "  33 402431 UA Nota Fiscal incluida no Pre'Romaneio: 12801"
 function parseHEBLS(texto){
   const counts = {};
   texto.split(/\r?\n/).forEach(line=>{
-    const m = line.match(/^\s*(\d{2}|[Dd]-?0)\s+(\d+)\s+\S+\s+Nota Fiscal.*(?:Pre.Romaneio|Romaneio)\s*:\s*(\d+)/i);
-    if(m){ const pr = m[3].replace(/^0+/,'') || '0'; counts[pr] = (counts[pr]||0) + 1; }
+    const m = line.match(HEBLS_RE_LINHA);
+    if(m && !heblsLinhaJaRomaneada(line)){ const pr = m[3].replace(/^0+/,'') || '0'; counts[pr] = (counts[pr]||0) + 1; }
   });
   return counts;
 }
@@ -1389,8 +1422,8 @@ function parseHEBLS(texto){
 function parseHEBLSFiliais(texto){
   const out = {};
   texto.split(/\r?\n/).forEach(line=>{
-    const m = line.match(/^\s*(\d{2}|[Dd]-?0)\s+(\d+)\s+\S+\s+Nota Fiscal.*(?:Pre.Romaneio|Romaneio)\s*:\s*(\d+)/i);
-    if(m){ const pr = m[3].replace(/^0+/,'') || '0'; if(!out[pr]) out[pr] = normFilialCod(m[1]); }
+    const m = line.match(HEBLS_RE_LINHA);
+    if(m && !heblsLinhaJaRomaneada(line)){ const pr = m[3].replace(/^0+/,'') || '0'; if(!out[pr]) out[pr] = normFilialCod(m[1]); }
   });
   return out;
 }
@@ -1494,7 +1527,9 @@ function consolidarUploads(){
   const heblsFilial = {};
   PENDING.HEBLS.forEach(f=>{ const m=parseHEBLSFiliais(f.texto); Object.keys(m).forEach(k=>{ if(!heblsFilial[k]) heblsFilial[k]=m[k]; }); });
   // remove pendências antigas que agora já têm placa (ex.: consolidação anterior feita sem o GAN)
-  STATE.presOrfaos = STATE.presOrfaos.filter(o=> !preRomaneiosComPlaca.has(o.preRomaneio));
+  const jaRomaneados = new Set();
+  PENDING.HEBLS.forEach(f=> parseHEBLSJaRomaneados(f.texto).forEach(pr=> jaRomaneados.add(pr)));
+  STATE.presOrfaos = STATE.presOrfaos.filter(o=> !preRomaneiosComPlaca.has(o.preRomaneio) && !jaRomaneados.has(o.preRomaneio));
   Object.keys(heblsMap).forEach(pr=>{
     if(!preRomaneiosComPlaca.has(pr) && !STATE.presOrfaos.find(o=>o.preRomaneio===pr)){
       STATE.presOrfaos.push({preRomaneio:pr, qtdEntrega:heblsMap[pr], filial:heblsFilial[pr]||'', placaInformada:''});
@@ -1516,8 +1551,13 @@ function consolidarUploads(){
   let msg = `${cargasNovas} carga(s) nova(s), ${presAdicionados} PRÉ(s) adicionado(s).`;
   if(semTransportadora) msg += ` ${semTransportadora} carga(s) com placa sem transportadora cadastrada.`;
   if(duplicidadesDetectadas) msg += ` ${duplicidadesDetectadas} duplicidade(s) ignorada(s) — veja o alerta.`;
+  if(jaRomaneados.size) msg += ` ${jaRomaneados.size} PRÉ(s) já em romaneio no Roadshow foram desconsiderados.`;
   if(tsResumo) msg += ' '+tsResumo.msg;
-  toast(msg, (semTransportadora||duplicidadesDetectadas||(tsResumo&&tsResumo.warn)) ? 'err' : 'ok');
+  // passo seguinte automático: roda a alocação e abre o Painel por Doca & Ondas (passo 4)
+  const msgAloc = rodarAlocacao(true);
+  if(msgAloc){ msg += ' '+msgAloc; switchTab('painel'); }
+  else msg += ' Alocação não foi recalculada — use "Rodar alocação" no Painel quando quiser.';
+  toast(msg, (semTransportadora||duplicidadesDetectadas||(tsResumo&&tsResumo.warn)||!msgAloc) ? 'err' : 'ok');
 }
 
 function renderOrfaos(){
@@ -1607,7 +1647,7 @@ function renderConsolidado(){
 }
 function limparCargas(){
   if(!confirm('Remover todas as cargas consolidadas e a alocação?')) return;
-  STATE.cargas = []; STATE.alocacao = []; STATE.presOrfaos = []; STATE.ondaStatus = {}; STATE.iscas = [];
+  STATE.cargas = []; STATE.alocacao = []; STATE.presOrfaos = []; STATE.ondaStatus = {}; STATE.iscas = []; STATE.insercao = null;
   saveState();
   renderConsolidado(); renderOrfaos(); renderAlocacao();
 }
@@ -1787,10 +1827,11 @@ function menorPreRomaneio(carga){
   return nums.length ? Math.min(...nums) : 0;
 }
 
-function rodarAlocacao(){
-  if(STATE.cargas.length===0){ toast('Não há cargas consolidadas.', 'err'); return; }
+function rodarAlocacao(silencioso){
+  /* silencioso=true: usado pela consolidação — não mostra toast próprio e devolve a mensagem (ou false se não rodou) */
+  if(STATE.cargas.length===0){ if(!silencioso) toast('Não há cargas consolidadas.', 'err'); return false; }
   const nAjustes = STATE.alocacao.filter(a=>a.status==='AJUSTADO').length;
-  if(nAjustes && !confirm(nAjustes+' carga(s) foram ajustadas manualmente no mapa de docas. Recalcular a alocação descarta esses ajustes. Continuar?')) return;
+  if(nAjustes && !confirm(nAjustes+' carga(s) foram ajustadas manualmente no mapa de docas. Recalcular a alocação descarta esses ajustes. Continuar?')) return false;
   revincularTransportadoras();   // garante que placas cadastradas depois da consolidação sejam reconhecidas
 
   const resultado = [];
@@ -1850,7 +1891,9 @@ function rodarAlocacao(){
   STATE.alocacao = resultado;
   saveState();
   atualizarTodasAsAbas();
-  toast('Alocação recalculada: '+resultado.length+' carga(s) processada(s)'+(tsPlano.n?' — '+tsPlano.n+' com doca/onda fixada pela base TS':'')+'.', 'ok');
+  const msgAloc = 'Alocação recalculada: '+resultado.length+' carga(s) processada(s)'+(tsPlano.n?' — '+tsPlano.n+' com doca/onda fixada pela base TS':'')+'.';
+  if(!silencioso) toast(msgAloc, 'ok');
+  return msgAloc;
 }
 /* Reatualiza todas as telas dependentes: ao rodar a alocação, Consolidação, Alocação, Dashboard,
    Painel por doca/onda, Cargas por filial e Backup ficam prontos, como se o processo já tivesse sido concluído. */
@@ -2370,10 +2413,17 @@ function mxDocasLinhas(){
 function mxOcupantes(doca, onda){
   return STATE.alocacao.map((a,i)=>({a,i})).filter(o=>o.a.status!=='ALTERAR' && pDoca(o.a)===doca && o.a.onda===onda);
 }
+/* Rótulo do campo ocupado: VM = carga da ferramenta; VM + TS = a mesma carga (placa) também consta na base TS.
+   Campo só com placa da base TS (sem carga) continua sendo "TS". Mais de uma carga no mesmo campo: VM2, VM3... */
+function mxRotuloCampo(oc, tsMapa){
+  const ehTS = x => !!(x.a.ts || (tsMapa && tsMapa[placaKey(x.a.placa)]));
+  const base = oc.length>1 ? 'VM'+oc.length : 'VM';
+  return oc.some(ehTS) ? base+' + TS' : base;
+}
 function renderMatrizDocas(){
   const el = document.getElementById('pMatriz'); if(!el) return;
   if(!STATE.alocacao.length){ el.innerHTML='<div class="empty">Rode a alocação para ver o mapa de docas.</div>'; return; }
-  const docas = mxDocasLinhas(), nO = mxOndasMax(), tsRes = tsReservas();
+  const docas = mxDocasLinhas(), nO = mxOndasMax(), tsRes = tsReservas(), tsMapa = tsMapaPorPlaca();
   let h = '<div class="pf-scroll"><table class="mx"><thead><tr><th>DOCA</th>';
   for(let o=1;o<=nO;o++) h += `<th>${o}ª ONDA</th>`;
   h += '</tr></thead><tbody>';
@@ -2381,11 +2431,11 @@ function renderMatrizDocas(){
     h += `<tr><td class="mx-doca">${d}</td>`;
     for(let o=1;o<=nO;o++){
       const oc = mxOcupantes(d,o);
-      if(!oc.length && tsRes[d+'|'+o]){ h += `<td class="mx-cell mx-free mx-tsres" title="Doca ${d} · ${o}ª onda reservada pela base TS (placa ${tsRes[d+'|'+o]}, sem carga na ferramenta). Clique para alocar outra carga aqui." onclick="abrirCelulaMatriz(${d},${o})">TS</td>`; continue; }
-      if(!oc.length){ h += `<td class="mx-cell mx-free" title="Doca ${d} · ${o}ª onda — livre. Clique para alocar uma carga aqui." onclick="abrirCelulaMatriz(${d},${o})"></td>`; continue; }
+      if(!oc.length && tsRes[d+'|'+o]){ h += `<td class="mx-cell mx-free mx-tsres" data-doca="${d}" data-onda="${o}" title="Doca ${d} · ${o}ª onda reservada pela base TS (placa ${tsRes[d+'|'+o]}, sem carga na ferramenta). Clique ou solte uma carga aqui." onclick="abrirCelulaMatriz(${d},${o})">TS</td>`; continue; }
+      if(!oc.length){ h += `<td class="mx-cell mx-free" data-doca="${d}" data-onda="${o}" title="Doca ${d} · ${o}ª onda — livre. Clique ou solte uma carga aqui." onclick="abrirCelulaMatriz(${d},${o})"></td>`; continue; }
       const tip = oc.map(x=>`${x.a.placa} · ${x.a.transportadora||'sem transportadora'} · ${x.a.pres.length} PRÉ · ${pEntregas(x.a)} ent.`).join('\n');
-      const cls = 'mx-cell mx-busy'+(oc.some(x=>x.a.ts)?' mx-ts':'')+(oc.length>1?' mx-dup':'')+(oc.some(x=>x.a.status==='AJUSTADO')?' mx-adj':'');
-      h += `<td class="${cls}" title="${pEsc(tip+(oc.some(x=>x.a.ts)?'\nDoca/onda definida pela base TS São Paulo':''))}" onclick="abrirCelulaMatriz(${d},${o})">${oc.length>1?'X'+oc.length:'X'}</td>`;
+      const cls = 'mx-cell mx-busy'+(oc.some(x=>x.a.ts||tsMapa[placaKey(x.a.placa)])?' mx-ts':'')+(oc.length>1?' mx-dup':'')+(oc.some(x=>x.a.status==='AJUSTADO')?' mx-adj':'');
+      h += `<td class="${cls}" data-doca="${d}" data-onda="${o}" title="${pEsc(tip+(oc.some(x=>x.a.ts)?'\nDoca/onda definida pela base TS São Paulo':(oc.some(x=>tsMapa[placaKey(x.a.placa)])?'\nPlaca também consta na base TS São Paulo':''))+'\nArraste para mover')}" onclick="abrirCelulaMatriz(${d},${o})">${mxRotuloCampo(oc, tsMapa)}</td>`;
     }
     h += '</tr>';
   });
@@ -2418,6 +2468,92 @@ function mxDesalocar(idx){
   saveState(); renderPainel();
   toast('Carga '+a.placa+' ficou sem doca (pendência).','ok');
 }
+
+/* ARRASTAR E SOLTAR no mapa: segure uma carga (campo com VM) e solte na doca/onda de destino.
+   Destino livre -> move; destino ocupado -> troca as duas cargas (mesma regra do modal). Clique simples continua abrindo o modal. */
+(function(){
+  let drag = null, ghost = null, bloquearClique = false, rafScroll = null;
+  const LIMIAR = 6;
+  function liberarClique(){ bloquearClique = true; setTimeout(()=>{ bloquearClique = false; }, 0); }
+  function celulaSob(x, y){
+    const el = document.elementFromPoint(x, y);
+    return el ? el.closest('#pMatriz td.mx-cell') : null;
+  }
+  function limparDrop(){ document.querySelectorAll('#pMatriz td.mx-drop').forEach(c=>c.classList.remove('mx-drop')); }
+  function idxDaCelula(td){
+    const oc = mxOcupantes(parseInt(td.dataset.doca), parseInt(td.dataset.onda));
+    if(!oc.length) return null;
+    if(oc.length===1) return oc[0].i;
+    const naoTS = oc.filter(x=>!x.a.ts);
+    const lista = naoTS.length ? naoTS : oc;
+    return lista[lista.length-1].i;      // campo duplicado: arrasta a carga excedente
+  }
+  function autoScroll(){
+    if(!drag || !drag.ativo) return;
+    const sc = document.querySelector('#pMatriz .pf-scroll');
+    if(sc){
+      const r = sc.getBoundingClientRect(), m = 40, v = 14;
+      if(drag.x > r.right-m) sc.scrollLeft += v; else if(drag.x < r.left+m+70) sc.scrollLeft -= v;
+      if(drag.y > r.bottom-m) sc.scrollTop += v; else if(drag.y < r.top+m) sc.scrollTop -= v;
+    }
+    rafScroll = requestAnimationFrame(autoScroll);
+  }
+  function iniciar(){
+    drag.ativo = true;
+    const a = STATE.alocacao[drag.idx];
+    ghost = document.createElement('div'); ghost.id = 'mxGhost';
+    ghost.textContent = '🚚 '+(a?a.placa:'carga');
+    document.body.appendChild(ghost);
+    document.body.classList.add('mx-arrastando');
+    drag.td.classList.add('mx-dragsrc');
+    rafScroll = requestAnimationFrame(autoScroll);
+  }
+  function encerrar(){
+    if(rafScroll) cancelAnimationFrame(rafScroll); rafScroll = null;
+    if(ghost) ghost.remove(); ghost = null;
+    document.body.classList.remove('mx-arrastando');
+    limparDrop();
+    document.querySelectorAll('#pMatriz td.mx-dragsrc').forEach(c=>c.classList.remove('mx-dragsrc'));
+    drag = null;
+  }
+  document.addEventListener('pointerdown', ev=>{
+    if(ev.button!==0 || ev.pointerType==='touch') return;          // toque na tela: mantém clique/modal (não bloqueia a rolagem)
+    const td = ev.target.closest && ev.target.closest('#pMatriz td.mx-busy');
+    if(!td) return;
+    const idx = idxDaCelula(td); if(idx==null) return;
+    drag = {td, idx, x0:ev.clientX, y0:ev.clientY, x:ev.clientX, y:ev.clientY, ativo:false};
+  });
+  document.addEventListener('pointermove', ev=>{
+    if(!drag) return;
+    drag.x = ev.clientX; drag.y = ev.clientY;
+    if(!drag.ativo){
+      if(Math.hypot(ev.clientX-drag.x0, ev.clientY-drag.y0) < LIMIAR) return;
+      iniciar();
+    }
+    ev.preventDefault();
+    ghost.style.left = ev.clientX+'px'; ghost.style.top = ev.clientY+'px';
+    limparDrop();
+    const alvo = celulaSob(ev.clientX, ev.clientY);
+    if(alvo && alvo !== drag.td) alvo.classList.add('mx-drop');
+  });
+  document.addEventListener('pointerup', ev=>{
+    if(!drag) return;
+    if(!drag.ativo){ drag = null; return; }                          // foi só um clique
+    const idx = drag.idx, origem = drag.td;
+    const alvo = celulaSob(ev.clientX, ev.clientY);
+    liberarClique();
+    encerrar();
+    if(alvo && alvo !== origem){
+      const doca = parseInt(alvo.dataset.doca), onda = parseInt(alvo.dataset.onda);
+      if(!isNaN(doca) && !isNaN(onda)) mxMoverCarga(idx, doca, onda);
+    }
+  });
+  document.addEventListener('keydown', ev=>{ if(ev.key==='Escape' && drag && drag.ativo){ liberarClique(); encerrar(); } });
+  document.addEventListener('pointercancel', ()=>{ if(drag && drag.ativo) encerrar(); else drag = null; });
+  // depois de arrastar o navegador dispara um "click": engole para não abrir o modal
+  document.addEventListener('click', ev=>{ if(bloquearClique){ ev.stopPropagation(); ev.preventDefault(); } }, true);
+  document.addEventListener('dragstart', ev=>{ if(drag) ev.preventDefault(); });
+})();
 
 function abrirCelulaMatriz(doca, onda){
   fecharAlterarDoca();
@@ -2680,12 +2816,15 @@ async function iscaArquivos(fileList){
   const files=Array.from(fileList||[]); if(!files.length) return;
   const log=document.getElementById('iscaArqLog'), linhas=[], falhas=[], lidos=[];
   if(log) log.textContent='Lendo '+files.length+' arquivo(s)…';
+  let insLido=false;
   for(const f of files){
+    if(/\.(xlsx|xlsm|xls)$/i.test(f.name)){ try{ const n=insLer(await f.arrayBuffer(), f.name); if(n){ insLido=true; lidos.push(f.name+' (arquivo de inserção: '+n+' iscas)'); continue; } }catch(e){} }
     try{ const l=await iscaLerBuffer(f.name, await f.arrayBuffer()); linhas.push(...l); lidos.push(f.name+' ('+l.length+')'); }
     catch(e){ falhas.push(f.name+': '+(e&&e.message||'erro ao ler')); }
   }
   if(log) log.textContent=(lidos.length?'Lido: '+lidos.join(', ')+'. ':'')+(falhas.length?'Não foi possível ler: '+falhas.join('; ')+'.':'');
-  if(!linhas.length){ toast(falhas.length?'Não foi possível ler o arquivo: '+falhas.join('; '):'Nenhuma placa ou doca encontrada no arquivo.','err'); return; }
+  if(insLido) renderIscas();
+  if(!linhas.length){ if(insLido){ toast('Arquivo de inserção carregado. Confira as regiões e gere os arquivos.','ok'); return; } toast(falhas.length?'Não foi possível ler o arquivo: '+falhas.join('; '):'Nenhuma placa ou doca encontrada no arquivo.','err'); return; }
   adicionarIscasDeTexto(linhas.join('\n'), 'arquivo');
 }
 function iscaEscolher(id, placa){
@@ -2701,6 +2840,7 @@ function limparIscas(){
 }
 
 function renderIscas(){
+  renderInsercao();
   const tb = document.getElementById('iscaTabela'); if(!tb) return;
   const c = iscaCfg();
   document.getElementById('iscaLarg').value = c.larg; document.getElementById('iscaAlt').value = c.alt;
@@ -2820,6 +2960,138 @@ function iscaImprimir(){
     const d = fr.contentWindow.document; d.open(); d.write(html); d.close();
     setTimeout(()=>{ fr.contentWindow.focus(); fr.contentWindow.print(); setTimeout(()=>fr.remove(),60000); },400);
   }
+}
+
+
+/* =========================================================
+   ARQUIVO DE INSERÇÃO DE ISCAS (cliente a cliente)
+   Lê o arquivo recebido, acha a região em que há cargas, preenche a placa,
+   gera o Excel do rastreamento e o Excel com doca/onda/cliente para a etiqueta.
+   ========================================================= */
+let INS_G = [];
+function insNorm(s){ return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
+function insData(v){ if(v instanceof Date){ const p=n=>String(n).padStart(2,'0'); return p(v.getDate())+'/'+p(v.getMonth()+1)+'/'+v.getFullYear(); } return String(v==null?'':v).trim(); }
+const INS_ABC=['ABC','GRANDEABC','SANTOANDRE','SAOBERNARDO','SAOCAETANO','DIADEMA'], INS_BS=['BAIXADA','BAIXADASANTISTA','LITORAL','SANTOS','SAOVICENTE','GUARUJA','PRAIAGRANDE'], INS_OE=['OESTE','GRANDEOESTE','OSASCO','CARAPICUIBA','BARUERI'], INS_LE=['LESTE'];
+const INS_ALIAS = {SANTOANDRE:INS_ABC,SAOBERNARDO:INS_ABC,SAOBERNARDODOCAMPO:INS_ABC,SAOCAETANO:INS_ABC,SAOCAETANODOSUL:INS_ABC,DIADEMA:INS_ABC,MAUA:INS_ABC,RIBEIRAOPIRES:INS_ABC,RIOGRANDEDASERRA:INS_ABC,
+  SANTOS:INS_BS,SAOVICENTE:INS_BS,GUARUJA:INS_BS,CUBATAO:INS_BS,PRAIAGRANDE:INS_BS,BERTIOGA:INS_BS,
+  OSASCO:INS_OE,CARAPICUIBA:INS_OE,BARUERI:INS_OE,COTIA:INS_OE,ITAPEVI:INS_OE,JANDIRA:INS_OE,SANTANADEPARNAIBA:INS_OE,TABOAODASERRA:INS_OE,EMBUDASARTES:INS_OE,
+  GUARULHOS:['GRU'],ARUJA:['GUARULHOS'],ITAQUAQUECETUBA:INS_LE,POA:INS_LE,SUZANO:INS_LE,FERRAZDEVASCONCELOS:INS_LE,MOGIDASCRUZES:INS_LE};
+
+/* lê a planilha de inserção (procura o cabeçalho Cliente / Cep / Cidade / Placa em qualquer aba) */
+function insLer(buf, nome){
+  if(typeof XLSX==='undefined') return 0;
+  let wb; try{ wb = XLSX.read(buf,{type:'array',cellDates:true}); }catch(e){ return 0; }
+  for(const sn of wb.SheetNames){
+    const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:'',raw:true});
+    for(let i=0;i<Math.min(aoa.length,10);i++){
+      const col={}; (aoa[i]||[]).forEach((c,j)=>{ const k=insNorm(c); if(k && col[k]===undefined) col[k]=j; });
+      if(['CLIENTE','CEP','CIDADE','PLACA'].some(k=>col[k]===undefined)) continue;
+      const g=(r,k)=>col[k]!==undefined ? r[col[k]] : '', t=(r,k)=>String(g(r,k)==null?'':g(r,k)).trim(), rows=[];
+      for(let r=i+1;r<aoa.length;r++){
+        const x=aoa[r]||[]; if(!t(x,'CLIENTE')) continue;
+        rows.push({data:insData(g(x,'DATA')), seq:g(x,'SEQ'), cliente:t(x,'CLIENTE'), cep:t(x,'CEP'), rua:t(x,'RUA'), bairro:t(x,'BAIRRO'), cidade:t(x,'CIDADE'), uf:t(x,'UF'), equip:g(x,'EQUIP'), placaOrig:placaKey(g(x,'PLACA')), nf:g(x,'NF')});
+      }
+      if(rows.length){ STATE.insercao = {nome, rows, grp:{}, man:{}}; saveState(); return rows.length; }
+    }
+  }
+  return 0;
+}
+/* destino da isca: cidade e, em São Paulo capital, a zona pelo prefixo do CEP */
+function insDestino(r){
+  const cid=insNorm(r.cidade), cap=cid==='SAOPAULO';
+  const zona = cap ? ({'01':'CENTRO','02':'NORTE','03':'LESTE','04':'SUL','05':'OESTE','08':'LESTE'})[String(r.cep).replace(/\D/g,'').slice(0,2)] : null;
+  const forte=[cid].concat(zona?['ZONA'+zona,'SP'+zona,'SAOPAULO'+zona,zona]:[]), fraco=(INS_ALIAS[cid]||[]).slice();
+  if(cap) fraco.push('SP','CAPITAL');
+  const excl = zona ? ['CENTRO','NORTE','LESTE','SUL','OESTE'].filter(z=>z!==zona) : [];   // região de OUTRA zona não serve
+  return {excl, key: cap ? 'SÃO PAULO'+(zona?' · zona '+zona.toLowerCase():'') : (r.cidade||'—'), forte, fraco};
+}
+/* regiões que têm carga hoje (nome do arquivo GAN/Região) com as respectivas placas */
+function insRegioes(){
+  const m={};
+  (STATE.cargas||[]).forEach(c=>{ const n=c.regiao||''; if(!n||!c.placa) return; (m[n]=m[n]||{nome:n,placas:[]}).placas.push(c.placa); });
+  return Object.values(m).map(r=>({nome:r.nome, placas:r.placas, qtd:r.placas.length}));
+}
+function insRegiaoAuto(d, regs){
+  let best=null, bs=0;
+  regs.forEach(R=>{
+    const n=insNorm(R.nome); if(!n || d.excl.some(z=>n.includes(z))) return; let s=0;
+    const hit=t=>t.length>=2 && (n.includes(t) || (n.length>=3 && t.includes(n)));
+    d.forte.forEach(t=>{ if(hit(t)) s += (t===n?12:8); }); d.fraco.forEach(t=>{ if(hit(t)) s += 3; });
+    if(s>bs || (s===bs && s>0 && R.qtd>best.qtd)){ bs=s; best=R; }
+  });
+  return best ? best.nome : '';
+}
+/* distribui as iscas entre as placas da região (a placa com menos iscas recebe a próxima) */
+function insAtribuir(){
+  const I=STATE.insercao, regs=insRegioes(), cnt={}, add=p=>{ const k=placaKey(p); cnt[k]=(cnt[k]||0)+1; };
+  const ord=p=>{ const v=iscaVinculo({placa:p}); return v.doca!=null ? v.doca*1000+(v.onda||0) : 1e9; };
+  const out=I.rows.map((r,i)=>{ const d=insDestino(r), p=I.man[i]||r.placaOrig||''; if(p) add(p);
+    return {grupo:d.key, regiao:I.grp[d.key]||insRegiaoAuto(d,regs), placa:p, manual:!!p}; });
+  out.forEach(o=>{
+    if(o.placa) return; const R=regs.find(x=>x.nome===o.regiao); if(!R) return;
+    const ps=R.placas.slice().sort((a,b)=>(cnt[placaKey(a)]||0)-(cnt[placaKey(b)]||0) || ord(a)-ord(b));
+    o.placa=ps[0]; add(ps[0]);
+  });
+  out.forEach(o=>{ if(!o.placa) return; const v=iscaVinculo({placa:o.placa}); o.doca=v.doca!=null?v.doca:null; o.onda=v.onda!=null?v.onda:null; o.transp=(v.row&&v.row.transportadora)||''; o.n=cnt[placaKey(o.placa)]; });
+  return out;
+}
+function insGrp(i,v){ STATE.insercao.grp[INS_G[i]]=v; saveState(); renderInsercao(); }
+function insMan(i,v){ if(v) STATE.insercao.man[i]=v; else delete STATE.insercao.man[i]; saveState(); renderInsercao(); }
+function insLimpar(){ if(!confirm('Remover o arquivo de inserção carregado?')) return; STATE.insercao=null; saveState(); renderInsercao(); }
+
+function renderInsercao(){
+  const el=document.getElementById('insPanel'); if(!el) return;
+  const I=STATE.insercao;
+  if(!I || !I.rows || !I.rows.length){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display='';
+  const regs=insRegioes(), A=insAtribuir(), ok=A.filter(a=>a.placa).length, sem=I.rows.length-ok;
+  const grupos=[]; A.forEach(a=>{ let g=grupos.find(x=>x.k===a.grupo); if(!g){ g={k:a.grupo,n:0,ok:0,reg:a.regiao}; grupos.push(g); } g.n++; if(a.placa) g.ok++; });
+  INS_G=grupos.map(g=>g.k);
+  const todas=[].concat(...regs.map(r=>r.placas)).filter((p,i,a)=>a.indexOf(p)===i).sort();
+  const dupl=A.filter(a=>a.placa && a.n>1).length;
+  const optReg=(sel,auto)=>`<option value="">${auto}</option>`+regs.map(r=>`<option value="${pEsc(r.nome)}"${r.nome===sel?' selected':''}>${pEsc(r.nome)} (${r.qtd} placa${r.qtd>1?'s':''})</option>`).join('');
+  el.innerHTML = `<div class="panel-head"><div><h2>Arquivo de inserção · ${pEsc(I.nome)}</h2>
+    <div class="desc">${I.rows.length} iscas. A ferramenta compara cidade/zona (pelo CEP) de cada cliente com as regiões que têm carga hoje e preenche a placa. Confira os grupos abaixo; se alguma região não foi reconhecida, escolha-a na lista.</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <button class="primary" onclick="insExportar('rastreio')">⬇ Excel para o rastreamento</button>
+      <button class="primary" onclick="insExportar('etiqueta')">⬇ Excel para etiqueta (doca/onda/cliente)</button>
+      <button class="danger small" onclick="insLimpar()">remover arquivo</button></div></div>
+    <div class="grid cols-2" style="margin-bottom:12px;">
+      <div class="stat"><div class="num" style="color:var(--teal)">${ok}</div><div class="lbl">iscas com placa</div></div>
+      <div class="stat"><div class="num" style="color:var(--red)">${sem}</div><div class="lbl">sem carga na região</div></div></div>
+    <div class="desc" style="margin-bottom:8px;">Regiões com carga: ${regs.length?regs.map(r=>'<b>'+pEsc(r.nome)+'</b> ('+r.qtd+')').join(' · '):'<span style="color:var(--red)">nenhuma — consolide as cargas (GAN) antes.</span>'}${dupl?` · <span style="color:var(--amber)">${dupl} isca(s) dividem placa com outra (há mais iscas que placas na região).</span>`:''}</div>
+    <div class="table-wrap"><table><thead><tr><th>Destino</th><th>Iscas</th><th>Região com carga</th></tr></thead><tbody>
+    ${grupos.map((g,gi)=>`<tr><td>${pEsc(g.k)}</td><td class="mono">${g.ok}/${g.n}</td><td><select onchange="insGrp(${gi},this.value)">${optReg(I.grp[g.k]||'', g.reg?'automático: '+g.reg:'— escolher região —')}</select></td></tr>`).join('')}</tbody></table></div>
+    <div class="table-wrap" style="max-height:420px;overflow:auto;margin-top:12px;"><table><thead><tr><th>Seq.</th><th>Cliente</th><th>Cidade · bairro</th><th>CEP</th><th>Placa</th><th>Doca</th><th>Onda</th></tr></thead><tbody>
+    ${I.rows.map((r,i)=>{ const a=A[i], mp=I.man[i]||'';
+      return `<tr><td class="mono">${pEsc(r.seq)}</td><td>${pEsc(r.cliente)}</td><td>${pEsc(r.cidade)} · ${pEsc(r.bairro)}</td><td class="mono">${pEsc(r.cep)}</td>
+      <td><select onchange="insMan(${i},this.value)"><option value="">${a.placa&&!mp?pEsc(a.placa)+' (auto)':'— sem placa —'}</option>${todas.map(p=>`<option${placaKey(p)===placaKey(mp)?' selected':''}>${pEsc(p)}</option>`).join('')}</select></td>
+      <td class="mono">${a.placa?(a.doca!=null?a.doca:'—'):''}</td><td class="mono">${a.placa&&a.onda!=null?a.onda+'ª':''}</td></tr>`; }).join('')}</tbody></table></div>`;
+}
+function insExportar(tipo){
+  const I=STATE.insercao; if(!I) return; const A=insAtribuir();
+  if(!A.some(a=>a.placa)){ toast('Nenhuma isca recebeu placa: confira as regiões com carga.','err'); return; }
+  const dt=s=>{ const m=String(s).match(/(\d+)\/(\d+)\/(\d+)/); return m ? new Date(+m[3],+m[2]-1,+m[1]) : s; };
+  const ref=((I.rows[0]&&I.rows[0].data)||'dia').replace(/\//g,'-');
+  let aoa, nome, cols;
+  if(tipo==='rastreio'){   /* mesmas colunas do arquivo recebido; só a Placa é preenchida */
+    aoa=[[null,'Data','Seq.','Cliente:','Cep:','Rua:','Bairro:','Cidade:','UF','Equip.','Placa','NF','Status']]
+      .concat(I.rows.map((r,i)=>[null,dt(r.data),r.seq,r.cliente,r.cep,r.rua,r.bairro,r.cidade,r.uf,r.equip,A[i].placa||'',r.nf,null]));
+    nome='iscas_rastreamento_'+ref+'.xlsx'; cols=[6,12,6,34,11,34,26,16,5,13,10,9,9];
+  } else {   /* etiqueta: ordem de impressão = doca menor → maior, onda 1 → n */
+    const ls=I.rows.map((r,i)=>({r,a:A[i]})).filter(x=>x.a.placa)
+      .sort((x,y)=>((x.a.doca==null)-(y.a.doca==null)) || ((x.a.doca||0)-(y.a.doca||0)) || ((x.a.onda||0)-(y.a.onda||0)) || ((+x.r.seq||0)-(+y.r.seq||0)));
+    aoa=[['Ordem','Doca','Onda','Placa','Cliente','Equip. (isca)','NF','Cidade','Transportadora']]
+      .concat(ls.map((x,n)=>[n+1, x.a.doca==null?'SEM DOCA':x.a.doca, x.a.onda==null?'':x.a.onda, x.a.placa, x.r.cliente, x.r.equip, x.r.nf, x.r.cidade, x.a.transp]));
+    nome='iscas_etiquetas_'+ref+'.xlsx'; cols=[7,9,7,11,34,14,9,18,18];
+  }
+  const ws=XLSX.utils.aoa_to_sheet(aoa,{cellDates:true});
+  ws['!cols']=cols.map(w=>({wch:w}));
+  if(tipo==='rastreio') for(let r=2;r<=aoa.length;r++){ const c=ws['B'+r]; if(c && c.t==='d') c.z='dd/mm/yyyy'; }
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,tipo==='rastreio'?'Saida Insercao':'Etiquetas');
+  bkBaixar(new Blob([XLSX.write(wb,{bookType:'xlsx',type:'array',cellDates:true})],{type:'application/octet-stream'}), nome);
+  const sem=A.filter(a=>!a.placa).length;
+  toast((tipo==='rastreio'?'Arquivo do rastreamento':'Arquivo de etiquetas')+' gerado.'+(sem?' '+sem+' isca(s) sem carga na região ficaram sem placa.':''), sem?'err':'ok');
 }
 
 function fecharAlterarDoca(){ const m=document.getElementById('modalDoca'); if(m) m.remove(); }
