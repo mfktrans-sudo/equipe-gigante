@@ -85,7 +85,7 @@
   .tab-btn:hover{color:var(--text-0);background:var(--bg-1);}
   .tab-btn.active{color:var(--amber);border-bottom-color:var(--amber);background:var(--bg-1);}
 
-  .view{display:none;padding:24px 28px 60px;max-width:1440px;margin:0 auto;}
+  .view{display:none;padding:24px 28px 60px;max-width:none;margin:0 auto;}
   .view.active{display:block;}
 
   .panel{background:var(--bg-1);border:1px solid var(--line);border-radius:10px;padding:20px;margin-bottom:20px;}
@@ -198,7 +198,7 @@
 
   /* ================= PAINEL: tabela + mapa de docas (fixos ao rolar) ================= */
   :root{--topbar-h:70px;}
-  #view-painel.view{max-width:min(2200px,100%);}
+  #view-painel.view{max-width:none;}
   #pFilialPanel{--pf-h:max(420px,calc(100vh - var(--topbar-h) - 250px));}
   #pFilialPanel.pf-sticky{position:sticky;top:calc(var(--topbar-h) + 8px);z-index:20;box-shadow:0 10px 24px rgba(0,0,0,.55);}
   .pf-layout{display:grid;grid-template-columns:minmax(0,1fr) 410px;gap:18px;align-items:start;}
