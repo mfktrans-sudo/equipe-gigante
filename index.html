@@ -53,6 +53,10 @@
   .brand .sub{color:var(--text-2);font-size:12.5px;margin-left:4px;}
   .top-actions{display:flex;gap:8px;align-items:center;}
   .top-actions .btn-novo-dia{align-self:center;}
+  .op-badge{display:inline-flex;align-items:center;gap:8px;border:1.5px solid #22d3ee;color:#bff4ff;background:#06243a;border-radius:999px;padding:5px 12px;font-size:11.5px;font-weight:600;white-space:nowrap;}
+  .op-badge.op-warn{border-color:#ffb020;color:#ffe3a3;background:#2a1f06;white-space:normal;}
+  .op-badge button{border:1px solid #ffb020;background:#4a3508;color:#ffe3a3;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;}
+  .op-badge button:hover{background:#6b4d0b;}
   .bk-ok{color:var(--teal);} .bk-err{color:var(--red);} .bk-info{color:var(--text-2);}
   .filelist div{padding:2px 0;}
 
@@ -444,6 +448,7 @@
     <div class="credit">Criado e desenvolvido por <b>Rafael Mariano</b></div>
   </div>
   <div class="top-actions">
+    <span id="opDataBadge" class="op-badge" style="display:none"></span>
     <button class="small danger btn-novo-dia" onclick="novaOperacao()" title="Apaga cargas, alocações e pendências do dia">Novo dia / limpar operação</button>
     <span class="user-chip">
       <span class="who" id="userEmail">—</span>
@@ -1557,15 +1562,143 @@ function atualizarPreviaUpload(){
 
 function getCargaPorPlaca(placa){ const k=placaKey(placa); return k ? STATE.cargas.find(c=>placaKey(c.placa)===k) : undefined; }
 
+/* =========================================================
+   DATA DA OPERAÇÃO — impede misturar cargas de dias diferentes
+   O GAN traz a data de entrega de cada PRÉ (dd/mm/aa). A consolidação agora:
+   • descobre as datas presentes nos arquivos e pede a DATA DA OPERAÇÃO quando há mais de uma;
+   • ignora os PRÉs de outras datas;
+   • se já existem cargas de OUTRA data salvas no navegador, pede confirmação para removê-las;
+   • mostra no topo a data das cargas atuais (e avisa se houver mais de uma).
+   ========================================================= */
+function dataParaISO(s){
+  s = String(s==null?'':s).trim(); let m;
+  if((m = s.match(/^(\d{4})-(\d{2})-(\d{2})/))) return m[1]+'-'+m[2]+'-'+m[3];
+  if((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/))){
+    let a = m[3]; if(a.length===2) a = '20'+a;
+    return a+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  }
+  return '';
+}
+function isoParaBR(iso){ const m = String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? m[3]+'/'+m[2]+'/'+m[1] : String(iso||''); }
+/* data (aaaa-mm-dd) -> nº de PRÉs, das cargas hoje consolidadas (PRÉs sem data, ex.: vinculados à mão, não entram) */
+function datasDasCargas(){
+  const r = {};
+  STATE.cargas.forEach(c=>(c.pres||[]).forEach(p=>{ const d = dataParaISO(p.dataEntrega); if(d) r[d] = (r[d]||0)+1; }));
+  return r;
+}
+/* remove PRÉs de data diferente de `iso` (e as cargas que ficarem sem nenhum PRÉ) */
+function purgarOutrasDatas(iso){
+  let prRem = 0; const ids = new Set();
+  STATE.cargas.forEach(c=>{
+    const antes = c.pres.length;
+    c.pres = c.pres.filter(p=>{ const d = dataParaISO(p.dataEntrega); return !d || d===iso; });
+    prRem += antes - c.pres.length;
+    if(!c.pres.length) ids.add(c.id);
+  });
+  const cargasRem = ids.size;
+  STATE.cargas = STATE.cargas.filter(c=>!ids.has(c.id));
+  STATE.alocacao = STATE.alocacao.filter(a=>!ids.has(a.cargaId));
+  STATE.alocacao.forEach(a=>{ const c = STATE.cargas.find(x=>x.id===a.cargaId); if(c) a.pres = c.pres; });
+  if(!STATE.cargas.length){   // nada sobrou: zera também o que era do dia antigo
+    STATE.alocacao = []; STATE.presOrfaos = []; STATE.ondaStatus = {}; STATE.iscas = []; STATE.iscaLote = null; IL_MEM.buf = null;
+  }
+  return {prRem, cargasRem};
+}
+/* Decide a data da operação a partir dos registros do GAN. Devolve null se o usuário cancelar. */
+function resolverDataOperacao(ganRecords){
+  const vazio = {mantidos:ganRecords, presOutraData:new Set(), data:null, descartados:0, datasDescartadas:[], removidoAnterior:null};
+  if(!ganRecords.length) return vazio;
+  const cont = {};
+  ganRecords.forEach(g=>{ const d = dataParaISO(g.dataEntrega); if(d) cont[d] = (cont[d]||0)+1; });
+  const datas = Object.keys(cont).sort((a,b)=> (cont[b]-cont[a]) || (a<b?1:-1));   // mais frequente primeiro
+  if(!datas.length) return vazio;                 // GAN sem data legível: segue como antes
+  let op = datas[0];
+  if(datas.length > 1){
+    const lista = datas.map(d=>'  • '+isoParaBR(d)+' — '+cont[d]+' registro(s) de PRÉ').join('\n');
+    let escolhida = null;
+    for(let i=0; i<3 && !escolhida; i++){
+      const r = prompt('Os arquivos GAN têm PRÉs de MAIS DE UMA DATA:\n\n'+lista+
+        '\n\nDigite a DATA DA OPERAÇÃO (dd/mm/aaaa). Só os PRÉs dessa data serão consolidados; os demais serão ignorados.\n(Cancelar interrompe a consolidação.)', isoParaBR(op));
+      if(r===null){ toast('Consolidação cancelada — nada foi alterado.', 'err'); return null; }
+      const iso = dataParaISO(r);
+      if(iso && cont[iso]) escolhida = iso;
+      else alert('Data inválida ou que não consta nos arquivos GAN. Use uma das datas listadas.');
+    }
+    if(!escolhida){ toast('Consolidação cancelada: data da operação não informada.', 'err'); return null; }
+    op = escolhida;
+  }
+  // já há cargas salvas de OUTRA data? (ex.: do dia anterior, que ficou no navegador)
+  const exist = datasDasCargas();
+  const outras = Object.keys(exist).filter(d=>d!==op);
+  let removidoAnterior = null;
+  if(STATE.cargas.length && outras.length){
+    const l2 = outras.map(d=>isoParaBR(d)+' ('+exist[d]+' PRÉs)').join(', ');
+    if(!confirm('ATENÇÃO: já existem cargas consolidadas de OUTRA data: '+l2+'.\nOs arquivos que você está consolidando são da operação de '+isoParaBR(op)+'.\n\n'+
+        'OK = REMOVER as cargas/PRÉs de outra data e consolidar apenas '+isoParaBR(op)+' (recomendado).\nCancelar = interromper, sem alterar nada.')){
+      toast('Consolidação cancelada — ainda há cargas de outra data. Use "Novo dia / limpar operação" ou confirme a remoção.', 'err'); return null;
+    }
+    removidoAnterior = purgarOutrasDatas(op);
+    removidoAnterior.datas = outras;
+    // base TS que sobrou de outro dia (e não foi reenviada agora) também sai
+    if(!PENDING.TS.length){
+      const dts = (STATE.ts||[]).map(r=>dataParaISO(r.data)).filter(Boolean);
+      if(dts.length && dts.every(d=>d!==op)) STATE.ts = [];
+    }
+  }
+  const mantidos = [], desc = [];
+  ganRecords.forEach(g=>{ const d = dataParaISO(g.dataEntrega); ((!d || d===op) ? mantidos : desc).push(g); });
+  const presMantidos = new Set(mantidos.map(g=>g.preRomaneio));
+  const presOutraData = new Set(desc.map(g=>g.preRomaneio).filter(pr=>!presMantidos.has(pr)));
+  const datasDescartadas = Array.from(new Set(desc.map(g=>dataParaISO(g.dataEntrega)))).sort();
+  return {mantidos, presOutraData, data:op, descartados:desc.length, datasDescartadas, removidoAnterior};
+}
+/* botão do indicador: tira as cargas/PRÉs de datas que não sejam a escolhida */
+function removerCargasOutraData(){
+  const ex = datasDasCargas(), ds = Object.keys(ex).sort((a,b)=>ex[b]-ex[a]);
+  if(ds.length < 2){ toast('As cargas atuais já são de uma única data.', 'ok'); return; }
+  const lista = ds.map(d=>'  • '+isoParaBR(d)+' — '+ex[d]+' PRÉ(s)').join('\n');
+  const r = prompt('As cargas consolidadas têm PRÉs de mais de uma data:\n\n'+lista+
+    '\n\nDigite a data que deve FICAR (dd/mm/aaaa). Os PRÉs das outras datas serão REMOVIDOS (e as cargas que ficarem sem PRÉ também).', isoParaBR(ds[0]));
+  if(r===null) return;
+  const iso = dataParaISO(r);
+  if(!iso || !ex[iso]){ toast('Data inválida ou sem cargas nessa data.', 'err'); return; }
+  const res = purgarOutrasDatas(iso);
+  saveState();
+  try{ atualizarTodasAsAbas(); }catch(e){ console.error(e); }
+  toast('Removidos '+res.prRem+' PRÉ(s) e '+res.cargasRem+' carga(s) de outras datas. Rode a alocação novamente para reorganizar as docas.', 'ok');
+}
+function renderDataOperacao(){
+  const el = document.getElementById('opDataBadge'); if(!el) return;
+  if(!STATE.cargas.length){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  const ex = datasDasCargas(), ds = Object.keys(ex).sort((a,b)=>ex[b]-ex[a]);
+  el.style.display = 'inline-flex';
+  if(ds.length > 1){
+    el.className = 'op-badge op-warn';
+    el.title = 'As cargas consolidadas misturam PRÉs de datas diferentes.';
+    el.innerHTML = '⚠ Cargas de '+ds.length+' datas: '+ds.map(d=>isoParaBR(d).slice(0,5)+' ('+ex[d]+')').join(' · ')+' <button type="button" onclick="removerCargasOutraData()">Remover outras datas</button>';
+  } else {
+    el.className = 'op-badge';
+    el.title = 'Data de entrega dos PRÉs consolidados';
+    el.innerHTML = ds.length ? ('📅 Operação '+isoParaBR(ds[0])) : '📅 Operação (PRÉs sem data)';
+  }
+}
+document.addEventListener('DOMContentLoaded', ()=>{ try{ renderDataOperacao(); }catch(e){ console.error(e); } });
+
 function consolidarUploads(){
   const totalArquivos = PENDING.GAN.length + PENDING.HEBLS.length + PENDING.REGIAO.length + PENDING.TS.length;
   if(totalArquivos === 0){ toast('Carregue ao menos um arquivo antes de consolidar.', 'err'); return; }
 
-  // a base de TS São Paulo entra primeiro: ela define a doca/onda que as demais cargas da mesma placa vão usar
-  const tsResumo = PENDING.TS.length ? aplicarTSPendentes() : null;
-
+  // DATA DA OPERAÇÃO: lê o GAN primeiro, descobre/pergunta a data e separa os PRÉs de outras datas
   let ganRecords = [];
   PENDING.GAN.forEach(f=> ganRecords = ganRecords.concat(parseGAN(f.texto, f.regiao)));
+  const nomesArquivos = [].concat(PENDING.TS, PENDING.GAN, PENDING.HEBLS, PENDING.REGIAO).map(f=>f.nome);
+  const dataRes = resolverDataOperacao(ganRecords);
+  if(!dataRes) return;                       // usuário cancelou: nada foi alterado
+  ganRecords = dataRes.mantidos;
+  const presOutraData = dataRes.presOutraData;   // PRÉs do GAN que são de outra data (não viram "PRÉ sem placa")
+
+  // a base de TS São Paulo entra primeiro: ela define a doca/onda que as demais cargas da mesma placa vão usar
+  const tsResumo = PENDING.TS.length ? aplicarTSPendentes() : null;
 
   let heblsMap = {};
   PENDING.HEBLS.forEach(f=>{ const c=parseHEBLS(f.texto); Object.keys(c).forEach(k=> heblsMap[k]=(heblsMap[k]||0)+c[k]); });
@@ -1591,7 +1724,9 @@ function consolidarUploads(){
       toast(tsResumo.msg+' Agora carregue as demais bases e consolide de novo.', tsResumo.warn ? 'err' : 'ok');
       return;
     }
-    toast('Nenhum registro reconhecido nos arquivos GAN. Verifique o formato do arquivo.', 'err'); return;
+    if(!(STATE.cargas.length && (PENDING.HEBLS.length || PENDING.REGIAO.length))){
+      toast('Nenhum registro reconhecido nos arquivos GAN. Verifique o formato do arquivo.', 'err'); return;
+    }
   }
 
   // mapa preRomaneio+filial -> cargaId, para detectar duplicidade
@@ -1630,9 +1765,9 @@ function consolidarUploads(){
   // remove pendências antigas que agora já têm placa (ex.: consolidação anterior feita sem o GAN)
   const jaRomaneados = new Set();
   PENDING.HEBLS.forEach(f=> parseHEBLSJaRomaneados(f.texto).forEach(pr=> jaRomaneados.add(pr)));
-  STATE.presOrfaos = STATE.presOrfaos.filter(o=> !preRomaneiosComPlaca.has(o.preRomaneio) && !jaRomaneados.has(o.preRomaneio));
+  STATE.presOrfaos = STATE.presOrfaos.filter(o=> !preRomaneiosComPlaca.has(o.preRomaneio) && !jaRomaneados.has(o.preRomaneio) && !presOutraData.has(o.preRomaneio));
   Object.keys(heblsMap).forEach(pr=>{
-    if(!preRomaneiosComPlaca.has(pr) && !STATE.presOrfaos.find(o=>o.preRomaneio===pr)){
+    if(!preRomaneiosComPlaca.has(pr) && !presOutraData.has(pr) && !STATE.presOrfaos.find(o=>o.preRomaneio===pr)){
       STATE.presOrfaos.push({preRomaneio:pr, qtdEntrega:heblsMap[pr], filial:heblsFilial[pr]||'', placaInformada:''});
     }
   });
@@ -1654,11 +1789,29 @@ function consolidarUploads(){
   if(duplicidadesDetectadas) msg += ` ${duplicidadesDetectadas} duplicidade(s) ignorada(s) — veja o alerta.`;
   if(jaRomaneados.size) msg += ` ${jaRomaneados.size} PRÉ(s) já em romaneio no Roadshow foram desconsiderados.`;
   if(tsResumo) msg += ' '+tsResumo.msg;
+  let avisoData = false;
+  if(dataRes.data) msg += ' Data da operação: '+isoParaBR(dataRes.data)+'.';
+  if(dataRes.removidoAnterior){ avisoData = true; msg += ' Removido(s) '+dataRes.removidoAnterior.prRem+' PRÉ(s) / '+dataRes.removidoAnterior.cargasRem+' carga(s) de outra data ('+dataRes.removidoAnterior.datas.map(isoParaBR).join(', ')+').'; }
+  if(dataRes.descartados){ avisoData = true; msg += ' '+dataRes.descartados+' registro(s) do GAN de outra data ('+dataRes.datasDescartadas.map(isoParaBR).join(', ')+') foram ignorados.'; }
+  if(dataRes.data){
+    const dtsTS = Array.from(new Set((STATE.ts||[]).map(r=>dataParaISO(r.data)).filter(Boolean)));
+    if(dtsTS.length && !dtsTS.includes(dataRes.data)){ avisoData = true; msg += ' ATENÇÃO: a base TS é de '+dtsTS.map(isoParaBR).join(', ')+', diferente da operação.'; }
+  }
   // passo seguinte automático: roda a alocação e abre o Painel por Doca & Ondas (passo 4)
   const msgAloc = rodarAlocacao(true);
   if(msgAloc){ msg += ' '+msgAloc; switchTab('painel'); }
   else msg += ' Alocação não foi recalculada — use "Rodar alocação" no Painel quando quiser.';
-  toast(msg, (semTransportadora||duplicidadesDetectadas||(tsResumo&&tsResumo.warn)||!msgAloc) ? 'err' : 'ok');
+  // libera a lista de arquivos: o dia seguinte não reprocessa os arquivos de hoje (o resumo fica visível na aba)
+  PENDING = { GAN: [], HEBLS: [], REGIAO: [], TS: [] };
+  ['GAN','HEBLS','REGIAO'].forEach(renderFileList);
+  atualizarPreviaUpload();
+  const rsm = document.getElementById('autoResumo');
+  if(rsm){
+    const cor = (avisoData||semTransportadora||duplicidadesDetectadas) ? '--amber' : '--teal';
+    rsm.innerHTML = `<div style="border-left:3px solid var(${cor});background:var(--bg-2);padding:8px 12px;border-radius:4px;margin-bottom:6px;font-size:12.5px;color:var(--text-1);">${escAuto(msg)}<br><span style="color:var(--text-2)">Arquivos consolidados e liberados da lista: ${escAuto(nomesArquivos.join(', ')||'—')}</span></div>`;
+  }
+  try{ renderDataOperacao(); }catch(e){ console.error(e); }
+  toast(msg, (semTransportadora||duplicidadesDetectadas||avisoData||(tsResumo&&tsResumo.warn)||!msgAloc) ? 'err' : 'ok');
 }
 
 function renderOrfaos(){
@@ -1722,6 +1875,7 @@ function renderDuplicidades(){
 
 function renderConsolidado(){
   renderDuplicidades();
+  try{ renderDataOperacao(); }catch(e){ console.error(e); }
   const tbody = document.querySelector('#tblConsolidado tbody');
   tbody.innerHTML = '';
   const filtro = (document.getElementById('filtroCargaPlaca').value||'').toUpperCase();
@@ -2790,8 +2944,18 @@ function iscaVinculo(isca){
   if(car) return {st:'semalocacao', carga:car};
   return {st:'naoachou'};
 }
+/* iscas digitadas + iscas do arquivo (saída de inserção) que já têm placa; uma linha por placa (a digitada prevalece) */
+function iscaTodas(){
+  const base = (STATE.iscas||[]).slice(), ks = new Set(base.map(x=>placaKey(x.placa)).filter(Boolean));
+  const L = STATE.iscaLote;
+  if(L) L.rows.forEach((r,i)=>{
+    if(!r.placa) return; const k = placaKey(r.placa); if(ks.has(k)) return; ks.add(k);
+    base.push({id:'L'+i, lote:true, tipo:'placa', placa:r.placa, docaInformada:null, ondaInformada:null, entrada:[r.cliente, r.equip].filter(Boolean).join(' · ')+' (arquivo'+(r.sobra?', sobra':'')+')'});
+  });
+  return base;
+}
 function iscaOrdenadas(){
-  const ls = (STATE.iscas||[]).map(isca=>({isca, v:iscaVinculo(isca)}));
+  const ls = iscaTodas().map(isca=>({isca, v:iscaVinculo(isca)}));
   const rank = x => x.v.st==='ok' ? 0 : (x.v.st==='semdoca'||x.v.st==='semalocacao') ? 1 : 2;
   const num = (v)=> v==null ? 1e9 : v;
   return ls.sort((a,b)=> rank(a)-rank(b) || num(a.v.doca)-num(b.v.doca) || num(a.v.onda)-num(b.v.onda) || String(a.isca.placa).localeCompare(String(b.isca.placa)));
@@ -2831,7 +2995,7 @@ function adicionarIscasDeTexto(texto, origem){
     if(isca.placa && STATE.iscas.some(x=>placaKey(x.placa)===placaKey(isca.placa))){ dup.push(isca.placa); return; }
     STATE.iscas.push(isca); add++;
   });
-  saveState();
+  if(STATE.iscaLote) ilDistribuir(); else saveState();
   renderIscas();
   const partes = [add+' isca(s) vinculada(s).'];
   if(escolher.length) partes.push('Doca com mais de uma carga: escolha a placa na tabela.');
@@ -2941,13 +3105,13 @@ async function iscaArquivos(fileList){
 function iscaEscolher(id, placa){
   const isca = STATE.iscas.find(x=>x.id===id); if(!isca || !placa) return;
   if(STATE.iscas.some(x=>x!==isca && placaKey(x.placa)===placaKey(placa))){ toast('A placa '+placa+' já possui isca.','err'); renderIscas(); return; }
-  isca.placa = placa; saveState(); renderIscas();
+  isca.placa = placa; if(STATE.iscaLote) ilDistribuir(); else saveState(); renderIscas();
 }
-function removerIsca(id){ STATE.iscas = STATE.iscas.filter(x=>x.id!==id); saveState(); renderIscas(); }
+function removerIsca(id){ STATE.iscas = STATE.iscas.filter(x=>x.id!==id); if(STATE.iscaLote) ilDistribuir(); else saveState(); renderIscas(); }
 function limparIscas(){
   if(!(STATE.iscas||[]).length) return;
   if(!confirm('Remover todas as iscas cadastradas?')) return;
-  STATE.iscas = []; saveState(); renderIscas();
+  STATE.iscas = []; if(STATE.iscaLote) ilDistribuir(); else saveState(); renderIscas();
 }
 
 /* =========================================================
@@ -3016,7 +3180,7 @@ function ilCarregarBuffer(nome, buf){
     STATE.iscaLote = {nome, folha:sn, colPlaca: ilColLetra(rg.s.c + c.placa + 1), rows};
     ilSugerirMapa();
     ilDistribuir();
-    ilRender();
+    renderIscas();
     return rows.length;
   }
   return false;
@@ -3054,43 +3218,59 @@ function ilInfoPlaca(placa){
   const d = (a && a.status!=='ALTERAR' && pDoca(a)!=null) ? pDoca(a) : null;
   return {existe:!!car, regiao:(car&&car.regiao)||'', transp:(a&&a.transportadora)||(car&&car.transportadora)||'', doca:d, onda:(d!=null&&a)?a.onda:null};
 }
-function ilPool(regiao){
-  if(!regiao) return [];
-  const nr = ilNorm(regiao);
-  return (STATE.cargas||[]).filter(c=>c.placa && ilNorm(c.regiao)===nr).map(c=>{
+function ilPoolDe(filtro){
+  const vistas = new Set();   // uma entrada por placa, mesmo que a placa apareça em mais de uma carga
+  return (STATE.cargas||[]).filter(c=>{ if(!c.placa || !filtro(c)) return false; const k=placaKey(c.placa); if(vistas.has(k)) return false; vistas.add(k); return true; }).map(c=>{
     const i = ilInfoPlaca(c.placa); return {placa:c.placa, doca:i.doca, onda:i.onda, transp:i.transp};
   }).sort((x,y)=> ((x.doca==null)-(y.doca==null)) || ((x.onda||0)-(y.onda||0)) || ((x.doca||0)-(y.doca||0)) || String(x.placa).localeCompare(String(y.placa)));
 }
-/* uma placa por isca, em ordem de onda/doca; só repete placa quando a região tem menos cargas que iscas */
+function ilPool(regiao){
+  if(!regiao) return [];
+  const nr = ilNorm(regiao);
+  return ilPoolDe(c=>ilNorm(c.regiao)===nr);
+}
+/* placas que já têm isca lançada na digitação (aba Iscas, campo de placas/docas): ficam reservadas, não entram na distribuição do arquivo */
+function ilReservadas(){ const s = new Set(); (STATE.iscas||[]).forEach(x=>{ if(x.placa) s.add(placaKey(x.placa)); }); return s; }
+/* REGRA: uma isca por placa (nunca repete).
+   1) cada isca pega a próxima placa livre da PRÓPRIA região (ordem de onda/doca);
+   2) a isca que sobra (região com menos placas que iscas) vai para a próxima placa livre de qualquer região, na mesma ordem;
+   placas já usadas na digitação (prioridade) e as escolhidas por você ficam reservadas.
+   Área sem região escolhida continua sem placa até você escolher. */
 function ilDistribuir(){
   const L = STATE.iscaLote; if(!L) return;
-  const uso = {};
-  L.rows.forEach(r=>{ if(r.manual && r.placa){ const k=placaKey(r.placa); uso[k]=(uso[k]||0)+1; } });
+  const usada = ilReservadas();
+  L.rows.forEach(r=>{ if(r.manual && r.placa) usada.add(placaKey(r.placa)); });
+  const livre = p => !usada.has(placaKey(p.placa));
+  const tomar = (r, p, sobra) => { r.placa = p.placa; r.sobra = !!sobra; usada.add(placaKey(p.placa)); };
+  const sobras = [];
   L.rows.forEach(r=>{
     if(r.manual && r.placa) return;
-    r.placa = '';
-    const pool = ilPool(ilRegiaoDe(r.key)); if(!pool.length) return;
-    let best = null, bu = 1e9;
-    pool.forEach(p=>{ const u = uso[placaKey(p.placa)]||0; if(u<bu){ bu=u; best=p; } });
-    r.placa = best.placa; uso[placaKey(best.placa)] = bu+1;
+    r.placa = ''; r.sobra = false;
+    const reg = ilRegiaoDe(r.key); if(!reg) return;
+    const p = ilPool(reg).find(livre);
+    if(p) tomar(r, p, false); else sobras.push(r);
   });
+  if(sobras.length){
+    const todas = ilPoolDe(()=>true);
+    sobras.forEach(r=>{ const p = todas.find(livre); if(p) tomar(r, p, true); });
+  }
   saveState();
 }
-function ilMudarRegiao(key, val){ ilMapa()[key] = val; ilDistribuir(); ilRender(); }
+function ilMudarRegiao(key, val){ ilMapa()[key] = val; ilDistribuir(); renderIscas(); }
 function ilMudarPlaca(i, val){
   const r = STATE.iscaLote.rows[i]; if(!r) return;
-  if(val){ r.placa = val; r.manual = true; saveState(); } else { r.manual = false; r.placa = ''; ilDistribuir(); }
-  ilRender();
+  if(val){ r.placa = val; r.manual = true; r.sobra = false; saveState(); } else { r.manual = false; r.placa = ''; }
+  ilDistribuir(); renderIscas();
 }
 function ilRedistribuir(zerarManuais){
   const L = STATE.iscaLote; if(!L) return;
   if(zerarManuais) L.rows.forEach(r=>{ r.manual=false; });
-  ilSugerirMapa(); ilDistribuir(); ilRender();
+  ilSugerirMapa(); ilDistribuir(); renderIscas();
 }
 function ilLimpar(){
   if(!STATE.iscaLote) return;
   if(!confirm('Remover o arquivo de iscas carregado?')) return;
-  STATE.iscaLote = null; IL_MEM.buf = null; saveState(); ilRender();
+  STATE.iscaLote = null; IL_MEM.buf = null; saveState(); renderIscas();
 }
 
 /* ---------- planilha para o rastreamento: o próprio arquivo, com a coluna Placa preenchida ---------- */
@@ -3202,10 +3382,10 @@ function ilRender(){
     <div class="desc" style="max-width:none;margin-bottom:8px;">A ferramenta sugere a região quando o nome bate; nas demais, escolha uma vez e ela fica lembrada para os próximos dias.</div>
     <div class="table-wrap"><table><thead><tr><th>Área de entrega</th><th>Iscas</th><th>Região com carga</th><th>Placas disponíveis</th></tr></thead><tbody>
     ${Object.keys(areas).sort().map(k=>{
-      const a = areas[k], sel = m[k]||'', pool = ilPool(sel);
+      const a = areas[k], sel = m[k]||'', pool = ilPool(sel).filter(p=>!ilReservadas().has(placaKey(p.placa)));
       return `<tr><td>${pEsc(a.rot)}</td><td class="mono">${a.n}</td>
         <td><select onchange="ilMudarRegiao('${pEsc(k).replace(/'/g,"&#39;")}',this.value)"><option value="">— escolher —</option>${regs.map(g=>`<option value="${pEsc(g)}"${g===sel?' selected':''}>${pEsc(g)}</option>`).join('')}</select></td>
-        <td class="mono" style="color:${sel&&pool.length<a.n?'var(--amber)':'var(--text-1)'}">${sel?pool.length:'—'}${sel&&pool.length<a.n?' (menos que as iscas)':''}</td></tr>`;
+        <td class="mono" style="color:${sel&&pool.length<a.n?'var(--amber)':'var(--text-1)'}">${sel?pool.length:'—'}${sel&&pool.length<a.n?' (menos que as iscas — sobra vai p/ próxima placa livre)':''}</td></tr>`;
     }).join('')}</tbody></table></div>`;
   /* linhas */
   const todas = (STATE.cargas||[]).filter(c=>c.placa).map(c=>c.placa);
@@ -3221,7 +3401,7 @@ function ilRender(){
       if(!r.placa) st = '<span class="badge alert">sem placa</span>';
       else if(inf.doca==null) st = '<span class="badge alert">carga sem doca</span>';
       else if(uso[placaKey(r.placa)]>1) st = '<span class="badge alert">placa repetida</span>';
-      else st = r.manual ? '<span class="badge neutral">escolhida por você</span>' : '<span class="badge ok">ok</span>';
+      else st = r.manual ? '<span class="badge neutral">escolhida por você</span>' : (r.sobra ? '<span class="badge neutral">sobra → placa livre</span>' : '<span class="badge ok">ok</span>');
       return `<tr><td class="mono">${pEsc(r.seq)}</td><td>${pEsc(r.cliente)}</td><td>${pEsc(ilTitulo(r.cidade))}<span style="color:var(--text-2)"> · ${pEsc(ilTitulo(r.bairro))}</span></td><td class="mono">${pEsc(r.equip)}</td>
         <td>${sel}</td><td>${pEsc(inf.regiao||'—')}</td><td class="mono">${inf.doca!=null?inf.doca:'—'}</td><td class="mono">${inf.onda!=null?inf.onda+'ª':'—'}</td><td>${st}</td></tr>`;
     }).join('')}</tbody></table></div>`;
@@ -3263,7 +3443,7 @@ function renderIscas(){
         <td class="mono">${v.onda!=null?v.onda+'ª':(v.st==='escolher'&&x.isca.ondaInformada?x.isca.ondaInformada+'ª':'—')}</td>
         <td>${pEsc(r.transportadora||car.transportadora||'—')}</td><td>${pEsc(r.regiao||car.regiao||'—')}</td>
         <td style="color:var(--text-2)">${pEsc(x.isca.entrada||'')}</td><td>${badge(v)}</td>
-        <td><button class="small ghost" onclick="removerIsca('${x.isca.id}')">remover</button></td></tr>`;
+        <td>${x.isca.lote?'<span style="color:var(--text-2);font-size:11px;">ajuste na lista do arquivo</span>':`<button class="small ghost" onclick="removerIsca('${x.isca.id}')">remover</button>`}</td></tr>`;
     }).join('')}</tbody></table></div>`;
   iscaRenderPreview(et);
 }
