@@ -772,7 +772,7 @@
       <div><label>Largura (mm)</label><input id="iscaLarg" type="number" min="30" max="300" style="width:90px" onchange="iscaSalvarCfg()"></div>
       <div><label>Altura (mm)</label><input id="iscaAlt" type="number" min="30" max="400" style="width:90px" onchange="iscaSalvarCfg()"></div>
       <div><label>Resolução</label><select id="iscaDpi" onchange="iscaSalvarCfg()"><option value="203">203 dpi (8 dots/mm)</option><option value="300">300 dpi (12 dots/mm)</option></select></div>
-      <label style="display:flex;gap:6px;align-items:center;margin:0 0 6px;"><input type="checkbox" id="iscaInfo" onchange="iscaSalvarCfg()"> mostrar doca, onda e transportadora</label>
+      <label style="display:flex;gap:6px;align-items:center;margin:0 0 6px;"><input type="checkbox" id="iscaInfo" onchange="iscaSalvarCfg()"> mostrar pré, doca e onda</label>
     </div>
     <div id="iscaPreview"></div>
   </div>
@@ -2960,11 +2960,16 @@ function iscaOrdenadas(){
   const num = (v)=> v==null ? 1e9 : v;
   return ls.sort((a,b)=> rank(a)-rank(b) || num(a.v.doca)-num(b.v.doca) || num(a.v.onda)-num(b.v.onda) || String(a.isca.placa).localeCompare(String(b.isca.placa)));
 }
+function iscaPreTexto(pres){
+  pres = pres||[];
+  const pr = pres.filter(p=>isFilialPrincipal(p.filial)); const ls = (pr.length?pr:pres).map(p=>String(p.preRomaneio)).filter(Boolean);
+  return Array.from(new Set(ls)).sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)).join('/');
+}
 function iscaEtiquetas(){
   return iscaOrdenadas().filter(x=>['ok','semdoca','semalocacao'].includes(x.v.st)).map((x,i)=>{
     const r = x.v.row, car = x.v.carga;
     return {n:i+1, placa:(r&&r.placa)||(car&&car.placa)||x.isca.placa, doca:x.v.doca!=null?x.v.doca:null, onda:x.v.onda!=null?x.v.onda:null,
-            transp:(r&&r.transportadora)||(car&&car.transportadora)||''};
+            transp:(r&&r.transportadora)||(car&&car.transportadora)||'', pre:iscaPreTexto((r&&r.pres)||(car&&car.pres))};
   });
 }
 
@@ -3388,15 +3393,20 @@ function ilRender(){
         <td class="mono" style="color:${sel&&pool.length<a.n?'var(--amber)':'var(--text-1)'}">${sel?pool.length:'—'}${sel&&pool.length<a.n?' (menos que as iscas — sobra vai p/ próxima placa livre)':''}</td></tr>`;
     }).join('')}</tbody></table></div>`;
   /* linhas */
-  const todas = (STATE.cargas||[]).filter(c=>c.placa).map(c=>c.placa);
+  const todas = ilPoolDe(()=>true).map(p=>p.placa);   // todas as placas, uma vez cada, em ordem de onda/doca
+  const reservadas = ilReservadas();
   h += `<h3 style="font-size:13.5px;margin:16px 0 6px;">Iscas e placas</h3>
     <div class="table-wrap" style="max-height:520px;overflow-y:auto;"><table><thead><tr><th>Seq.</th><th>Cliente</th><th>Cidade · bairro</th><th>Equip.</th><th>Placa</th><th>Região da placa</th><th>Doca</th><th>Onda</th><th>Situação</th></tr></thead><tbody>
     ${L.rows.map((r,i)=>{
       const inf = r.placa ? ilInfoPlaca(r.placa) : {};
-      const pool = ilPool(ilRegiaoDe(r.key)).map(p=>p.placa);
-      const resto = todas.filter(p=>pool.indexOf(p)<0);
+      /* a lista mostra só placas DISPONÍVEIS: sem isca no arquivo, sem isca digitada e sem repetir; a placa atual da linha sempre aparece */
+      const cur = placaKey(r.placa);
+      const disp = p => { const k = placaKey(p); return k===cur || (!uso[k] && !reservadas.has(k)); };
+      const pool = ilPool(ilRegiaoDe(r.key)).map(p=>p.placa).filter(disp);
+      const resto = todas.filter(p=>pool.indexOf(p)<0 && disp(p));
+      if(cur && pool.indexOf(r.placa)<0 && resto.indexOf(r.placa)<0) resto.unshift(r.placa);
       const opt = p=>`<option value="${pEsc(p)}"${placaKey(p)===placaKey(r.placa)?' selected':''}>${pEsc(p)}</option>`;
-      const sel = `<select onchange="ilMudarPlaca(${i},this.value)"><option value="">— sem placa —</option>${pool.length?`<optgroup label="Da região">${pool.map(opt).join('')}</optgroup>`:''}${resto.length?`<optgroup label="Outras regiões">${resto.map(opt).join('')}</optgroup>`:''}</select>`;
+      const sel = `<select onchange="ilMudarPlaca(${i},this.value)"><option value="">— sem placa —</option>${pool.length?`<optgroup label="Disponíveis da região">${pool.map(opt).join('')}</optgroup>`:''}${resto.length?`<optgroup label="Disponíveis de outras regiões">${resto.map(opt).join('')}</optgroup>`:''}</select>`;
       let st;
       if(!r.placa) st = '<span class="badge alert">sem placa</span>';
       else if(inf.doca==null) st = '<span class="badge alert">carga sem doca</span>';
@@ -3454,14 +3464,19 @@ function iscaMedidas(larg, alt, placaLen, info){
   return {
     half,
     fsTit: Math.min(half*0.11, larg*0.07),
-    fsPlaca: Math.min(larg*0.9/(Math.max(placaLen,5)*0.62), half*0.45),
-    fsInfo: Math.min(half*0.11, larg*0.055),
-    yTit: half*0.07, yPlaca: half*(info?0.25:0.30), yInfo: half*0.78
+    fsPlaca: Math.min(larg*0.9/(Math.max(placaLen,5)*0.62), half*(info?0.28:0.45)),
+    fsInfo: Math.min(half*0.13, larg*0.09),
+    yTit: half*0.05, yPlaca: half*(info?0.17:0.30), yInfo: half*0.47
   };
 }
 function iscaTextoInfo(e){
   return (e.doca!=null ? 'DOCA '+e.doca+' | ONDA '+e.onda : 'SEM DOCA') + (e.transp ? ' | '+e.transp : '');
 }
+/* bloco de identificação da carga: PRÉ / DOCA / ONDA, uma por linha, em letra grande */
+function iscaLinhasInfo(e){
+  return ['PRÉ '+(e.pre||'—'), 'DOCA '+(e.doca!=null?e.doca:'—'), 'ONDA '+(e.onda!=null?e.onda:'—')];
+}
+function iscaFsLinha(m, txt, larg){ return Math.min(m.fsInfo, larg*0.9/(Math.max(txt.length,5)*0.62)); }
 function iscaLabelHTML(e, c, px){   // px = pixels por mm (prévia) ou 0 para usar mm (impressão)
   const m = iscaMedidas(c.larg, c.alt, e.placa.length, c.info);
   const u = v => px ? (v*px).toFixed(1)+'px' : v.toFixed(2)+'mm';
@@ -3469,7 +3484,7 @@ function iscaLabelHTML(e, c, px){   // px = pixels por mm (prévia) ou 0 para us
   const meia = (borda)=>`<div class="mhalf" style="position:relative;flex:1 1 0;min-height:0;${borda?`border-top:${px?'1px':'0.4mm'} dashed #000;`:''}overflow:hidden;">
       <div style="position:absolute;left:0;right:0;top:${u(m.yTit)};text-align:center;font-weight:700;letter-spacing:.2em;font-size:${u(m.fsTit)};line-height:1;">ISCA</div>
       <div style="position:absolute;left:0;right:0;top:${u(m.yPlaca)};text-align:center;font-weight:900;font-size:${u(m.fsPlaca)};line-height:1;white-space:nowrap;">${pEsc(e.placa)}</div>
-      ${c.info?`<div style="position:absolute;left:0;right:0;top:${u(m.yInfo)};text-align:center;font-weight:700;font-size:${u(m.fsInfo)};line-height:1;white-space:nowrap;overflow:hidden;">${pEsc(iscaTextoInfo(e))}</div>`:''}
+      ${c.info?iscaLinhasInfo(e).map((t,k)=>`<div style="position:absolute;left:0;right:0;top:${u(m.yInfo+k*m.fsInfo*1.18)};text-align:center;font-weight:900;font-size:${u(iscaFsLinha(m,t,c.larg))};line-height:1;white-space:nowrap;overflow:hidden;">${pEsc(t)}</div>`).join(''):''}
     </div>`;
   return `<div class="lbl" style="width:${W};height:${H};box-sizing:border-box;display:flex;flex-direction:column;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;overflow:hidden;">${meia(false)}${meia(true)}</div>`;
 }
@@ -3497,8 +3512,10 @@ function iscaZPL(){
       z += `^FO0,${off+d(m.yTit)}^A0N,${d(m.fsTit)},${d(m.fsTit)}^FB${W},1,0,C,0^FDISCA^FS\n`;
       z += `^FO0,${off+d(m.yPlaca)}^A0N,${d(m.fsPlaca)},${d(m.fsPlaca)}^FB${W},1,0,C,0^FD${san(e.placa)}^FS\n`;
       if(c.info){
-        const maxCh = Math.max(8, Math.floor(W/(d(m.fsInfo)*0.62)));
-        z += `^FO0,${off+d(m.yInfo)}^A0N,${d(m.fsInfo)},${d(m.fsInfo)}^FB${W},1,0,C,0^FD${san(iscaTextoInfo(e)).slice(0,maxCh)}^FS\n`;
+        iscaLinhasInfo(e).forEach((t,k)=>{
+          const fs = iscaFsLinha(m, t, c.larg);
+          z += `^FO0,${off+d(m.yInfo+k*m.fsInfo*1.18)}^A0N,${d(fs)},${d(fs)}^FB${W},1,0,C,0^FD${san(t)}^FS\n`;
+        });
       }
     });
     z += '^PQ1,0,1,N\n^XZ\n';
