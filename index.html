@@ -774,7 +774,7 @@
     <div id="iscaTabela"></div>
   </div>
   <div class="panel">
-    <div class="panel-head"><div><h2>Etiqueta Zebra</h2><div class="desc">Cada etiqueta é dividida exatamente ao meio por uma linha de corte/dobra, com a placa da isca em destaque nas duas metades. Padrão: 100 × 150 mm (4×6 pol).</div></div>
+    <div class="panel-head"><div><h2>Etiqueta Zebra</h2><div class="desc">Cada etiqueta é dividida exatamente ao meio por uma linha de corte/dobra, com PRÉ, DOCA e ONDA em destaque nas duas metades. Padrão: 100 × 150 mm (4×6 pol).</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <button class="primary" onclick="iscaBaixarZPL()">⬇ Baixar ZPL (Zebra)</button>
         <button class="primary" onclick="iscaImprimir()">🖨 Imprimir / salvar PDF</button></div></div>
@@ -782,7 +782,7 @@
       <div><label>Largura (mm)</label><input id="iscaLarg" type="number" min="30" max="300" style="width:90px" onchange="iscaSalvarCfg()"></div>
       <div><label>Altura (mm)</label><input id="iscaAlt" type="number" min="30" max="400" style="width:90px" onchange="iscaSalvarCfg()"></div>
       <div><label>Resolução</label><select id="iscaDpi" onchange="iscaSalvarCfg()"><option value="203">203 dpi (8 dots/mm)</option><option value="300">300 dpi (12 dots/mm)</option></select></div>
-      <label style="display:flex;gap:6px;align-items:center;margin:0 0 6px;"><input type="checkbox" id="iscaInfo" onchange="iscaSalvarCfg()"> mostrar pré, doca e onda</label>
+      <label style="display:none;gap:6px;align-items:center;margin:0 0 6px;"><input type="checkbox" id="iscaInfo" onchange="iscaSalvarCfg()"> mostrar pré, doca e onda</label>
     </div>
     <div id="iscaPreview"></div>
   </div>
@@ -3470,13 +3470,13 @@ function renderIscas(){
 
 /* ---------- etiqueta: tamanho dos textos (mm), igual para tela, impressão e ZPL ---------- */
 function iscaMedidas(larg, alt, placaLen, info){
+  /* layout novo: só PRÉ / DOCA / ONDA em cada metade (sem placa e sem o título ISCA) */
   const half = alt/2;
   return {
     half,
-    fsTit: Math.min(half*0.11, larg*0.07),
-    fsPlaca: Math.min(larg*0.9/(Math.max(placaLen,5)*0.62), half*(info?0.28:0.45)),
-    fsInfo: Math.min(half*0.13, larg*0.09),
-    yTit: half*0.05, yPlaca: half*(info?0.17:0.30), yInfo: half*0.47
+    fsPre: half*0.17,            // linha do PRÉ
+    fsLin: half*0.20,            // linhas de DOCA e ONDA
+    yL: [half*0.11, half*0.11+half*0.30, half*0.11+half*0.60]   // posição de cada linha
   };
 }
 function iscaTextoInfo(e){
@@ -3486,15 +3486,13 @@ function iscaTextoInfo(e){
 function iscaLinhasInfo(e){
   return ['PRÉ '+(e.pre||'—'), 'DOCA '+(e.doca!=null?e.doca:'—'), 'ONDA '+(e.onda!=null?e.onda:'—')];
 }
-function iscaFsLinha(m, txt, larg){ return Math.min(m.fsInfo, larg*0.9/(Math.max(txt.length,5)*0.62)); }
+function iscaFsLinha(m, txt, larg, k){ return Math.min(k===0 ? m.fsPre : m.fsLin, larg*0.9/(Math.max(txt.length,5)*0.62)); }
 function iscaLabelHTML(e, c, px){   // px = pixels por mm (prévia) ou 0 para usar mm (impressão)
   const m = iscaMedidas(c.larg, c.alt, e.placa.length, c.info);
   const u = v => px ? (v*px).toFixed(1)+'px' : v.toFixed(2)+'mm';
   const W = u(c.larg), H = u(c.alt);
   const meia = (borda)=>`<div class="mhalf" style="position:relative;flex:1 1 0;min-height:0;${borda?`border-top:${px?'1px':'0.4mm'} dashed #000;`:''}overflow:hidden;">
-      <div style="position:absolute;left:0;right:0;top:${u(m.yTit)};text-align:center;font-weight:700;letter-spacing:.2em;font-size:${u(m.fsTit)};line-height:1;">ISCA</div>
-      <div style="position:absolute;left:0;right:0;top:${u(m.yPlaca)};text-align:center;font-weight:900;font-size:${u(m.fsPlaca)};line-height:1;white-space:nowrap;">${pEsc(e.placa)}</div>
-      ${c.info?iscaLinhasInfo(e).map((t,k)=>`<div style="position:absolute;left:0;right:0;top:${u(m.yInfo+k*m.fsInfo*1.18)};text-align:center;font-weight:900;font-size:${u(iscaFsLinha(m,t,c.larg))};line-height:1;white-space:nowrap;overflow:hidden;">${pEsc(t)}</div>`).join(''):''}
+      ${iscaLinhasInfo(e).map((t,k)=>`<div style="position:absolute;left:0;right:0;top:${u(m.yL[k])};text-align:center;font-weight:900;font-size:${u(iscaFsLinha(m,t,c.larg,k))};line-height:1;white-space:nowrap;overflow:hidden;">${pEsc(t)}</div>`).join('')}
     </div>`;
   return `<div class="lbl" style="width:${W};height:${H};box-sizing:border-box;display:flex;flex-direction:column;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;overflow:hidden;">${meia(false)}${meia(true)}</div>`;
 }
@@ -3503,32 +3501,37 @@ function iscaRenderPreview(et){
   const c = iscaCfg();
   if(!et.length){ el.innerHTML = '<div class="empty">Nenhuma etiqueta pronta ainda.</div>'; return; }
   const px = 150 / c.larg;
-  el.innerHTML = `<div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">Prévia — ${et.length} etiqueta(s), na ordem de impressão (doca menor → maior). Cada etiqueta é dividida exatamente ao meio, com a placa nas duas metades.</div>
+  el.innerHTML = `<div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">Prévia — ${et.length} etiqueta(s), na ordem de impressão (doca menor → maior). Cada etiqueta é dividida exatamente ao meio, com PRÉ, DOCA e ONDA nas duas metades.</div>
     <div style="display:flex;flex-wrap:wrap;gap:14px;max-height:480px;overflow:auto;padding:4px;">
     ${et.map(e=>`<div><div style="font-size:11px;color:var(--text-2);margin-bottom:3px;">#${e.n}</div><div style="border:1px solid var(--line);">${iscaLabelHTML(e,c,px)}</div></div>`).join('')}</div>`;
 }
 
 /* ---------- ZPL (Zebra) ---------- */
+/* converte o texto para ZPL 100% ASCII: acentos e símbolos viram _XX (UTF-8) lidos com ^FH + ^CI28.
+   Assim o arquivo imprime igual em qualquer codificação/impressora e o "É" de PRÉ não quebra. */
+function iscaZEnc(t){
+  let o = '';
+  new TextEncoder().encode(String(t==null?'':t)).forEach(b=>{
+    const ch = String.fromCharCode(b);
+    o += (b>=32 && b<127 && '^~\\_'.indexOf(ch)<0) ? ch : '_'+b.toString(16).toUpperCase().padStart(2,'0');
+  });
+  return o;
+}
 function iscaZPL(){
   const c = iscaCfg(), et = iscaEtiquetas(); if(!et.length) return '';
   const dpmm = c.dpi/25.4, W = Math.round(c.larg*dpmm), H = Math.round(c.alt*dpmm), half = Math.floor(H/2);
-  const san = t => String(t==null?'':t).replace(/[\^~\\]/g,' ');
   let z = '';
   et.forEach(e=>{
-    const m = iscaMedidas(c.larg, c.alt, e.placa.length, c.info), d = v => Math.max(1, Math.round(v*dpmm));
-    z += '^XA\n^CI28\n^PW'+W+'\n^LL'+H+'\n^LH0,0\n';
-    z += '^FO0,'+(half-2)+'^GB'+W+',4,4^FS\n';             // linha exatamente na metade
+    const m = iscaMedidas(c.larg, c.alt, 0, true), d = v => Math.max(1, Math.round(v*dpmm));
+    z += '^XA\r\n^CI28\r\n^PW'+W+'\r\n^LL'+H+'\r\n^LH0,0\r\n';
+    z += '^FO0,'+(half-2)+'^GB'+W+',4,4^FS\r\n';             // linha exatamente na metade
     [0, half].forEach(off=>{
-      z += `^FO0,${off+d(m.yTit)}^A0N,${d(m.fsTit)},${d(m.fsTit)}^FB${W},1,0,C,0^FDISCA^FS\n`;
-      z += `^FO0,${off+d(m.yPlaca)}^A0N,${d(m.fsPlaca)},${d(m.fsPlaca)}^FB${W},1,0,C,0^FD${san(e.placa)}^FS\n`;
-      if(c.info){
-        iscaLinhasInfo(e).forEach((t,k)=>{
-          const fs = iscaFsLinha(m, t, c.larg);
-          z += `^FO0,${off+d(m.yInfo+k*m.fsInfo*1.18)}^A0N,${d(fs)},${d(fs)}^FB${W},1,0,C,0^FD${san(t)}^FS\n`;
-        });
-      }
+      iscaLinhasInfo(e).forEach((t,k)=>{
+        const fs = iscaFsLinha(m, t, c.larg, k);
+        z += `^FO0,${off+d(m.yL[k])}^A0N,${d(fs)},${d(fs)}^FB${W},1,0,C,0^FH^FD${iscaZEnc(t)}^FS\r\n`;
+      });
     });
-    z += '^PQ1,0,1,N\n^XZ\n';
+    z += '^PQ1,0,1,N\r\n^XZ\r\n';
   });
   return z;
 }
