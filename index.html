@@ -517,6 +517,7 @@
         <h2>Cadastro Placa → Transportadora</h2>
         <div class="desc">O veículo (placa) é o vínculo fixo com a transportadora. A ferramenta nunca escolhe transportadora ou doca por conta própria — sempre usa esse cadastro. Suba a planilha (colunas <b>TRANSP</b> e <b>PLACA</b>), cole uma lista (Placa;Transportadora, uma por linha) ou adicione manualmente.</div>
         <div id="cadastroUso" class="desc" style="margin-top:6px;"></div>
+        <div id="cadastroNuvem" class="desc" style="margin-top:2px;"></div>
       </div>
       <div style="display:flex;gap:8px;">
         <button class="small" onclick="cadastroUploadClick()">⬆ Subir planilha</button>
@@ -1008,7 +1009,7 @@ function saveState(){
   let json;
   try{ json = JSON.stringify(STATE); }
   catch(e){ avisarFalhaSalvar(e,'serializar'); return false; }
-  try{ localStorage.setItem(STORAGE_KEY, json); return true; }
+  try{ localStorage.setItem(STORAGE_KEY, json); if(window.gdnCadastroSync) window.gdnCadastroSync(); return true; }
   catch(e1){
     /* 1ª tentativa de recuperação: apaga só chaves ANTIGAS desta ferramenta (prefixo gdn_) e tenta de novo */
     try{
@@ -1016,8 +1017,9 @@ function saveState(){
       antigas.forEach(k=>localStorage.removeItem(k));
       localStorage.removeItem(STORAGE_KEY);
       localStorage.setItem(STORAGE_KEY, json);
+      if(window.gdnCadastroSync) window.gdnCadastroSync();
       return true;
-    }catch(e2){ avisarFalhaSalvar(e2,'gravar'); return false; }
+    }catch(e2){ avisarFalhaSalvar(e2,'gravar'); if(window.gdnCadastroSync) window.gdnCadastroSync(); return false; }
   }
 }
 
@@ -1231,7 +1233,7 @@ function renderCadastroUso(){
   const el = document.getElementById('cadastroUso'); if(!el) return;
   const total = usoLocalStorageKB(), estado = Math.round(JSON.stringify(STATE).length/1024);
   const cheio = total > 4000;
-  el.innerHTML = 'Armazenamento do navegador (este computador): <b style="color:'+(cheio?'var(--red,#c0392b)':'inherit')+'">'+total+' KB de ~5.000 KB</b> · dados desta ferramenta: ~'+estado+' KB. Os dados ficam salvos só neste navegador, não no Firebase.';
+  el.innerHTML = 'Armazenamento do navegador (este computador): <b style="color:'+(cheio?'var(--red,#c0392b)':'inherit')+'">'+total+' KB de ~5.000 KB</b> · dados desta ferramenta: ~'+estado+' KB. O cadastro de placas fica no Firebase; o restante da operação fica só neste navegador.';
 }
 function renderCadastro(){
   renderCadastroUso();
@@ -3945,6 +3947,8 @@ import {
   signOut,
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDWRdqnwZn9Q1EbM7Fz8QP6fPTiK3WBCvk",
@@ -4052,6 +4056,57 @@ btnReset.addEventListener('click', redefinirSenha);
 
 setPersistence(auth, browserLocalPersistence).catch(()=>{});
 
+/* ---------- Cadastro de placas no Firestore (coleção gdn_docas, documento cadastroPlacas) ----------
+   O cadastro fica salvo no banco e é o mesmo em todos os computadores. O navegador mantém só uma cópia local. */
+const db = getFirestore(app);
+const cadRef = doc(db, 'gdn_docas', 'cadastroPlacas');
+let cadUltimo = null, cadTimer = null, cadUnsub = null, cadPronto = false;
+const cadJson = () => JSON.stringify(STATE.config.cadastroPlacas || []);
+function cadStatus(txt, erro){
+  const el = document.getElementById('cadastroNuvem');
+  if(el){ el.textContent = txt; el.style.color = erro ? 'var(--red,#c0392b)' : 'inherit'; }
+}
+async function cadEnviar(){
+  if(!cadPronto || !auth.currentUser) return;
+  const j = cadJson(); if(j === cadUltimo) return;
+  try{
+    const placas = JSON.parse(j);
+    await setDoc(cadRef, {placas, total: placas.length, atualizadoEm: serverTimestamp(), atualizadoPor: auth.currentUser.email || ''});
+    cadUltimo = j;
+    cadStatus('☁ Cadastro salvo no Firebase ('+placas.length+' placas) — igual em todos os computadores.');
+  }catch(e){
+    console.error('Firestore (gravar)', e);
+    cadStatus('⚠ Não foi possível gravar no Firebase ('+(e.code||e.message)+'). O cadastro continua só neste navegador.', true);
+  }
+}
+window.gdnCadastroSync = function(){ clearTimeout(cadTimer); cadTimer = setTimeout(cadEnviar, 800); };
+function iniciarSyncCadastro(){
+  if(cadUnsub) return;
+  cadStatus('☁ Conectando ao Firebase…');
+  cadUnsub = onSnapshot(cadRef, snap => {
+    if(snap.metadata.hasPendingWrites) return;
+    cadPronto = true;
+    if(!snap.exists()){                      // primeira vez: sobe o cadastro deste computador
+      cadUltimo = null; cadEnviar(); return;
+    }
+    const remoto = Array.isArray(snap.data().placas) ? snap.data().placas : [];
+    const jr = JSON.stringify(remoto);
+    cadUltimo = jr;
+    if(jr !== cadJson()){                    // o banco é a fonte da verdade
+      STATE.config.cadastroPlacas = remoto;
+      try{ revincularTransportadoras(); }catch(e){}
+      try{ saveState(); }catch(e){}
+      try{ renderCadastro(); }catch(e){}
+    }
+    cadStatus('☁ Cadastro salvo no Firebase ('+remoto.length+' placas) — igual em todos os computadores.');
+  }, err => {
+    console.error('Firestore (ler)', err);
+    cadPronto = false;
+    cadStatus('⚠ Sem acesso ao Firestore ('+(err.code||err.message)+'). Confira as regras do banco. O cadastro continua só neste navegador.', true);
+  });
+}
+function pararSyncCadastro(){ if(cadUnsub){ cadUnsub(); cadUnsub = null; } cadPronto = false; cadUltimo = null; }
+
 onAuthStateChanged(auth, (user) => {
   splash.hidden = true;
   elPass.value = '';
@@ -4061,8 +4116,10 @@ onAuthStateChanged(auth, (user) => {
     elWho.title = user.email || '';
     limpaErro();
     entrarNaFerramenta();
+    iniciarSyncCadastro();
   }else{
     elWho.textContent = '—';
+    pararSyncCadastro();
     sairDaFerramenta();
     elEmail.focus();
   }
