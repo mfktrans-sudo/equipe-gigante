@@ -3736,7 +3736,7 @@ function ilInfoPlaca(placa){
 function ilPoolDe(filtro){
   const vistas = new Set();   // uma entrada por placa, mesmo que a placa apareça em mais de uma carga
   return (STATE.cargas||[]).filter(c=>{ if(!c.placa || !filtro(c)) return false; const k=placaKey(c.placa); if(vistas.has(k)) return false; vistas.add(k); return true; }).map(c=>{
-    const i = ilInfoPlaca(c.placa); return {placa:c.placa, doca:i.doca, onda:i.onda, transp:i.transp};
+    const i = ilInfoPlaca(c.placa); return {placa:c.placa, doca:i.doca, onda:i.onda, transp:i.transp, terr:(c.territorios?Object.keys(c.territorios):(c.territorio==null?[]:[c.territorio])).map(v=>String(parseInt(v,10)))};
   }).sort((x,y)=> ((x.doca==null)-(y.doca==null)) || ((x.onda||0)-(y.onda||0)) || ((x.doca||0)-(y.doca||0)) || String(x.placa).localeCompare(String(y.placa)));
 }
 function ilPool(regiao){
@@ -3757,23 +3757,31 @@ function ilDistribuir(){
   L.rows.forEach(r=>{ if(r.manual && r.placa) usada.add(placaKey(r.placa)); });
   const livre = p => !usada.has(placaKey(p.placa));
   const tomar = (r, p, sobra) => { r.placa = p.placa; r.sobra = !!sobra; usada.add(placaKey(p.placa)); };
-  const sobras = [], cachePool = {};
+  const cachePool = {}, cacheT = {};
   const poolDe = reg => cachePool[reg] || (cachePool[reg] = ilPool(reg));
-  L.rows.forEach(r=>{
-    if(r.manual && r.placa) return;
-    r.placa = ''; r.sobra = false;
-    const reg = ilRegiaoDe(r.key); if(!reg) return;
-    const p = poolDe(reg).find(livre);
-    if(p) tomar(r, p, false); else sobras.push(r);
-  });
+  const codsDe = r => ilCodsDaArea(r.key).cods;
+  const bate = (p, cods) => cods.length && (p.terr||[]).some(v=>cods.indexOf(v)>=0);
+  /* placas (de qualquer região) cujo território — 4ª coluna dos arquivos de Região — bate com o da área da isca */
+  const poolTerr = r => cacheT[r.key] || (cacheT[r.key] = ilPoolDe(()=>true).filter(p=>bate(p, codsDe(r))));
+  const pend = [];
+  L.rows.forEach(r=>{ if(r.manual && r.placa) return; r.placa = ''; r.sobra = false; pend.push(r); });
+  const comReg = pend.filter(r=>ilRegiaoDe(r.key)), semReg = pend.filter(r=>!ilRegiaoDe(r.key));
+  /* 1ª passada: placa da região escolhida E com o mesmo território da isca */
+  const resto = [];
+  comReg.forEach(r=>{ const c = codsDe(r), p = poolDe(ilRegiaoDe(r.key)).find(x=>livre(x) && bate(x, c)); if(p) tomar(r, p, false); else resto.push(r); });
+  /* 2ª passada: qualquer placa livre da região escolhida */
+  const sobras = [];
+  resto.forEach(r=>{ const p = poolDe(ilRegiaoDe(r.key)).find(livre); if(p) tomar(r, p, false); else sobras.push(r); });
+  /* 3ª passada: sem placa na região -> placa livre de qualquer região com o território da isca; por último, qualquer placa livre (sobra) */
   if(sobras.length){
-    const todas = ilPoolDe(()=>true), cacheT = {};
-    /* antes de pegar qualquer placa livre, tenta uma placa cujo território (4ª coluna dos arquivos de Região) bate com o da área da isca */
-    const poolTerr = key => cacheT[key] || (cacheT[key] = (cods=>cods.length ? ilPoolDe(c=>{ const cs = c.territorios ? Object.keys(c.territorios) : (c.territorio==null?[]:[c.territorio]); return cs.some(v=>cods.indexOf(String(parseInt(v,10)))>=0); }) : [])(ilCodsDaArea(key).cods));
-    sobras.forEach(r=>{ const pt = poolTerr(r.key).find(livre); if(pt){ tomar(r, pt, false); return; } const p = todas.find(livre); if(p) tomar(r, p, true); });
+    const todas = ilPoolDe(()=>true);
+    sobras.forEach(r=>{ const pt = poolTerr(r).find(livre); if(pt){ tomar(r, pt, false); return; } const p = todas.find(livre); if(p) tomar(r, p, true); });
   }
+  /* área sem região escolhida: se o território da isca tem placa nos arquivos de Região, já vincula */
+  semReg.forEach(r=>{ const pt = poolTerr(r).find(livre); if(pt) tomar(r, pt, false); });
   saveState();
 }
+
 function ilMudarRegiao(key, val){ ilMapa()[key] = val; ilDistribuir(); renderIscas(); }
 function ilMudarPlaca(i, val){
   const r = STATE.iscaLote.rows[i]; if(!r) return;
