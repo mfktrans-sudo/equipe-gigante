@@ -496,7 +496,10 @@
         <h2>Transportadoras — docas parametrizadas e prioridade</h2>
         <div class="desc">A transportadora só pode usar as docas dessa faixa — nunca outra doca do CD. A quantidade de docas define quantos veículos cabem por onda; o excedente forma automaticamente novas ondas reaproveitando as mesmas docas. Prioridade: quanto menor o número, mais cedo a carga entra na 1ª onda.</div>
       </div>
-      <button class="primary small" onclick="addTransportadora()">+ Transportadora</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="small" onclick="restaurarTransportadoras()" title="Traz de volta transportadoras que foram excluídas (as da lista padrão desta versão e a última excluída)">↩ Restaurar excluídas</button>
+        <button class="primary small" onclick="addTransportadora()">+ Transportadora</button>
+      </div>
     </div>
     <div class="table-wrap">
       <table id="tblTransportadoras">
@@ -521,7 +524,7 @@
       </div>
       <div style="display:flex;gap:8px;">
         <button class="small" onclick="cadastroUploadClick()">⬆ Subir planilha</button>
-        <input type="file" id="cadastroFile" style="display:none" onchange="cadastroUploadArquivo(event)">
+        <input type="file" id="cadastroFile" multiple style="display:none" onchange="cadastroUploadArquivo(event)">
         <button class="small" onclick="document.getElementById('cadastroPaste').style.display='block'">Colar lista</button>
         <button class="primary small" onclick="addCadastroRow()">+ Placa</button>
       </div>
@@ -1224,7 +1227,29 @@ function addTransportadora(){
   saveState(); renderParametros();
 }
 function updateTransp(idx, field, val){ STATE.config.transportadoras[idx][field] = val; saveState(); renderParametros(); }
-function removeTransp(idx){ STATE.config.transportadoras.splice(idx,1); saveState(); renderParametros(); }
+let ULTIMAS_TRANSP_REMOVIDAS = [];
+function removeTransp(idx){
+  const t = STATE.config.transportadoras[idx]; if(!t) return;
+  if(!confirm('Excluir a transportadora "'+t.nome+'" (docas '+t.docaIn+' a '+t.docaFim+')? Dá para trazer de volta em "↩ Restaurar excluídas".')) return;
+  ULTIMAS_TRANSP_REMOVIDAS.push(JSON.parse(JSON.stringify(t)));
+  STATE.config.transportadoras.splice(idx,1); saveState(); renderParametros();
+  toast('Transportadora "'+t.nome+'" excluída. Use "↩ Restaurar excluídas" para desfazer.', 'ok');
+}
+/* devolve as transportadoras que sumiram: as da lista padrão desta versão + as excluídas nesta sessão. Não mexe nas que já existem. */
+function restaurarTransportadoras(){
+  const atual = new Set(STATE.config.transportadoras.map(t=>String(t.nome||'').trim().toUpperCase()));
+  const candidatas = defaultState().config.transportadoras.concat(ULTIMAS_TRANSP_REMOVIDAS);
+  const volta = [];
+  candidatas.forEach(t=>{
+    const k = String(t.nome||'').trim().toUpperCase();
+    if(!k || atual.has(k)) return;
+    atual.add(k); STATE.config.transportadoras.push(JSON.parse(JSON.stringify(t))); volta.push(t.nome);
+  });
+  if(!volta.length){ toast('Nenhuma transportadora faltando em relação à lista padrão.', 'ok'); return; }
+  ULTIMAS_TRANSP_REMOVIDAS = [];
+  saveState(); renderParametros();
+  toast('Restaurada(s): '+volta.join(', ')+'. Rode a alocação de novo para aplicar.', 'ok');
+}
 
 /* =========================================================
    CADASTRO PLACA -> TRANSPORTADORA
@@ -1342,17 +1367,37 @@ function processCadastroPaste(){
 function cadNorm(s){ return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
 function cadEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function cadastroUploadClick(){ document.getElementById('cadastroFile').click(); }
+function cadMostrar(html, anexar){
+  const box = document.getElementById('cadastroResultado');
+  box.innerHTML = (anexar ? box.innerHTML+'<hr style="border:0;border-top:1px solid var(--border,#444);margin:10px 0;">' : '') + html;
+  box.style.display = 'block';
+}
 function cadastroUploadArquivo(ev){
-  const f = ev.target.files && ev.target.files[0];
-  if(!f) return;
-  const rd = new FileReader();
-  rd.onload = e => {
-    try{ cadastroProcessarPlanilha(new Uint8Array(e.target.result), f.name); }
-    catch(err){ console.error(err); toast('Não foi possível ler "'+f.name+'": '+(err && err.message || err), 'err'); }
-    finally{ try{ ev.target.value = ''; }catch(x){} }
+  const input = ev.target, arqs = Array.from(input.files||[]);
+  if(!arqs.length) return;
+  const lidos = new Array(arqs.length); let falta = arqs.length;
+  const fim = ()=>{
+    if(--falta) return;
+    let ok = 0, tot = 0, falhas = 0;
+    lidos.forEach((x,i)=>{
+      try{
+        if(x.erro) throw new Error('não foi possível abrir o arquivo');
+        const n = cadastroProcessarPlanilha(x.buf, x.nome, {anexar:i>0, quieto:true});
+        if(n===false) falhas++; else { ok++; tot += n; }
+      }catch(err){
+        console.error(err); falhas++;
+        cadMostrar('<div style="color:var(--red,#c0392b);">⚠ '+cadEsc(x.nome)+': '+cadEsc(err && err.message || err)+'</div>', i>0);
+      }
+    });
+    toast(arqs.length+' arquivo(s) lido(s): '+tot+' placa(s) nova(s)'+(falhas?' · '+falhas+' arquivo(s) sem dados reconhecidos':'')+'.', falhas && !ok ? 'err' : 'ok');
+    try{ input.value = ''; }catch(e){}
   };
-  rd.onerror = () => toast('Não foi possível abrir o arquivo.', 'err');
-  rd.readAsArrayBuffer(f);
+  arqs.forEach((f,i)=>{
+    const rd = new FileReader();
+    rd.onload = e => { lidos[i] = {nome:f.name, buf:new Uint8Array(e.target.result)}; fim(); };
+    rd.onerror = () => { lidos[i] = {nome:f.name, erro:true}; fim(); };
+    rd.readAsArrayBuffer(f);
+  });
 }
 /* converte o arquivo em "folhas" (matrizes linhas x colunas): planilha (xlsx/xls/ods/...) ou texto (csv/tsv/txt) */
 function cadastroFolhas(buf, nomeArq){
@@ -1395,7 +1440,8 @@ function cadastroAcharColunas(aoa){
   if(cT<0) return null;
   return {h:-1, cP:melhor, cT, porCabecalho:false};
 }
-function cadastroProcessarPlanilha(buf, nomeArq){
+function cadastroProcessarPlanilha(buf, nomeArq, opts){
+  opts = opts || {};
   const folhas = cadastroFolhas(buf, nomeArq);
   const atualizar = !!document.getElementById('cadastroAtualizar').checked;
   const RE_PLACA = CAD_RE_PLACA;
@@ -1434,13 +1480,11 @@ function cadastroProcessarPlanilha(buf, nomeArq){
   });
 
   if(!achouAba){
-    const box = document.getElementById('cadastroResultado');
-    box.innerHTML = '<div style="font-weight:700;margin-bottom:6px;">Não consegui identificar as colunas em '+cadEsc(nomeArq)+'</div>'
+    cadMostrar('<div style="font-weight:700;margin-bottom:6px;">Não consegui identificar as colunas em '+cadEsc(nomeArq)+'</div>'
       + '<div>Procurei uma coluna <b>PLACA</b> e uma <b>TRANSP</b> (ou TRANSPORTADORA) e, sem cabeçalho, uma coluna com placas ao lado de uma com nomes.</div>'
-      + (cabecalhosVistos.length ? '<div style="margin-top:6px;color:var(--muted,#888);">Primeira linha encontrada: '+cadEsc(cabecalhosVistos[0])+'</div>' : '');
-    box.style.display = 'block';
-    toast('Não encontrei as colunas de placa e transportadora no arquivo.', 'err');
-    return;
+      + (cabecalhosVistos.length ? '<div style="margin-top:6px;color:var(--muted,#888);">Primeira linha encontrada: '+cadEsc(cabecalhosVistos[0])+'</div>' : ''), !!opts.anexar);
+    if(!opts.quieto) toast('Não encontrei as colunas de placa e transportadora no arquivo.', 'err');
+    return false;
   }
   novas.forEach(n=>STATE.config.cadastroPlacas.push(n));
   const recalc = revincularTransportadoras();
@@ -1464,9 +1508,9 @@ function cadastroProcessarPlanilha(buf, nomeArq){
   if(recalc) h += '<div>• '+recalc+' carga(s) já consolidada(s) tiveram a transportadora atualizada</div>';
   if(semParam.length) h += '<div style="margin-top:6px;color:var(--amber,#b9770e);">⚠ Transportadora(s) novas, já criadas em 1 · Parâmetros com faixa de docas vazia: <b>'+cadEsc(semParam.join(', '))+'</b>. Preencha a doca inicial/final de cada uma e rode a alocação.</div>';
   if(!salvou) h += '<div style="margin-top:6px;color:var(--red,#c0392b);">⚠ O armazenamento <b>deste navegador</b> está cheio, então a cópia local não foi gravada. O cadastro é salvo no <b>Firebase</b>: confirme que a linha “☁ Cadastro salvo no Firebase” no topo da aba está sem erro. Para liberar espaço aqui, use “Ver o que ocupa o espaço”.</div>';
-  const box = document.getElementById('cadastroResultado');
-  box.innerHTML = h; box.style.display = 'block';
-  toast(novas.length+' placa(s) importada(s) da planilha.'+(salvou?'':' ATENÇÃO: não foi possível salvar no navegador.'), salvou?'ok':'err');
+  cadMostrar(h, !!opts.anexar);
+  if(!opts.quieto) toast(novas.length+' placa(s) importada(s) da planilha.'+(salvou?'':' ATENÇÃO: não foi possível salvar no navegador.'), salvou?'ok':'err');
+  return novas.length;
 }
 function findCadastroDaPlaca(placa){
   const k = placaKey(placa); if(!k) return null;
