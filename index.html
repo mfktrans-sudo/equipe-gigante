@@ -3988,23 +3988,30 @@ function iscaXmlEsc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt
 async function iscaGerarDocx(){
   const fl = iscaFolhas(); if(!fl.length) return null;
   const c = iscaCfg(), TW = Math.round(c.larg/25.4*1440), TH = Math.round(c.alt/25.4*1440);   // mm -> twips
-  const DIV = 40, USE = Math.floor(TH*0.88), HALF = Math.floor((USE - DIV)/2);   // usa só 88% da altura: margem de segurança p/ driver Zebra/Word não empurrar a 2ª carga p/ outra página
-  const h = [Math.round(HALF*0.29), Math.round(HALF*0.32), Math.round(HALF*0.32)];   // altura exata de PRÉ / DOCA / ONDA
-  const antes = HALF - h[0] - h[1] - h[2];
-  const baseFs = [Math.min(34, h[0]/20*0.80), Math.min(40, h[1]/20*0.80), Math.min(40, h[2]/20*0.80)];   // pt
+  /* Layout em TABELA de 2 linhas de altura fixa (1 carga por linha) + parágrafo mínimo com a quebra de seção.
+     Usa só ~88% da altura da página (folga p/ a área não imprimível do driver Zebra). Tabela não sofre o corte de
+     "altura exata de linha" que fazia a 2ª carga sumir na impressão. */
+  const ROW = Math.floor(TH*0.44), base = ROW/20*0.25;   // pt
   const larPt = TW/20*0.92;
   const SECT = `<w:sectPr><w:pgSz w:w="${TW}" w:h="${TH}"/><w:pgMar w:top="0" w:right="0" w:bottom="0" w:left="0" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr>`;
-  const par = (txt, k, first, sect)=>{
-    let fs = baseFs[k]; if(txt) fs = Math.min(fs, larPt/(Math.max(txt.length,4)*0.64));
+  const par = (txt, k)=>{
+    let fs = k===0 ? base*0.95 : base*1.08; if(txt) fs = Math.min(fs, larPt/(Math.max(txt.length,4)*0.64));
     const sz = Math.max(8, Math.floor(fs*2));
-    return `<w:p><w:pPr><w:spacing w:before="${first?antes:0}" w:after="0" w:line="${h[k]}" w:lineRule="exact"/><w:jc w:val="center"/>${sect?SECT:''}</w:pPr>`+
+    return `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr>`+
            `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/></w:rPr><w:t xml:space="preserve">${iscaXmlEsc(txt||'')}</w:t></w:r></w:p>`;
   };
-  const metade = (e, fim)=>{ const L = e ? iscaLinhasInfo(e) : ['','','']; return L.map((t,k)=>par(t,k,k===0,fim&&k===2)).join(''); };
-  const divisor = `<w:p><w:pPr><w:pBdr><w:bottom w:val="dashed" w:sz="8" w:space="0" w:color="000000"/></w:pBdr><w:spacing w:before="0" w:after="0" w:line="${DIV}" w:lineRule="exact"/></w:pPr><w:r><w:rPr><w:sz w:val="2"/></w:rPr><w:t></w:t></w:r></w:p>`;
-  const corpo = fl.map((f,i)=> metade(f.a, false) + divisor + metade(f.b, i<fl.length-1)).join('');
+  const cel = (e, borda)=>{
+    const L = e ? iscaLinhasInfo(e) : ['','',''];
+    return `<w:tc><w:tcPr><w:tcW w:w="${TW}" w:type="dxa"/>`+
+      (borda?'<w:tcBorders><w:bottom w:val="dashed" w:sz="8" w:space="0" w:color="000000"/></w:tcBorders>':'')+
+      `<w:vAlign w:val="center"/></w:tcPr>${L.map(par).join('')}</w:tc>`;
+  };
+  const linha = (e, borda)=>`<w:tr><w:trPr><w:cantSplit/><w:trHeight w:val="${ROW}" w:hRule="exact"/></w:trPr>${cel(e,borda)}</w:tr>`;
+  const tabela = f => `<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${TW}"/></w:tblGrid>${linha(f.a,true)}${linha(f.b,false)}</w:tbl>`;
+  const fim = (ult)=>`<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/>${ult?'':SECT}</w:pPr><w:r><w:rPr><w:sz w:val="2"/></w:rPr><w:t></w:t></w:r></w:p>`;
+  const corpo = fl.map((f,i)=> tabela(f) + fim(i===fl.length-1)).join('');
   const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${corpo}`+
-    `<w:sectPr><w:pgSz w:w="${TW}" w:h="${TH}"/><w:pgMar w:top="0" w:right="0" w:bottom="0" w:left="0" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+    SECT+`</w:body></w:document>`;
   const zip = new JSZip();
   zip.file('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
   zip.file('_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
