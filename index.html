@@ -3421,6 +3421,8 @@ async function iscaArquivos(fileList){
   for(const f of files){
     try{
       const buf=await f.arrayBuffer();
+      if(log) log.textContent='Lendo '+f.name+' ('+Math.round(f.size/1024)+' KB) — aguarde…';
+      await new Promise(r=>setTimeout(r,60));      // deixa a tela atualizar antes da leitura pesada
       /* planilha "Saída de inserção" (Cliente / Cep / Cidade / Equip. / Placa): fluxo próprio */
       if(/\.(xlsx|xlsm|xls|xlsb)$/i.test(f.name)){
         const n=ilCarregarBuffer(f.name, buf);
@@ -3488,35 +3490,68 @@ function ilDetectar(aoa){
     const idx = re => cab.findIndex(x=>re.test(x));
     const c = {cliente:idx(/^CLIENTE/), cep:idx(/^CEP/), cidade:idx(/^CIDADE/), equip:idx(/^EQUIP/), placa:idx(/^PLACA/)};
     if(c.cliente>=0 && c.cidade>=0 && c.equip>=0 && c.placa>=0){
-      c.seq=idx(/^SEQ/); c.bairro=idx(/^BAIRRO/); c.nf=idx(/^NF/); c.rua=idx(/^RUA/); c.uf=idx(/^UF/);
+      c.seq=idx(/^SEQ/); c.data=idx(/^DATA/); c.bairro=idx(/^BAIRRO/); c.nf=idx(/^NF/); c.rua=idx(/^RUA/); c.uf=idx(/^UF/);
       return {linha:i, col:c};
     }
   }
   return null;
 }
 
+/* data (serial do Excel, dd/mm/aaaa ou aaaa-mm-dd) -> 'aaaa-mm-dd' */
+function ilDataISO(v){
+  if(v==null || v==='') return '';
+  if(typeof v==='number' && v>20000 && v<80000) return new Date(Math.round((v-25569)*86400000)).toISOString().slice(0,10);
+  const t = String(v).trim(); let m = t.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/);
+  if(m) return m[3]+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[1]).slice(-2);
+  m = t.match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[0] : '';
+}
+/* o arquivo de iscas pode acumular vários dias: usa só o dia da operação (1º a data do nome do arquivo,
+   2º a data das cargas consolidadas, 3º a data mais recente do arquivo) */
+function ilEscolherData(nome, cont){
+  const m = String(nome).match(/(\d{2})[-_.\/](\d{2})[-_.\/](\d{4})/), doNome = m ? m[3]+'-'+m[2]+'-'+m[1] : '';
+  if(doNome && cont[doNome]) return {iso:doNome, de:'o nome do arquivo'};
+  try{ const ex = datasDasCargas(), ds = Object.keys(ex).sort((a,b)=>ex[b]-ex[a]); if(ds[0] && cont[ds[0]]) return {iso:ds[0], de:'a data das cargas da operação'}; }catch(e){}
+  const ult = Object.keys(cont).sort().pop(); return {iso:ult, de:'a data mais recente do arquivo'};
+}
+const IL_MAX_LINHAS = 3000;
+
 /* lê o arquivo; devolve true se for um arquivo de iscas (e já carrega) */
 function ilCarregarBuffer(nome, buf){
   if(typeof XLSX==='undefined') return false;
-  let wb; try{ wb = XLSX.read(buf,{type:'array'}); }catch(e){ return false; }
+  let wb; try{ wb = XLSX.read(buf,{type:'array', cellStyles:false, cellFormula:false, cellNF:false, cellHTML:false, cellText:false}); }catch(e){ return false; }
   for(const sn of wb.SheetNames){
     const ws = wb.Sheets[sn]; if(!ws || !ws['!ref']) continue;
     const rg = XLSX.utils.decode_range(ws['!ref']);
     const aoa = XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true,blankrows:true});
     const det = ilDetectar(aoa); if(!det) continue;
     const c = det.col, get = (r,k)=> (k>=0 && r[k]!=null) ? String(r[k]).trim() : '';
-    const rows = [];
+    /* 1ª passada (barata): linhas candidatas + contagem por data */
+    const cand = [], cont = {};
     for(let i=det.linha+1;i<aoa.length;i++){
       const r = aoa[i]||[];
+      if(!get(r,c.cliente) && !get(r,c.equip)) continue;
+      const dt = c.data>=0 ? ilDataISO(r[c.data]) : '';
+      cand.push({i, dt}); if(dt) cont[dt] = (cont[dt]||0)+1;
+    }
+    let filtro = null, sel = cand;
+    if(Object.keys(cont).length > 1){
+      const esc = ilEscolherData(nome, cont);
+      sel = cand.filter(x=>x.dt===esc.iso);
+      filtro = {iso:esc.iso, de:esc.de, total:cand.length, dias:Object.keys(cont).length};
+    }
+    if(sel.length > IL_MAX_LINHAS) throw new Error('o arquivo tem '+sel.length+' iscas (limite '+IL_MAX_LINHAS+'). Suba só o dia da operação ou um arquivo com coluna Data.');
+    /* 2ª passada: monta só as linhas do dia */
+    const rows = [];
+    sel.forEach(({i})=>{
+      const r = aoa[i]||[];
       const cliente=get(r,c.cliente), equip=get(r,c.equip);
-      if(!cliente && !equip) continue;
       const ar = ilAreaDe(get(r,c.cidade), get(r,c.cep));
       rows.push({xl: rg.s.r+i+1, seq:get(r,c.seq), cliente, cep:get(r,c.cep), bairro:get(r,c.bairro), cidade:get(r,c.cidade),
                  equip, nf:get(r,c.nf), key:ar.key, rot:ar.rot, placa:'', manual:false, placaOriginal:get(r,c.placa)});
-    }
+    });
     if(!rows.length) continue;
     IL_MEM.buf = buf; IL_MEM.nome = nome; IL_MEM.folha = sn;
-    STATE.iscaLote = {nome, folha:sn, colPlaca: ilColLetra(rg.s.c + c.placa + 1), rows};
+    STATE.iscaLote = {nome, folha:sn, colPlaca: ilColLetra(rg.s.c + c.placa + 1), rows, filtro};
     ilSugerirMapa();
     ilDistribuir();
     renderIscas();
@@ -3638,12 +3673,13 @@ function ilDistribuir(){
   L.rows.forEach(r=>{ if(r.manual && r.placa) usada.add(placaKey(r.placa)); });
   const livre = p => !usada.has(placaKey(p.placa));
   const tomar = (r, p, sobra) => { r.placa = p.placa; r.sobra = !!sobra; usada.add(placaKey(p.placa)); };
-  const sobras = [];
+  const sobras = [], cachePool = {};
+  const poolDe = reg => cachePool[reg] || (cachePool[reg] = ilPool(reg));
   L.rows.forEach(r=>{
     if(r.manual && r.placa) return;
     r.placa = ''; r.sobra = false;
     const reg = ilRegiaoDe(r.key); if(!reg) return;
-    const p = ilPool(reg).find(livre);
+    const p = poolDe(reg).find(livre);
     if(p) tomar(r, p, false); else sobras.push(r);
   });
   if(sobras.length){
@@ -3768,7 +3804,7 @@ function ilRender(){
   const rep = L.rows.filter(r=>r.placa && uso[placaKey(r.placa)]>1).length;
   const semDoca = L.rows.filter(r=>r.placa && ilInfoPlaca(r.placa).doca==null).length;
   const stat = (n,l,cor)=>`<div class="stat"><div class="num"${cor?` style="color:var(--${cor})"`:''}>${n}</div><div class="lbl">${l}</div></div>`;
-  let h = `<div class="desc" style="margin-bottom:10px;max-width:none;">Arquivo: <b>${pEsc(L.nome)}</b> · aba ${pEsc(L.folha)} · a placa será gravada na coluna <b>${pEsc(L.colPlaca)}</b>.</div>`;
+  let h = `<div class="desc" style="margin-bottom:10px;max-width:none;">Arquivo: <b>${pEsc(L.nome)}</b> · aba ${pEsc(L.folha)} · a placa será gravada na coluna <b>${pEsc(L.colPlaca)}</b>.${L.filtro?` O arquivo acumula <b>${L.filtro.dias}</b> dias (${L.filtro.total} linhas); usei só as <b>${L.rows.length}</b> iscas de <b>${pEsc(isoParaBR(L.filtro.iso))}</b> (data escolhida pelo ${pEsc(L.filtro.de)}).`:''}</div>`;
   if(!temCargas) h += '<div class="badge alert" style="display:block;margin-bottom:10px;padding:8px;">Ainda não há cargas carregadas. Carregue GAN, Log de NF e Região (aba 3) e rode a alocação; depois clique em “Redistribuir placas”.</div>';
   h += `<div class="grid cols-4" style="margin-bottom:14px;">${stat(L.rows.length,'iscas no arquivo')}${stat(comPlaca,'com placa','teal')}${stat(L.rows.length-comPlaca,'sem placa','red')}${stat(rep,'placa repetida','amber')}</div>`;
   /* mapa área -> região */
