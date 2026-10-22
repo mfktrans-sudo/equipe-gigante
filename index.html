@@ -787,10 +787,11 @@
     <div id="iscaTabela"></div>
   </div>
   <div class="panel">
-    <div class="panel-head"><div><h2>Etiqueta Zebra</h2><div class="desc">Cada etiqueta é dividida exatamente ao meio por uma linha de corte/dobra, com PRÉ, DOCA e ONDA em destaque nas duas metades. Padrão: 100 × 150 mm (4×6 pol).</div></div>
+    <div class="panel-head"><div><h2>Etiqueta Zebra</h2><div class="desc">Cada etiqueta é dividida exatamente ao meio por uma linha de corte/dobra e leva <b>2 cargas diferentes</b> (metade de cima e metade de baixo), com PRÉ, DOCA e ONDA em destaque. Padrão: 100 × 100 mm (10 × 10 cm), igual ao driver Zebra TP.</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <button class="primary" onclick="iscaBaixarZPL()">⬇ Baixar ZPL (Zebra) .txt</button>
         <button onclick="iscaCopiarZPL()">📋 Copiar ZPL</button>
+        <button class="primary" onclick="iscaBaixarWord()">⬇ Baixar Word (.docx) 10×10 cm</button>
         <button class="primary" onclick="iscaImprimir()">🖨 Imprimir / salvar PDF</button></div></div>
     <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
       <div><label>Largura (mm)</label><input id="iscaLarg" type="number" min="30" max="300" style="width:90px" onchange="iscaSalvarCfg()"></div>
@@ -3231,13 +3232,15 @@ function abrirCelulaMatriz(doca, onda){
    e gera as etiquetas Zebra na ordem das docas (menor → maior).
    ========================================================= */
 function iscaCfg(){
-  STATE.config.etiquetaIsca = Object.assign({larg:100, alt:150, dpi:203, info:true}, STATE.config.etiquetaIsca||{});
-  return STATE.config.etiquetaIsca;
+  STATE.config.etiquetaIsca = Object.assign({larg:100, alt:100, dpi:203, info:true}, STATE.config.etiquetaIsca||{});
+  const cfg = STATE.config.etiquetaIsca;
+  if(cfg.v!==2){ cfg.v=2; cfg.larg=100; cfg.alt=100; }   /* migração: padrão agora é 10 x 10 cm (driver Zebra TP) */
+  return cfg;
 }
 function iscaSalvarCfg(){
   const c = iscaCfg();
   c.larg = Math.min(300, Math.max(30, parseFloat(document.getElementById('iscaLarg').value)||100));
-  c.alt  = Math.min(400, Math.max(30, parseFloat(document.getElementById('iscaAlt').value)||150));
+  c.alt  = Math.min(400, Math.max(30, parseFloat(document.getElementById('iscaAlt').value)||100));
   c.dpi  = parseInt(document.getElementById('iscaDpi').value)||203;
   c.info = document.getElementById('iscaInfo').checked;
   saveState(); renderIscas();
@@ -3297,6 +3300,12 @@ function iscaPreTexto(pres){
   pres = pres||[];
   const pr = pres.filter(p=>isFilialPrincipal(p.filial)); const ls = (pr.length?pr:pres).map(p=>String(p.preRomaneio)).filter(Boolean);
   return Array.from(new Set(ls)).sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)).join('/');
+}
+/* cada etiqueta física leva 2 iscas (2 cargas diferentes): metade de cima = a, metade de baixo = b */
+function iscaFolhas(){
+  const et = iscaEtiquetas(), out = [];
+  for(let i=0;i<et.length;i+=2) out.push({n:out.length+1, a:et[i], b:et[i+1]||null});
+  return out;
 }
 function iscaEtiquetas(){
   return iscaOrdenadas().filter(x=>['ok','semdoca','semalocacao'].includes(x.v.st)).map((x,i)=>{
@@ -3868,7 +3877,7 @@ function renderIscas(){
   document.getElementById('iscaStats').innerHTML =
     `<div class="stat"><div class="num">${ls.length}</div><div class="lbl">iscas cadastradas</div></div>
      <div class="stat"><div class="num" style="color:var(--teal)">${ls.filter(x=>x.v.st==='ok').length}</div><div class="lbl">vinculadas a carga e doca</div></div>
-     <div class="stat"><div class="num" style="color:var(--amber)">${et.length}</div><div class="lbl">etiquetas prontas</div></div>
+     <div class="stat"><div class="num" style="color:var(--amber)">${et.length}</div><div class="lbl">iscas prontas (2 por etiqueta)</div></div>
      <div class="stat"><div class="num" style="color:var(--red)">${pend}</div><div class="lbl">com pendência</div></div>`;
   if(!ls.length){ tb.innerHTML = '<div class="empty">Nenhuma isca cadastrada.</div>'; document.getElementById('iscaPreview').innerHTML=''; return; }
   let n = 0;
@@ -3916,13 +3925,14 @@ function iscaLinhasInfo(e){
   return ['PRÉ '+(e.pre||'—'), 'DOCA '+(e.doca!=null?e.doca:'—'), 'ONDA '+(e.onda!=null?e.onda:'—')];
 }
 function iscaFsLinha(m, txt, larg, k){ return Math.min(k===0 ? m.fsPre : m.fsLin, larg*0.9/(Math.max(txt.length,5)*0.62)); }
-function iscaLabelHTML(e, c, px){   // px = pixels por mm (prévia) ou 0 para usar mm (impressão)
+function iscaLabelHTML(fa, c, px){   /* fa = {a, b} */
+  const e = fa.a;   // px = pixels por mm (prévia) ou 0 para usar mm (impressão)
   const m = iscaMedidas(c.larg, c.alt, e.placa.length, c.info);
   const u = v => px ? (v*px).toFixed(1)+'px' : v.toFixed(2)+'mm';
   const W = u(c.larg), H = u(c.alt);
-  const meia = (borda)=>`<div class="mhalf" style="position:relative;flex:1 1 0;min-height:0;${borda?`border-top:${px?'1px':'0.4mm'} dashed #000;`:''}overflow:hidden;">
-      ${iscaLinhasInfo(e).map((t,k)=>`<div style="position:absolute;left:0;right:0;top:${u(m.yL[k])};text-align:center;font-weight:900;font-size:${u(iscaFsLinha(m,t,c.larg,k))};line-height:1;white-space:nowrap;overflow:hidden;">${pEsc(t)}</div>`).join('')}
-    </div>`;
+  const meia = (borda)=>{ const e = borda ? fa.b : fa.a; return `<div class="mhalf" style="position:relative;flex:1 1 0;min-height:0;${borda?`border-top:${px?'1px':'0.4mm'} dashed #000;`:''}overflow:hidden;">
+      ${!e ? '' : iscaLinhasInfo(e).map((t,k)=>`<div style="position:absolute;left:0;right:0;top:${u(m.yL[k])};text-align:center;font-weight:900;font-size:${u(iscaFsLinha(m,t,c.larg,k))};line-height:1;white-space:nowrap;overflow:hidden;">${pEsc(t)}</div>`).join('')}
+    </div>`; };
   return `<div class="lbl" style="width:${W};height:${H};box-sizing:border-box;display:flex;flex-direction:column;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;overflow:hidden;">${meia(false)}${meia(true)}</div>`;
 }
 function iscaRenderPreview(et){
@@ -3930,9 +3940,10 @@ function iscaRenderPreview(et){
   const c = iscaCfg();
   if(!et.length){ el.innerHTML = '<div class="empty">Nenhuma etiqueta pronta ainda.</div>'; return; }
   const px = 150 / c.larg;
-  el.innerHTML = `<div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">Prévia — ${et.length} etiqueta(s), na ordem de impressão (doca menor → maior). Cada etiqueta é dividida exatamente ao meio, com PRÉ, DOCA e ONDA nas duas metades.</div>
+  const fl = iscaFolhas();
+  el.innerHTML = `<div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">Prévia — ${et.length} isca(s) em ${fl.length} etiqueta(s) de ${c.larg/10} × ${c.alt/10} cm, na ordem de impressão (doca menor → maior). Cada etiqueta tem 2 cargas diferentes: uma na metade de cima e outra na de baixo.</div>
     <div style="display:flex;flex-wrap:wrap;gap:14px;max-height:480px;overflow:auto;padding:4px;">
-    ${et.map(e=>`<div><div style="font-size:11px;color:var(--text-2);margin-bottom:3px;">#${e.n}</div><div style="border:1px solid var(--line);">${iscaLabelHTML(e,c,px)}</div></div>`).join('')}</div>`;
+    ${fl.map(f=>`<div><div style="font-size:11px;color:var(--text-2);margin-bottom:3px;">#${f.n}</div><div style="border:1px solid var(--line);">${iscaLabelHTML(f,c,px)}</div></div>`).join('')}</div>`;
 }
 
 /* ---------- ZPL (Zebra) ---------- */
@@ -3950,11 +3961,12 @@ function iscaZPL(){
   const c = iscaCfg(), et = iscaEtiquetas(); if(!et.length) return '';
   const dpmm = c.dpi/25.4, W = Math.round(c.larg*dpmm), H = Math.round(c.alt*dpmm), half = Math.floor(H/2);
   let z = '';
-  et.forEach(e=>{
+  iscaFolhas().forEach(f=>{
     const m = iscaMedidas(c.larg, c.alt, 0, true), d = v => Math.max(1, Math.round(v*dpmm));
     z += '^XA\r\n^CI28\r\n^PW'+W+'\r\n^LL'+H+'\r\n^LH0,0\r\n';
     z += '^FO0,'+(half-2)+'^GB'+W+',4,4^FS\r\n';             // linha exatamente na metade
-    [0, half].forEach(off=>{
+    [[0,f.a],[half,f.b]].forEach(([off,e])=>{
+      if(!e) return;
       iscaLinhasInfo(e).forEach((t,k)=>{
         const fs = iscaFsLinha(m, t, c.larg, k);
         z += `^FO0,${off+d(m.yL[k])}^A0N,${d(fs)},${d(fs)}^FB${W},1,0,C,0^FH^FD${iscaZEnc(t)}^FS\r\n`;
@@ -3969,7 +3981,41 @@ function iscaBaixarZPL(){
   const ts = new Date().toISOString().slice(0,10);
   /* .txt (e não .zpl): no Windows a extensão .zpl é associada ao Windows Media Player (playlist) e o arquivo vira "vídeo" */
   bkBaixar(new Blob([z],{type:'text/plain;charset=utf-8'}), 'iscas_zebra_'+ts+'.txt');
-  toast(iscaEtiquetas().length+' etiqueta(s) geradas em ZPL (ordem: doca menor → maior).','ok');
+  toast(iscaFolhas().length+' etiqueta(s) com 2 cargas cada geradas em ZPL (ordem: doca menor → maior).','ok');
+}
+/* ---------- Word (.docx): 1 página = 1 etiqueta (tamanho configurado, margens 0), 2 cargas por página ---------- */
+function iscaXmlEsc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+async function iscaGerarDocx(){
+  const fl = iscaFolhas(); if(!fl.length) return null;
+  const c = iscaCfg(), TW = Math.round(c.larg/25.4*1440), TH = Math.round(c.alt/25.4*1440);   // mm -> twips
+  const DIV = 40, HALF = Math.floor((TH - DIV - 30)/2);   // 30 twips de folga p/ o Word não criar página em branco
+  const h = [Math.round(HALF*0.29), Math.round(HALF*0.32), Math.round(HALF*0.32)];   // altura exata de PRÉ / DOCA / ONDA
+  const antes = HALF - h[0] - h[1] - h[2];
+  const baseFs = [Math.min(34, h[0]/20*0.80), Math.min(40, h[1]/20*0.80), Math.min(40, h[2]/20*0.80)];   // pt
+  const larPt = TW/20*0.92;
+  const par = (txt, k, first, pgBreak)=>{
+    let fs = baseFs[k]; if(txt) fs = Math.min(fs, larPt/(Math.max(txt.length,4)*0.64));
+    const sz = Math.max(8, Math.floor(fs*2));
+    return `<w:p><w:pPr>${pgBreak?'<w:pageBreakBefore/>':''}<w:spacing w:before="${first?antes:0}" w:after="0" w:line="${h[k]}" w:lineRule="exact"/><w:jc w:val="center"/></w:pPr>`+
+           `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/></w:rPr><w:t xml:space="preserve">${iscaXmlEsc(txt||'')}</w:t></w:r></w:p>`;
+  };
+  const metade = (e, pgBreak)=>{ const L = e ? iscaLinhasInfo(e) : ['','','']; return L.map((t,k)=>par(t,k,k===0,pgBreak&&k===0)).join(''); };
+  const divisor = `<w:p><w:pPr><w:pBdr><w:bottom w:val="dashed" w:sz="8" w:space="0" w:color="000000"/></w:pBdr><w:spacing w:before="0" w:after="0" w:line="${DIV}" w:lineRule="exact"/></w:pPr><w:r><w:rPr><w:sz w:val="2"/></w:rPr><w:t></w:t></w:r></w:p>`;
+  const corpo = fl.map((f,i)=> metade(f.a, i>0) + divisor + metade(f.b, false)).join('');
+  const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${corpo}`+
+    `<w:sectPr><w:pgSz w:w="${TW}" w:h="${TH}"/><w:pgMar w:top="0" w:right="0" w:bottom="0" w:left="0" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+  const zip = new JSZip();
+  zip.file('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+  zip.file('_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+  zip.file('word/document.xml', doc);
+  return zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+}
+async function iscaBaixarWord(){
+  if(!iscaFolhas().length){ toast('Não há etiquetas prontas para gerar.','err'); return; }
+  if(typeof JSZip==='undefined'){ toast('Biblioteca de ZIP não carregou (verifique a internet).','err'); return; }
+  const c = iscaCfg(), blob = await iscaGerarDocx();
+  bkBaixar(blob, 'iscas_etiquetas_'+new Date().toISOString().slice(0,10)+'.docx');
+  toast(iscaFolhas().length+' etiqueta(s) de '+(c.larg/10)+' × '+(c.alt/10)+' cm geradas em Word (2 cargas por etiqueta). Imprima na Zebra TP com margens 0 e escala 100%.','ok');
 }
 function iscaCopiarZPL(){
   const z = iscaZPL(); if(!z){ toast('Não há etiquetas prontas para copiar.','err'); return; }
@@ -3990,7 +4036,7 @@ function iscaImprimir(){
     .lbl{page-break-after:always;break-after:page}
     .lbl:last-child{page-break-after:auto;break-after:auto}
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  </style></head><body>${et.map(e=>iscaLabelHTML(e,c,0)).join('')}</body></html>`;
+  </style></head><body>${iscaFolhas().map(f=>iscaLabelHTML(f,c,0)).join('')}</body></html>`;
   const w = window.open('','_blank');
   if(w){ w.document.open(); w.document.write(html); w.document.close(); w.focus(); setTimeout(()=>w.print(),400); }
   else {
