@@ -496,7 +496,8 @@
         <h2>Transportadoras — docas parametrizadas e prioridade</h2>
         <div class="desc">A transportadora só pode usar as docas dessa faixa — nunca outra doca do CD. A quantidade de docas define quantos veículos cabem por onda; o excedente forma automaticamente novas ondas reaproveitando as mesmas docas. Prioridade: quanto menor o número, mais cedo a carga entra na 1ª onda.</div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;font-size:12.5px;margin:0;" title="Quando a transportadora não tem faixa de docas, usa as docas que sobraram livres em vez de ficar sem doca"><input type="checkbox" id="cfgDocaLivre" onchange="STATE.config.docaLivreSemFaixa=this.checked;saveState();"> Sem faixa → usar doca livre</label>
         <button class="small" onclick="restaurarTransportadoras()" title="Traz de volta transportadoras que foram excluídas (as da lista padrão desta versão e a última excluída)">↩ Restaurar excluídas</button>
         <button class="primary small" onclick="addTransportadora()">+ Transportadora</button>
       </div>
@@ -1140,6 +1141,7 @@ function removeUnidade(idx){
 }
 
 function renderParametros(){
+  const cl = document.getElementById('cfgDocaLivre'); if(cl) cl.checked = STATE.config.docaLivreSemFaixa !== false;
   const uWrap = document.getElementById('unidadesList');
   uWrap.innerHTML = '';
   STATE.config.unidades.forEach((u, idx)=>{
@@ -2381,7 +2383,7 @@ function rodarAlocacao(silencioso){
      primeira doca livre da faixa da sua transportadora na menor onda possível. Se a doca
      já está usada naquela onda por outra carga (ex.: duas transportadoras na mesma doca),
      a carga de menor prioridade é lançada para a onda seguinte. */
-  const fila = [];
+  const fila = [], semFaixa = [];
 
   Object.keys(porTransp).forEach(nomeTransp=>{
     const cargas = porTransp[nomeTransp];
@@ -2390,8 +2392,9 @@ function rodarAlocacao(silencioso){
       return;
     }
     const cfg = STATE.config.transportadoras.find(t=>t.nome===nomeTransp);
-    if(!cfg){
-      cargas.forEach(c=> resultado.push(baseAlocRow(c, nomeTransp, 'ALTERAR', null, 'Transportadora sem faixa de doca parametrizada')));
+    if(!cfg || !(cfg.docaIn>0 && cfg.docaFim>0)){          // sem faixa de docas em Parâmetros
+      const un0 = cfg ? cfg.unidade : (STATE.config.unidades[0]||{}).id;
+      cargas.forEach(c=> semFaixa.push({c, nomeTransp, un: un0}));
       return;
     }
     const unidade = STATE.config.unidades.find(u=>u.id===cfg.unidade);
@@ -2418,11 +2421,39 @@ function rodarAlocacao(silencioso){
     }
   });
 
+  /* TRANSPORTADORAS SEM FAIXA em Parâmetros: depois de alocar todas as parametrizadas, usam o que sobrou livre
+     na unidade (primeiro docas fora de qualquer faixa, depois as demais), da menor onda para a maior. Pode ser desligado em Parâmetros. */
+  let nDocaLivre = 0;
+  if(semFaixa.length){
+    const usar = STATE.config.docaLivreSemFaixa !== false;
+    semFaixa.sort((x,y)=> x.nomeTransp.localeCompare(y.nomeTransp) || menorPreRomaneio(x.c)-menorPreRomaneio(y.c));
+    semFaixa.forEach(it=>{
+      const unidade = STATE.config.unidades.find(u=>u.id===it.un) || STATE.config.unidades[0];
+      if(!usar || !unidade){
+        resultado.push(baseAlocRow(it.c, it.nomeTransp, 'ALTERAR', null, 'Transportadora sem faixa de doca — preencha a faixa em 1 · Parâmetros e rode a alocação')); return;
+      }
+      const emFaixa = new Set();
+      STATE.config.transportadoras.forEach(t=>{ if(t.unidade===unidade.id && t.docaIn>0 && t.docaFim>0) for(let d=t.docaIn; d<=t.docaFim; d++) emFaixa.add(d); });
+      const docas = getDocasDisponiveisUnidade(unidade).slice().sort((a,b)=> (emFaixa.has(a)?1:0)-(emFaixa.has(b)?1:0) || a-b);
+      for(let onda=1; onda<=500; onda++){
+        const doca = docas.find(d=>!ocupado.has(unidade.id+'|'+d+'|'+onda));
+        if(doca!==undefined){
+          ocupado.add(unidade.id+'|'+doca+'|'+onda);
+          const row = baseAlocRow(it.c, it.nomeTransp, 'OK', doca, 'Doca livre — transportadora sem faixa em Parâmetros', onda);
+          row.docaLivre = true; resultado.push(row); nDocaLivre++;
+          return;
+        }
+      }
+      resultado.push(baseAlocRow(it.c, it.nomeTransp, 'ALTERAR', null, 'Sem doca livre disponível na unidade'));
+    });
+  }
+
   STATE.alocacao = resultado;
   saveState();
   atualizarTodasAsAbas();
   const msgAloc = 'Alocação recalculada: '+resultado.length+' carga(s) processada(s)'+(tsPlano.n?' — '+tsPlano.n+' com doca/onda fixada pela base TS':'')+'.'
-    + (transpCriadas.length ? ' Transportadora(s) sem faixa de docas — preencha em 1 · Parâmetros: '+transpCriadas.join(', ')+'.' : '');
+    + (nDocaLivre ? ' '+nDocaLivre+' carga(s) de transportadora sem faixa foram alocadas em docas livres (confira; o ideal é preencher a faixa em 1 · Parâmetros).' : '')
+    + (transpCriadas.length ? ' Transportadora(s) sem faixa de docas: '+transpCriadas.join(', ')+'.' : '');
   if(!silencioso) toast(msgAloc, 'ok');
   return msgAloc;
 }
@@ -3976,7 +4007,7 @@ function pLinhaCarga(it, filialCod, temOutras){
   if((STATE.ts||[]).length){ const t=tsInfoPlaca(a.placa); o['TS SP · LOJAS']=t.lojas.join(' / '); o['TS SP · PRÉ-05']=t.pre05.join(' / '); }
   if(!filialCod) o['FILIAIS']=Array.from(new Set(a.pres.map(p=>nomeFilial(p.filial)))).join(' + ');
   else o['FILIAL']=filialCod;
-  o['OBSERVAÇÃO']= it.pend ? ('SEM DOCA'+(a.motivo?' — '+a.motivo:'')) : '';
+  o['OBSERVAÇÃO']= it.pend ? ('SEM DOCA'+(a.motivo?' — '+a.motivo:'')) : (a.docaLivre && a.status!=='AJUSTADO' ? 'DOCA LIVRE — transportadora sem faixa em Parâmetros' : '');
   o['ALTERADO']= pAlteracaoTxt(a);   // sempre por último
   return o;
 }
