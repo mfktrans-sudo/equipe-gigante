@@ -234,7 +234,7 @@
     padding:5px 10px;border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,.5);white-space:nowrap;transform:translate(10px,10px);}
   table.mx td.mx-adj{box-shadow:inset 0 0 0 2px #f59e0b;}
   table.mx td.mx-ts{box-shadow:inset 0 0 0 2px #0d9488;}
-  table.mx td.mx-tsres{color:#fff;font-size:11px;box-shadow:inset 0 0 0 2px #0d9488;}
+  table.mx td.mx-tsonly{box-shadow:inset 0 0 0 2px #0d9488;}
   @media (max-width:1100px){
     .pf-layout{grid-template-columns:1fr;}
     #pFilialPanel.pf-sticky{position:static;box-shadow:none;}
@@ -733,7 +733,7 @@
       </div>
       <div class="pf-right">
         <div class="mx-title"><b>Mapa de docas × ondas</b>
-          <span class="mx-leg"><i class="mx-sw busy" style="width:auto;padding:0 3px;">VM</i> carga da ferramenta <i class="mx-sw busy" style="width:auto;padding:0 3px;">VM + TS</i> carga que também está na base TS <i class="mx-sw free" style="width:auto;padding:0 3px;color:#fff;">TS</i> só base TS <i class="mx-sw free"></i> livre</span></div>
+          <span class="mx-leg"><i class="mx-sw busy" style="width:auto;padding:0 3px;">VM</i> carga da ferramenta <i class="mx-sw busy" style="width:auto;padding:0 3px;">VM + TS</i> carga que também está na base TS <i class="mx-sw busy" style="width:auto;padding:0 3px;box-shadow:inset 0 0 0 2px #0d9488;">TS</i> reserva da base TS (sem carga) — arraste para mover <i class="mx-sw free"></i> livre</span></div>
         <div class="mx-hint">Arraste uma carga (campo com VM) e solte na doca/onda desejada — se o destino estiver ocupado, as duas trocam de lugar. Ou clique em qualquer campo para mover digitando a doca/onda.</div>
         <div id="pMatriz"></div>
       </div>
@@ -986,7 +986,7 @@ function loadState(){
    por todas as páginas do mesmo domínio (ex.: todos os projetos em usuario.github.io). */
 function usoLocalStorageKB(){
   let t=0;
-  try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); t += (k.length + (localStorage.getItem(k)||'').length)*2; } }catch(e){}
+  try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); t += (k.length + (localStorage.getItem(k)||'').length); } }catch(e){}
   return Math.round(t/1024);
 }
 let _ultimoAvisoSalvar = 0;
@@ -1233,7 +1233,25 @@ function renderCadastroUso(){
   const el = document.getElementById('cadastroUso'); if(!el) return;
   const total = usoLocalStorageKB(), estado = Math.round(JSON.stringify(STATE).length/1024);
   const cheio = total > 4000;
-  el.innerHTML = 'Armazenamento do navegador (este computador): <b style="color:'+(cheio?'var(--red,#c0392b)':'inherit')+'">'+total+' KB de ~5.000 KB</b> · dados desta ferramenta: ~'+estado+' KB. O cadastro de placas fica no Firebase; o restante da operação fica só neste navegador.';
+  el.innerHTML = 'Armazenamento do navegador (este computador): <b style="color:'+(cheio?'var(--red,#c0392b)':'inherit')+'">'+total+' KB de ~5.000 KB</b> · dados desta ferramenta: ~'+estado+' KB. O cadastro de placas fica no Firebase; o restante da operação fica só neste navegador. <button class="small" style="margin-left:6px;" onclick="cadastroVerArmazenamento()">Ver o que ocupa o espaço</button>';
+}
+/* Lista as chaves do localStorage deste site (inclusive de OUTRAS ferramentas hospedadas no mesmo endereço) */
+let _cadChaves = [];
+function cadastroVerArmazenamento(){
+  _cadChaves = [];
+  try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); _cadChaves.push({k, kb: Math.round((k.length+(localStorage.getItem(k)||'').length)/1024)}); } }catch(e){}
+  _cadChaves.sort((a,b)=>b.kb-a.kb);
+  const total = _cadChaves.reduce((a,c)=>a+c.kb,0);
+  let h = '<div style="font-weight:700;margin-bottom:6px;">O que está ocupando o armazenamento deste navegador ('+total+' KB no total)</div>';
+  h += '<div style="color:var(--muted,#888);margin-bottom:8px;">Chaves maiores primeiro. A desta ferramenta é <span class="mono">'+cadEsc(STORAGE_KEY)+'</span>. As demais costumam ser de outras ferramentas hospedadas no mesmo endereço — apague só o que tiver certeza de que pode perder (faça backup antes).</div>';
+  h += _cadChaves.slice(0,12).map((c,i)=>'<div style="display:flex;gap:10px;align-items:center;margin:3px 0;"><span class="mono" style="min-width:70px;text-align:right;">'+c.kb+' KB</span><span class="mono" style="flex:1;word-break:break-all;">'+cadEsc(c.k)+(c.k===STORAGE_KEY?'  (esta ferramenta)':'')+'</span>'+(c.k===STORAGE_KEY?'':'<button class="danger small" onclick="cadastroRemoverChave('+i+')">Apagar</button>')+'</div>').join('');
+  const box = document.getElementById('cadastroResultado'); box.innerHTML = h; box.style.display = 'block';
+}
+function cadastroRemoverChave(i){
+  const c = _cadChaves[i]; if(!c || c.k===STORAGE_KEY) return;
+  if(!confirm('Apagar "'+c.k+'" ('+c.kb+' KB) do armazenamento deste navegador? Se for dado de outra ferramenta, ela perde essas informações neste computador.')) return;
+  try{ localStorage.removeItem(c.k); }catch(e){}
+  renderCadastroUso(); cadastroVerArmazenamento(); saveState();
 }
 function renderCadastro(){
   renderCadastroUso();
@@ -1390,8 +1408,8 @@ function cadastroProcessarPlanilha(buf, nomeArq){
   renderCadastro();
 
   // transportadoras do cadastro que ainda não existem na aba Parâmetros (sem faixa de docas)
-  const paramNomes = new Set(STATE.config.transportadoras.map(t=>String(t.nome||'').trim().toUpperCase()));
-  const semParam = Array.from(new Set(novas.concat(atualizar?[]:[]).map(n=>n.transportadora))).filter(n=>!paramNomes.has(n)).sort();
+  const semParam = garantirTranspParametros(novas.map(n=>n.transportadora)).sort();
+  if(semParam.length) saveState();
 
   let h = '<div style="font-weight:700;margin-bottom:6px;">Planilha '+cadEsc(nomeArq)+'</div>';
   h += '<div>✔ <b>'+novas.length+'</b> placa(s) nova(s) cadastrada(s) · '+lidas+' linha(s) de dados lidas</div>';
@@ -1404,8 +1422,8 @@ function cadastroProcessarPlanilha(buf, nomeArq){
   if(invalidas.length) h += '<div>• '+invalidas.length+' linha(s) ignorada(s) por placa inválida: '+cadEsc(invalidas.slice(0,6).join(', '))+(invalidas.length>6?' …':'')+'</div>';
   if(semTransp.length) h += '<div>• '+semTransp.length+' placa(s) sem transportadora na planilha (ignoradas): '+cadEsc(semTransp.slice(0,6).join(', '))+(semTransp.length>6?' …':'')+'</div>';
   if(recalc) h += '<div>• '+recalc+' carga(s) já consolidada(s) tiveram a transportadora atualizada</div>';
-  if(semParam.length) h += '<div style="margin-top:6px;color:var(--amber,#b9770e);">⚠ Transportadora(s) novas sem faixa de docas na aba Parâmetros: <b>'+cadEsc(semParam.join(', '))+'</b>. Cadastre-as em Parâmetros para a alocação conseguir usá-las.</div>';
-  if(!salvou) h += '<div style="margin-top:6px;color:var(--red,#c0392b);">⚠ As placas estão na tela, mas <b>não foram gravadas</b>: o armazenamento do navegador está cheio. Faça um backup na aba 7 · Backup &amp; Upload e libere espaço (veja o aviso no topo desta aba).</div>';
+  if(semParam.length) h += '<div style="margin-top:6px;color:var(--amber,#b9770e);">⚠ Transportadora(s) novas, já criadas em 1 · Parâmetros com faixa de docas vazia: <b>'+cadEsc(semParam.join(', '))+'</b>. Preencha a doca inicial/final de cada uma e rode a alocação.</div>';
+  if(!salvou) h += '<div style="margin-top:6px;color:var(--red,#c0392b);">⚠ O armazenamento <b>deste navegador</b> está cheio, então a cópia local não foi gravada. O cadastro é salvo no <b>Firebase</b>: confirme que a linha “☁ Cadastro salvo no Firebase” no topo da aba está sem erro. Para liberar espaço aqui, use “Ver o que ocupa o espaço”.</div>';
   const box = document.getElementById('cadastroResultado');
   box.innerHTML = h; box.style.display = 'block';
   toast(novas.length+' placa(s) importada(s) da planilha.'+(salvou?'':' ATENÇÃO: não foi possível salvar no navegador.'), salvou?'ok':'err');
@@ -2240,12 +2258,26 @@ function menorPreRomaneio(carga){
   return nums.length ? Math.min(...nums) : 0;
 }
 
+/* Transportadoras que têm placa no cadastro/cargas mas não existem em Parâmetros: cria a linha (faixa 0–0,
+   a preencher) para ela aparecer em 1 · Parâmetros. A ferramenta NÃO inventa doca. Retorna os nomes criados. */
+function garantirTranspParametros(nomes){
+  const criadas = [], un = STATE.config.unidades[0];
+  const ja = new Set(STATE.config.transportadoras.map(t=>String(t.nome||'').trim().toUpperCase()));
+  Array.from(new Set(nomes)).filter(Boolean).forEach(n=>{
+    if(n==='__SEM_TRANSPORTADORA__' || ja.has(String(n).trim().toUpperCase())) return;
+    const maxP = STATE.config.transportadoras.reduce((m,t)=>Math.max(m, t.prioridade||0), 0);
+    STATE.config.transportadoras.push({nome:n, unidade:un?un.id:'caj1', docaIn:0, docaFim:0, prioridade:maxP+1});
+    ja.add(String(n).trim().toUpperCase()); criadas.push(n);
+  });
+  return criadas;
+}
 function rodarAlocacao(silencioso){
   /* silencioso=true: usado pela consolidação — não mostra toast próprio e devolve a mensagem (ou false se não rodou) */
   if(STATE.cargas.length===0){ if(!silencioso) toast('Não há cargas consolidadas.', 'err'); return false; }
   const nAjustes = STATE.alocacao.filter(a=>a.status==='AJUSTADO').length;
   if(nAjustes && !confirm(nAjustes+' carga(s) foram ajustadas manualmente no mapa de docas. Recalcular a alocação descarta esses ajustes. Continuar?')) return false;
   revincularTransportadoras();   // garante que placas cadastradas depois da consolidação sejam reconhecidas
+  const transpCriadas = garantirTranspParametros(STATE.cargas.map(c=>c.transportadora));
 
   const resultado = [];
   const ocupado = new Set();   // 'unidade|doca|onda'
@@ -2283,7 +2315,8 @@ function rodarAlocacao(silencioso){
     const docasFaixa = [];
     for(let d=cfg.docaIn; d<=cfg.docaFim; d++){ if(!docasUnidade || docasUnidade.has(d)) docasFaixa.push(d); }
     if(docasFaixa.length===0){
-      cargas.forEach(c=> resultado.push(baseAlocRow(c, nomeTransp, 'ALTERAR', null, 'Nenhuma doca disponível na faixa parametrizada para essa transportadora')));
+      const semFaixa = !(cfg.docaIn>0 && cfg.docaFim>0);
+      cargas.forEach(c=> resultado.push(baseAlocRow(c, nomeTransp, 'ALTERAR', null, semFaixa ? 'Transportadora sem faixa de doca — preencha a faixa em 1 · Parâmetros e rode a alocação' : 'Nenhuma doca disponível na faixa parametrizada para essa transportadora')));
       return;
     }
     cargas.forEach(c=> fila.push({c, nomeTransp, docasFaixa, un: cfg.unidade}));
@@ -2304,7 +2337,8 @@ function rodarAlocacao(silencioso){
   STATE.alocacao = resultado;
   saveState();
   atualizarTodasAsAbas();
-  const msgAloc = 'Alocação recalculada: '+resultado.length+' carga(s) processada(s)'+(tsPlano.n?' — '+tsPlano.n+' com doca/onda fixada pela base TS':'')+'.';
+  const msgAloc = 'Alocação recalculada: '+resultado.length+' carga(s) processada(s)'+(tsPlano.n?' — '+tsPlano.n+' com doca/onda fixada pela base TS':'')+'.'
+    + (transpCriadas.length ? ' Transportadora(s) sem faixa de docas — preencha em 1 · Parâmetros: '+transpCriadas.join(', ')+'.' : '');
   if(!silencioso) toast(msgAloc, 'ok');
   return msgAloc;
 }
@@ -2844,7 +2878,7 @@ function renderMatrizDocas(){
     h += `<tr><td class="mx-doca">${d}</td>`;
     for(let o=1;o<=nO;o++){
       const oc = mxOcupantes(d,o);
-      if(!oc.length && tsRes[d+'|'+o]){ h += `<td class="mx-cell mx-free mx-tsres" data-doca="${d}" data-onda="${o}" title="Doca ${d} · ${o}ª onda reservada pela base TS (placa ${tsRes[d+'|'+o]}, sem carga na ferramenta). Clique ou solte uma carga aqui." onclick="abrirCelulaMatriz(${d},${o})">TS</td>`; continue; }
+      if(!oc.length && tsRes[d+'|'+o]){ h += `<td class="mx-cell mx-busy mx-ts mx-tsonly" data-doca="${d}" data-onda="${o}" data-tsplaca="${pEsc(tsRes[d+'|'+o])}" title="Doca ${d} · ${o}ª onda reservada pela base TS (placa ${pEsc(tsRes[d+'|'+o])}, sem carga na ferramenta).\nArraste para mover a reserva ou clique para alocar uma carga aqui." onclick="abrirCelulaMatriz(${d},${o})">TS</td>`; continue; }
       if(!oc.length){ h += `<td class="mx-cell mx-free" data-doca="${d}" data-onda="${o}" title="Doca ${d} · ${o}ª onda — livre. Clique ou solte uma carga aqui." onclick="abrirCelulaMatriz(${d},${o})"></td>`; continue; }
       const tip = oc.map(x=>`${x.a.placa} · ${x.a.transportadora||'sem transportadora'} · ${x.a.pres.length} PRÉ · ${pEntregas(x.a)} ent.`).join('\n');
       const cls = 'mx-cell mx-busy'+(oc.some(x=>x.a.ts||tsMapa[placaKey(x.a.placa)])?' mx-ts':'')+(oc.length>1?' mx-dup':'')+(oc.some(x=>x.a.status==='AJUSTADO')?' mx-adj':'');
@@ -2872,6 +2906,30 @@ function mxMoverCarga(idx, doca, onda){
   saveState(); renderPainel();
   if(document.getElementById('view-dashboard').classList.contains('active')) renderDashboard();
   toast(oc ? `Troca feita: ${a.placa} → doca ${doca}/${onda}ª onda · ${oc.a.placa} → doca ${dOld}/${oOld}ª onda.` : `Carga ${a.placa}: doca ${doca}, ${onda}ª onda.`,'ok');
+  return true;
+}
+/* move a reserva da base TS (placa sem carga na ferramenta) para outra doca/onda.
+   Destino com carga -> a carga ocupa a posição antiga da reserva; destino com outra reserva -> trocam. */
+function mxMoverReservaTS(placa, doca, onda){
+  const k = placaKey(placa), col = (STATE.config.tsColuna==='docaTS') ? 'docaTS' : 'doca';
+  const info = tsMapaPorPlaca()[k]; if(!info || info.doca==null) return false;
+  if(!docasTodas().includes(doca)){ toast('Doca '+doca+' não existe ou está indisponível.','err'); return false; }
+  const dOld = info.doca, oOld = info.onda || 1;
+  if(dOld===doca && oOld===onda) return false;
+  const setPos = (pl, d, o)=>{ const kk = placaKey(pl); (STATE.ts||[]).forEach(r=>{ if(placaKey(r.placa)===kk) r[col] = {doca:d, onda:o}; }); };
+  const cargaDest = mxOcupantes(doca, onda)[0], resDest = tsReservas()[doca+'|'+onda];
+  if(cargaDest){
+    mxMarcarOrigem(cargaDest.a);
+    cargaDest.a.docaManual = dOld; cargaDest.a.onda = oOld; cargaDest.a.status = 'AJUSTADO'; cargaDest.a.motivo = '';
+  } else if(resDest && placaKey(resDest)!==k){
+    setPos(resDest, dOld, oOld);
+  }
+  setPos(k, doca, onda);
+  saveState(); renderPainel();
+  if(document.getElementById('view-dashboard').classList.contains('active')) renderDashboard();
+  toast(cargaDest ? `Reserva TS ${k} → doca ${doca}/${onda}ª onda · ${cargaDest.a.placa} → doca ${dOld}/${oOld}ª onda.`
+        : resDest ? `Reservas TS trocadas: ${k} → doca ${doca}/${onda}ª onda · ${resDest} → doca ${dOld}/${oOld}ª onda.`
+        : `Reserva TS ${k}: doca ${doca}, ${onda}ª onda.`, 'ok');
   return true;
 }
 function mxDesalocar(idx){
@@ -2913,9 +2971,9 @@ function mxDesalocar(idx){
   }
   function iniciar(){
     drag.ativo = true;
-    const a = STATE.alocacao[drag.idx];
+    const a = drag.tsp ? null : STATE.alocacao[drag.idx];
     ghost = document.createElement('div'); ghost.id = 'mxGhost';
-    ghost.textContent = '🚚 '+(a?a.placa:'carga');
+    ghost.textContent = '🚚 '+(drag.tsp ? drag.tsp+' (TS)' : (a?a.placa:'carga'));
     document.body.appendChild(ghost);
     document.body.classList.add('mx-arrastando');
     drag.td.classList.add('mx-dragsrc');
@@ -2933,8 +2991,9 @@ function mxDesalocar(idx){
     if(ev.button!==0 || ev.pointerType==='touch') return;          // toque na tela: mantém clique/modal (não bloqueia a rolagem)
     const td = ev.target.closest && ev.target.closest('#pMatriz td.mx-busy');
     if(!td) return;
-    const idx = idxDaCelula(td); if(idx==null) return;
-    drag = {td, idx, x0:ev.clientX, y0:ev.clientY, x:ev.clientX, y:ev.clientY, ativo:false};
+    const tsp = td.dataset.tsplaca || null;
+    const idx = tsp ? null : idxDaCelula(td); if(idx==null && !tsp) return;
+    drag = {td, idx, tsp, x0:ev.clientX, y0:ev.clientY, x:ev.clientX, y:ev.clientY, ativo:false};
   });
   document.addEventListener('pointermove', ev=>{
     if(!drag) return;
@@ -2952,13 +3011,13 @@ function mxDesalocar(idx){
   document.addEventListener('pointerup', ev=>{
     if(!drag) return;
     if(!drag.ativo){ drag = null; return; }                          // foi só um clique
-    const idx = drag.idx, origem = drag.td;
+    const idx = drag.idx, origem = drag.td, tsp = drag.tsp;
     const alvo = celulaSob(ev.clientX, ev.clientY);
     liberarClique();
     encerrar();
     if(alvo && alvo !== origem){
       const doca = parseInt(alvo.dataset.doca), onda = parseInt(alvo.dataset.onda);
-      if(!isNaN(doca) && !isNaN(onda)) mxMoverCarga(idx, doca, onda);
+      if(!isNaN(doca) && !isNaN(onda)){ if(tsp) mxMoverReservaTS(tsp, doca, onda); else mxMoverCarga(idx, doca, onda); }
     }
   });
   document.addEventListener('keydown', ev=>{ if(ev.key==='Escape' && drag && drag.ativo){ liberarClique(); encerrar(); } });
