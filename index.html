@@ -3534,7 +3534,15 @@ function ilCarregarBuffer(nome, buf){
       cand.push({i, dt}); if(dt) cont[dt] = (cont[dt]||0)+1;
     }
     let filtro = null, sel = cand;
-    if(Object.keys(cont).length > 1){
+    /* REGRA PRINCIPAL (arquivo acumulado de vários dias): só as cargas do dia estão com a coluna Placa VAZIA.
+       Parte da última linha com dados e sobe enquanto a Placa estiver vazia; para na 1ª linha que já tem placa. */
+    let ini = cand.length;
+    while(ini>0 && !get(aoa[cand[ini-1].i]||[], c.placa)) ini--;
+    if(ini>0 && ini<cand.length){
+      sel = cand.slice(ini);
+      filtro = {modo:'bloco', total:cand.length, ignoradas:ini, xlParada: rg.s.r+cand[ini-1].i+1};
+    } else if(Object.keys(cont).length > 1){
+      /* plano B (sem linhas com placa acima, ou a última linha já tem placa): escolhe o dia pela coluna Data */
       const esc = ilEscolherData(nome, cont);
       sel = cand.filter(x=>x.dt===esc.iso);
       filtro = {iso:esc.iso, de:esc.de, total:cand.length, dias:Object.keys(cont).length};
@@ -3804,7 +3812,7 @@ function ilRender(){
   const rep = L.rows.filter(r=>r.placa && uso[placaKey(r.placa)]>1).length;
   const semDoca = L.rows.filter(r=>r.placa && ilInfoPlaca(r.placa).doca==null).length;
   const stat = (n,l,cor)=>`<div class="stat"><div class="num"${cor?` style="color:var(--${cor})"`:''}>${n}</div><div class="lbl">${l}</div></div>`;
-  let h = `<div class="desc" style="margin-bottom:10px;max-width:none;">Arquivo: <b>${pEsc(L.nome)}</b> · aba ${pEsc(L.folha)} · a placa será gravada na coluna <b>${pEsc(L.colPlaca)}</b>.${L.filtro?` O arquivo acumula <b>${L.filtro.dias}</b> dias (${L.filtro.total} linhas); usei só as <b>${L.rows.length}</b> iscas de <b>${pEsc(isoParaBR(L.filtro.iso))}</b> (data escolhida pelo ${pEsc(L.filtro.de)}).`:''}</div>`;
+  let h = `<div class="desc" style="margin-bottom:10px;max-width:none;">Arquivo: <b>${pEsc(L.nome)}</b> · aba ${pEsc(L.folha)} · a placa será gravada na coluna <b>${pEsc(L.colPlaca)}</b>.${L.filtro?(L.filtro.modo==='bloco'?` Li de baixo para cima até a primeira linha com placa preenchida (linha <b>${L.filtro.xlParada}</b> da planilha): <b>${L.rows.length}</b> iscas do dia; ${L.filtro.ignoradas} linhas de cargas anteriores ignoradas (${L.filtro.total} no total).`:` O arquivo acumula <b>${L.filtro.dias}</b> dias (${L.filtro.total} linhas); usei só as <b>${L.rows.length}</b> iscas de <b>${pEsc(isoParaBR(L.filtro.iso))}</b> (data escolhida pelo ${pEsc(L.filtro.de)}).`):''}</div>`;
   if(!temCargas) h += '<div class="badge alert" style="display:block;margin-bottom:10px;padding:8px;">Ainda não há cargas carregadas. Carregue GAN, Log de NF e Região (aba 3) e rode a alocação; depois clique em “Redistribuir placas”.</div>';
   h += `<div class="grid cols-4" style="margin-bottom:14px;">${stat(L.rows.length,'iscas no arquivo')}${stat(comPlaca,'com placa','teal')}${stat(L.rows.length-comPlaca,'sem placa','red')}${stat(rep,'placa repetida','amber')}</div>`;
   /* mapa área -> região */
