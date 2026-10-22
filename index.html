@@ -789,7 +789,8 @@
   <div class="panel">
     <div class="panel-head"><div><h2>Etiqueta Zebra</h2><div class="desc">Cada etiqueta é dividida exatamente ao meio por uma linha de corte/dobra, com PRÉ, DOCA e ONDA em destaque nas duas metades. Padrão: 100 × 150 mm (4×6 pol).</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        <button class="primary" onclick="iscaBaixarZPL()">⬇ Baixar ZPL (Zebra)</button>
+        <button class="primary" onclick="iscaBaixarZPL()">⬇ Baixar ZPL (Zebra) .txt</button>
+        <button onclick="iscaCopiarZPL()">📋 Copiar ZPL</button>
         <button class="primary" onclick="iscaImprimir()">🖨 Imprimir / salvar PDF</button></div></div>
     <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
       <div><label>Largura (mm)</label><input id="iscaLarg" type="number" min="30" max="300" style="width:90px" onchange="iscaSalvarCfg()"></div>
@@ -3966,8 +3967,19 @@ function iscaZPL(){
 function iscaBaixarZPL(){
   const z = iscaZPL(); if(!z){ toast('Não há etiquetas prontas para gerar.','err'); return; }
   const ts = new Date().toISOString().slice(0,10);
-  bkBaixar(new Blob([z],{type:'text/plain;charset=utf-8'}), 'iscas_zebra_'+ts+'.zpl');
+  /* .txt (e não .zpl): no Windows a extensão .zpl é associada ao Windows Media Player (playlist) e o arquivo vira "vídeo" */
+  bkBaixar(new Blob([z],{type:'text/plain;charset=utf-8'}), 'iscas_zebra_'+ts+'.txt');
   toast(iscaEtiquetas().length+' etiqueta(s) geradas em ZPL (ordem: doca menor → maior).','ok');
+}
+function iscaCopiarZPL(){
+  const z = iscaZPL(); if(!z){ toast('Não há etiquetas prontas para copiar.','err'); return; }
+  const ok = ()=>toast('ZPL copiado. Cole no Zebra Setup Utilities (Open Communication with Printer) ou envie em modo RAW.','ok');
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(z).then(ok,()=>iscaCopiarZPLFallback(z,ok)); }
+  else iscaCopiarZPLFallback(z,ok);
+}
+function iscaCopiarZPLFallback(z,ok){
+  const t=document.createElement('textarea'); t.value=z; t.style.cssText='position:fixed;opacity:0;'; document.body.appendChild(t); t.select();
+  try{ document.execCommand('copy'); ok(); }catch(e){ toast('Não foi possível copiar; use o botão de download.','err'); } t.remove();
 }
 function iscaImprimir(){
   const et = iscaEtiquetas(); if(!et.length){ toast('Não há etiquetas prontas para imprimir.','err'); return; }
