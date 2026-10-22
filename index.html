@@ -3483,9 +3483,16 @@ function ilColNum(L){ let n=0; String(L).split('').forEach(ch=>{ n=n*26+(ch.char
 function ilColLetra(n){ let s=''; while(n>0){ const r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=Math.floor((n-1)/26); } return s; }
 
 /* Área de entrega = cidade; a capital é dividida por zona (2 primeiros dígitos do CEP) */
-function ilAreaDe(cidade, cep){
+function ilAreaDe(cidade, cep, bairro){
   const c = ilNorm(cidade) || 'SEM CIDADE';
   const d = String(cep||'').replace(/\D/g,'');
+  if(c==='SAO PAULO'){
+    const cods = ilCodigosDoBairro(bairro);
+    if(cods.length){
+      cods.sort((a,b)=>a-b);
+      return {key:'SAO PAULO|T'+cods.join('-'), rot:'São Paulo · '+cods.map(x=>ilTerrNome(x)||('território '+x)).join('  |  ')+' (território '+cods.join(' / ')+')'};
+    }
+  }
   if(c==='SAO PAULO' && d.length>=2){
     const p = d.slice(0,2);
     return {key:'SAO PAULO|'+p, rot:'São Paulo · '+(IL_ZONAS[p]||('CEP '+p))+' (CEP '+p+')'};
@@ -3563,7 +3570,7 @@ function ilCarregarBuffer(nome, buf){
     sel.forEach(({i})=>{
       const r = aoa[i]||[];
       const cliente=get(r,c.cliente), equip=get(r,c.equip);
-      const ar = ilAreaDe(get(r,c.cidade), get(r,c.cep));
+      const ar = ilAreaDe(get(r,c.cidade), get(r,c.cep), get(r,c.bairro));
       rows.push({xl: rg.s.r+i+1, seq:get(r,c.seq), cliente, cep:get(r,c.cep), bairro:get(r,c.bairro), cidade:get(r,c.cidade),
                  equip, nf:get(r,c.nf), key:ar.key, rot:ar.rot, placa:'', manual:false, placaOriginal:get(r,c.placa)});
     });
@@ -3578,6 +3585,8 @@ function ilCarregarBuffer(nome, buf){
   return false;
 }
 
+/* Territórios padrão (planilha Regiões VM): código → nome da região e lista de cidades/bairros */
+const IL_TERR_PADRAO = {"1": {"n": "ALTO DE PINHEIROS / VL. LEOPOLDINA", "c": ["ALTO DE PINHEIROS", "VL. LEOPOLDINA"]}, "2": {"n": "PINHEIROS / VL. MADALENA", "c": ["PINHEIROS", "VL. MADALENA"]}, "3": {"n": "BARRA FUNDA / PERDIZES / LAPA", "c": ["BARRA FUNDA", "PERDIZES", "LAPA"]}, "4": {"n": "HIGIENOPOLIS / CONSOLAÇÃO", "c": ["HIGIENOPOLIS", "CONSOLAÇÃO"]}, "5": {"n": "JD. PAULISTA", "c": ["JD. PAULISTA"]}, "6": {"n": "SANTA CECILIA / BOM RETIRO / REPUBLICA / SÉ", "c": ["SANTA CECILIA", "BOM RETIRO", "REPUBLICA", "SÉ"]}, "7": {"n": "PARI / BRÁS / MOOCA", "c": ["PARI", "BRÁS", "MOOCA"]}, "8": {"n": "MOOCA / ALTO DA MOOCA", "c": ["MOOCA", "ALTO DA MOOCA"]}, "9": {"n": "BELA VISTA", "c": ["BELA VISTA"]}, "10": {"n": "LIBERDADE / CAMBUCI / VL. MARIANA", "c": ["LIBERDADE", "CAMBUCI", "VL. MARIANA"]}, "11": {"n": "IPIRANGA / CURSINO", "c": ["IPIRANGA", "CURSINO"]}, "12": {"n": "SAUDE", "c": ["SAUDE"]}, "13": {"n": "PARAISO / VL. MARIANA", "c": ["PARAISO", "VL. MARIANA"]}, "14": {"n": "MOEMA / INDIANOPOLIS", "c": ["MOEMA", "INDIANOPOLIS"]}, "15": {"n": "SAUDE / ST. CRUZ", "c": ["SAUDE", "ST. CRUZ"]}, "16": {"n": "ITAIN BIBI", "c": ["ITAIM BIBI"]}, "17": {"n": "SÃO CAETANO", "c": ["SÃO CAETANO"]}, "18": {"n": "TAUBATÉ / CAMPOS DO JORDÃO", "c": ["TAUBATÉ", "CAMPOS DO JORDÃO"]}, "19": {"n": "SÃO BERNADO DO CAMPO - CENTRO", "c": ["SÃO BERNARDO DO CAMPO", "CENTRO"]}, "20": {"n": "SANTO ANDRÉ - CENTRO", "c": ["SANTO ANDRÉ", "CENTRO"]}, "21": {"n": "SANTO ANDRÉ", "c": ["SANTO ANDRÉ"]}, "22": {"n": "TATUAPÉ", "c": ["TATUAPÉ"]}, "23": {"n": "VL. PRUDENTE / SÃO LUCAS", "c": ["VL. PRUDENTE", "SÃO LUCAS"]}, "24": {"n": "JACAREI / SÃO JOSÉ DOS CAMPOS", "c": ["JACAREI", "SÃO JOSÉ DOS CAMPOS"]}, "25": {"n": "AGUA RASA / SAPOPEMBA", "c": ["AGUA RASA", "SAPOPEMBA"]}, "26": {"n": "CARRÃO / ARICANDUVA", "c": ["CARRÃO", "ARICANDUVA"]}, "27": {"n": "PENHA / PONTE RASA / ERMELINO MATARAZO", "c": ["PENHA", "PONTE RASA", "ERMELINO MATARAZO"]}, "28": {"n": "VL. MATILDE / CID. LIDER", "c": ["VL. MATILDE", "CID. LIDER"]}, "29": {"n": "MAUA / RIBEIRÃO PIRES / RIO GR. DA SERRA", "c": ["MAUA", "RIBEIRÃO PIRES", "RIO GR. DA SERRA"]}, "30": {"n": "SÃO MATEUS / SÃO RAFAEL", "c": ["SÃO MATEUS", "SÃO RAFAEL"]}, "31": {"n": "ITAIM PL. / LAJEADO / ITAQUERA / GUAIANASES", "c": ["ITAIM PL.", "LAJEADO", "ITAQUERA", "GUAIANASES"]}, "32": {"n": "ITAQUAQUECETUBA / POÁ / FERRAZ / SUZANO", "c": ["ITAQUAQUECETUBA", "POÁ", "FERRAZ", "SUZANO"]}, "33": {"n": "GUARULHOS CENTRO / AEROPORTO", "c": ["GUARULHOS CENTRO", "AEROPORTO"]}, "34": {"n": "GUARULHOS", "c": ["GUARULHOS"]}, "35": {"n": "TUCURUVI / JAÇANA / TREMEMBÉ", "c": ["TUCURUVI", "JAÇANA", "TREMEMBÉ"]}, "36": {"n": "VL. GUILHERME / VL. MEDEIROS / VL. MARIA", "c": ["VL. GUILHERME", "VL. MEDEIROS", "VL. MARIA"]}, "37": {"n": "CASA VERDE / SANTANA / TUCURUVI", "c": ["CASA VERDE", "SANTANA", "TUCURUVI"]}, "38": {"n": "FREGUESIA DO Ó / LIMÃO / BRASILANDIA / MANDAQUI", "c": ["FREGUESIA DO Ó", "LIMÃO", "BRASILANDIA", "MANDAQUI"]}, "39": {"n": "PIRITUBA / JARAGUA / PERUS", "c": ["PIRITUBA", "JARAGUA", "PERUS"]}, "40": {"n": "SÃO VICENTE / PRAIA GRANDE / CUBATÃO", "c": ["SÃO VICENTE", "PRAIA GRANDE", "CUBATÃO"]}, "41": {"n": "SANTOS", "c": ["SANTOS"]}, "42": {"n": "GUARUJÁ", "c": ["GUARUJÁ"]}, "43": {"n": "BERTIOGA", "c": ["BERTIOGA"]}, "44": {"n": "SÃO SEBASTIÃO / ILHA BELA", "c": ["SÃO SEBASTIÃO", "ILHA BELA"]}, "45": {"n": "CARAGUATATUBA / UBATUBA", "c": ["CARAGUATATUBA", "UBATUBA"]}, "46": {"n": "MOGI DAS CRUZES / BIRITIBA MIRIM / SALESÓPOLIS", "c": ["MOGI DAS CRUZES", "BIRITIBA MIRIM", "SALESÓPOLIS"]}, "47": {"n": "ARUJÁ / SANTA ISABEL / GUARAREMA / ASNTA BRANCA", "c": ["ARUJÁ", "SANTA ISABEL", "GUARAREMA", "SANTA BRANCA"]}, "48": {"n": "MAIRIPORÃ / CAIEIRAS / CAJAMAR", "c": ["MAIRIPORÃ", "CAIEIRAS", "CAJAMAR"]}, "49": {"n": "ATIBAIA / BRAGANÇA PL. / JARINU / ITATIBA", "c": ["ATIBAIA", "BRAGANÇA PL.", "JARINU", "ITATIBA"]}, "50": {"n": "SACOMÃ", "c": ["SACOMÃ"]}, "51": {"n": "JABAQUARA", "c": ["JABAQUARA"]}, "52": {"n": "SÃO BERNADO DO CAMPO / DIADEMA", "c": ["SÃO BERNARDO DO CAMPO", "DIADEMA"]}, "53": {"n": "CAMPO GRANDE / CID. ADEMAR / PEDREIRA", "c": ["CAMPO GRANDE", "CID. ADEMAR", "PEDREIRA"]}, "54": {"n": "GRAJAÚ / CID. DUTRA / PARELHEIROS", "c": ["GRAJAÚ", "CID. DUTRA", "PARELHEIROS"]}, "55": {"n": "SANTO AMARO", "c": ["SANTO AMARO"]}, "56": {"n": "BROOKLIN PAULISTA / CAMPO BELO", "c": ["BROOKLIN PAULISTA", "CAMPO BELO"]}, "57": {"n": "MORUNBI / VILA ANDRADE", "c": ["MORUMBI", "VILA ANDRADE"]}, "58": {"n": "JD. ANGELA / ITAPECIRICA DA SERRA / EMBU", "c": ["JD. ANGELA", "ITAPECERICA DA SERRA", "EMBU"]}, "59": {"n": "VL. SONIA / PARAISÓPOLIS", "c": ["VL. SONIA", "PARAISÓPOLIS"]}, "60": {"n": "TABOÃO DA SERRA / CAMPO LIMPO", "c": ["TABOÃO DA SERRA", "CAMPO LIMPO"]}, "61": {"n": "RAPOSO / MORUMBI", "c": ["RAPOSO", "MORUMBI"]}, "62": {"n": "JARAGUA / RIO PEQUENO / BUTANTÃ", "c": ["JARAGUA", "RIO PEQUENO", "BUTANTÃ"]}, "63": {"n": "ANHANGUERA / OSASCO", "c": ["ANHANGUERA", "OSASCO"]}, "64": {"n": "CARAPICUIBA / COTIA", "c": ["CARAPICUIBA", "COTIA"]}, "65": {"n": "BARUERI / CARAPICUBA / JANDIRA / ITAPEVI", "c": ["BARUERI", "CARAPICUIBA", "JANDIRA", "ITAPEVI"]}, "66": {"n": "ALPHAVILLE / TAMBORÉ / SANTANA DE PARNAIBA", "c": ["ALPHAVILLE", "TAMBORÉ", "SANTANA DE PARNAIBA"]}, "67": {"n": "VARGEM GRANDE / IBIUNA / SÃO ROQUE", "c": ["VARGEM GRANDE", "IBIUNA", "SÃO ROQUE"]}, "68": {"n": "SOROCABA / ITU / PORTO FELIZ", "c": ["SOROCABA", "ITU", "PORTO FELIZ"]}, "69": {"n": "SUMARÉ / HORTOLANDIA / MONTE MOR / INDAIATUBA", "c": ["SUMARÉ", "HORTOLANDIA", "MONTE MOR", "INDAIATUBA"]}, "70": {"n": "AMERICANA NOVA ODESSA / PIRACICABA / LIMEIRA", "c": ["AMERICANA NOVA ODESSA", "PIRACICABA", "LIMEIRA"]}, "71": {"n": "PAULINIA / HOLAMBRA / JAGUARIUNA / PEDREIRA", "c": ["PAULINIA", "HOLAMBRA", "JAGUARIUNA", "PEDREIRA"]}, "72": {"n": "CAMPINAS", "c": ["CAMPINAS"]}, "73": {"n": "CAMPINAS CENTRO", "c": ["CAMPINAS CENTRO"]}, "74": {"n": "LOUVEIRA / VINHEDO / VALINHOS", "c": ["LOUVEIRA", "VINHEDO", "VALINHOS"]}, "75": {"n": "CAMPO LIMPO PL. / VARZEA PL. / JUNDIAI / ITUPEVA", "c": ["CAMPO LIMPO PL.", "VARZEA PL.", "JUNDIAI", "ITUPEVA"]}};
 /* ---------- regiões das cargas ---------- */
 function ilRegioes(){
   const s = new Set(); (STATE.cargas||[]).forEach(c=>{ if(c.regiao && c.placa) s.add(String(c.regiao)); });
@@ -3586,7 +3595,31 @@ function ilRegioes(){
 function ilMapa(){ STATE.config = STATE.config||{}; STATE.config.iscaMapa = STATE.config.iscaMapa||{}; return STATE.config.iscaMapa; }
 /* sugere a região pelo nome (ex.: cidade GUARULHOS ↔ região "GUARULHOS"; zona SUL ↔ região "ZONA SUL"); só se houver uma única candidata */
 /* ---------- lista de territórios (código → cidades; várias cidades na mesma linha separadas por "/") ---------- */
-function ilTerrMapa(){ STATE.config = STATE.config||{}; STATE.config.iscaTerritorios = STATE.config.iscaTerritorios||{}; return STATE.config.iscaTerritorios; }
+function ilTerrPadraoNorm(){
+  if(!ilTerrPadraoNorm.c){ const o={}; Object.keys(IL_TERR_PADRAO).forEach(k=>{ o[k]=IL_TERR_PADRAO[k].c.map(ilNorm).filter(Boolean); }); ilTerrPadraoNorm.c=o; }
+  return ilTerrPadraoNorm.c;
+}
+/* lista carregada pelo usuário (se houver) tem prioridade; senão vale a lista padrão embutida */
+function ilTerrMapa(){
+  STATE.config = STATE.config||{};
+  const T = STATE.config.iscaTerritorios;
+  return (T && Object.keys(T).length) ? T : ilTerrPadraoNorm();
+}
+function ilTerrCustom(){ const T=(STATE.config||{}).iscaTerritorios; return !!(T && Object.keys(T).length); }
+function ilTerrNome(cod){ const p=IL_TERR_PADRAO[cod]; return p?p.n:''; }
+function ilAbrev(s){ return ' '+s+' '; }
+function ilNormBairro(s){ return ilNorm(s).replace(/\bVL\b/g,'VILA').replace(/\bJD\b/g,'JARDIM').replace(/\bCID\b/g,'CIDADE').replace(/\bST\b/g,'SANTA').replace(/\bPQ\b/g,'PARQUE'); }
+/* territórios de São Paulo (capital) que contêm o bairro: igualdade exata primeiro; depois nome do território contido no bairro */
+function ilCodigosDoBairro(bairro){
+  const nb = ilNormBairro(bairro); if(!nb) return [];
+  const T = ilTerrMapa(), ex=[], par=[];
+  Object.keys(T).forEach(cod=>{
+    const ns = (T[cod]||[]).map(ilNormBairro);
+    if(ns.indexOf(nb)>=0) ex.push(cod);
+    else if(ns.some(n=>n.length>=5 && ilAbrev(nb).indexOf(ilAbrev(n))>=0)) par.push(cod);
+  });
+  return ex.length?ex:par;
+}
 function ilDist1(a,b){   /* distância de edição (tolera erro de digitação de 1 letra, ex.: CARAPICUCA) */
   if(a===b) return 0; if(Math.abs(a.length-b.length)>1) return 2;
   let i=0; while(i<a.length && i<b.length && a[i]===b[i]) i++;
@@ -3627,11 +3660,12 @@ function ilCarregarTerritorios(nome, buf){
   renderIscas();
   return Object.keys(T).length;
 }
-function ilLimparTerritorios(){ if(!confirm('Remover a lista de territórios carregada?')) return; STATE.config.iscaTerritorios = {}; saveState(); renderIscas(); }
+function ilLimparTerritorios(){ if(!confirm('Remover a lista carregada e voltar para a lista padrão embutida?')) return; STATE.config.iscaTerritorios = {}; saveState(); renderIscas(); }
 /* região sugerida por território: entre as placas cujo Território (nº no fim da linha do arquivo de Região) está nos códigos da cidade,
    escolhe a região com mais placas; empate = sem sugestão (você escolhe) */
 function ilSugerirPorTerritorio(key){
-  const cods = ilCodigosDaCidade(key); if(!cods.length) return '';
+  const pk = String(key).split('|')[1];
+  const cods = (pk && pk.charAt(0)==='T') ? pk.slice(1).split('-') : ilCodigosDaCidade(key); if(!cods.length) return '';
   const cont = {}, vistas = new Set();
   (STATE.cargas||[]).forEach(c=>{
     if(!c.regiao || !c.placa || c.territorio==null || cods.indexOf(String(parseInt(c.territorio,10)))<0) return;
@@ -3643,7 +3677,7 @@ function ilSugerirPorTerritorio(key){
 }
 function ilSugerir(key){
   const regs = ilRegioes(); const parts = key.split('|'); const nCid = ilNorm(parts[0]);
-  if(!parts[1]){ const t = ilSugerirPorTerritorio(key); if(t) return t; }
+  if(!parts[1] || parts[1].charAt(0)==='T'){ const t = ilSugerirPorTerritorio(key); if(t) return t; if(parts[1]) return ''; }
   let cand;
   if(parts[1]){
     const z = ilNorm(IL_ZONAS[parts[1]]||'').replace(/^ZONA /,'').replace(/ EXT.*$/,'');
@@ -3829,13 +3863,13 @@ function ilRender(){
   const areas = {}; L.rows.forEach(r=>{ const a = areas[r.key] = areas[r.key]||{rot:r.rot, n:0}; a.n++; });
   const m = ilMapa();
   const nTerr = Object.keys(ilTerrMapa()).length;
-  h += `<div class="desc" style="margin-bottom:10px;max-width:none;">${nTerr?`Lista de territórios carregada: <b>${nTerr}</b> códigos (a região é sugerida pelo código da cidade). <a href="#" onclick="ilLimparTerritorios();return false;" style="color:var(--teal)">remover lista</a>`:'Para a ferramenta sugerir a região pelo código do território (ex.: 65 = Barueri / Carapicuíba / Jandira / Itapevi), suba a planilha de territórios (código → cidades) no mesmo campo “Ou suba um arquivo”.'}</div>`;
+  h += `<div class="desc" style="margin-bottom:10px;max-width:none;">${ilTerrCustom()?`Lista de territórios carregada: <b>${nTerr}</b> códigos (a região é sugerida pelo código da cidade/bairro). <a href="#" onclick="ilLimparTerritorios();return false;" style="color:var(--teal)">voltar para a lista padrão</a>`:nTerr?`Lista de territórios padrão embutida (<b>${nTerr}</b> códigos, planilha Regiões VM): a região de cada área é sugerida pelo código do território (cidade ou, em São Paulo, bairro) cruzado com os arquivos de Região da aba 3. Para trocar, suba outra planilha de territórios.`:'Para a ferramenta sugerir a região pelo código do território (ex.: 65 = Barueri / Carapicuíba / Jandira / Itapevi), suba a planilha de territórios (código → cidades) no mesmo campo “Ou suba um arquivo”.'}</div>`;
   h += `<h3 style="font-size:13.5px;margin:6px 0;">Região de cada área de entrega</h3>
     <div class="desc" style="max-width:none;margin-bottom:8px;">A ferramenta sugere a região quando o nome bate; nas demais, escolha uma vez e ela fica lembrada para os próximos dias.</div>
     <div class="table-wrap"><table><thead><tr><th>Área de entrega</th><th>Iscas</th><th>Território</th><th>Região com carga</th><th>Placas disponíveis</th></tr></thead><tbody>
     ${Object.keys(areas).sort().map(k=>{
       const a = areas[k], sel = m[k]||'', pool = ilPool(sel).filter(p=>!ilReservadas().has(placaKey(p.placa)));
-      const cods = k.indexOf('|')<0 ? ilCodigosDaCidade(k) : [];
+      const pk = k.split('|')[1], cods = k.indexOf('|')<0 ? ilCodigosDaCidade(k) : (pk && pk.charAt(0)==='T' ? pk.slice(1).split('-') : []);
       return `<tr><td>${pEsc(a.rot)}</td><td class="mono">${a.n}</td><td class="mono">${cods.length?cods.join(' · '):'—'}</td>
         <td><select onchange="ilMudarRegiao('${pEsc(k).replace(/'/g,"&#39;")}',this.value)"><option value="">— escolher —</option>${regs.map(g=>`<option value="${pEsc(g)}"${g===sel?' selected':''}>${pEsc(g)}</option>`).join('')}</select></td>
         <td class="mono" style="color:${sel&&pool.length<a.n?'var(--amber)':'var(--text-1)'}">${sel?pool.length:'—'}${sel&&pool.length<a.n?' (menos que as iscas — sobra vai p/ próxima placa livre)':''}</td></tr>`;
