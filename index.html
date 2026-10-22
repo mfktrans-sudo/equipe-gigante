@@ -1976,10 +1976,10 @@ function consolidarUploads(){
   });
   function territorioDaPlaca(placa){
     const info = regiaoPorPlaca[placaKey(placa)];
-    if(!info) return {territorio:null, regiao:null};
+    if(!info) return {territorio:null, regiao:null, territorios:null};
     let best=null, bestCount=-1;
     Object.entries(info.valores).forEach(([v,c])=>{ if(c>bestCount){best=v;bestCount=c;} });
-    return {territorio:best, regiao:info.regiao};
+    return {territorio:best, regiao:info.regiao, territorios:info.valores};
   }
 
   if(ganRecords.length === 0){
@@ -2010,7 +2010,7 @@ function consolidarUploads(){
     if(!carga){
       const terr = territorioDaPlaca(g.placa);
       const transportadora = findTransportadoraDaPlaca(g.placa);
-      carga = {id:'c'+Date.now()+Math.random().toString(36).slice(2,7), placa:g.placa, transportadora, regiao:(g.regiao||terr.regiao), territorio:terr.territorio, pres:[]};
+      carga = {id:'c'+Date.now()+Math.random().toString(36).slice(2,7), placa:g.placa, transportadora, regiao:(g.regiao||terr.regiao), territorio:terr.territorio, territorios:terr.territorios, pres:[]};
       STATE.cargas.push(carga);
       cargasNovas++;
     }
@@ -2020,6 +2020,9 @@ function consolidarUploads(){
     presIndex[key] = g.placa;
     presAdicionados++;
   });
+
+  // cargas já existentes: a Região carregada agora também vincula código(s) de território (e a região, se estiver vazia)
+  STATE.cargas.forEach(c=>{ const t=territorioDaPlaca(c.placa); if(t.territorio==null) return; c.territorios=t.territorios; c.territorio=t.territorio; if(!c.regiao) c.regiao=t.regiao; });
 
   // PRÉs sem placa: preRomaneios do hebls que não apareceram em nenhum GAN
   const preRomaneiosComPlaca = new Set(ganRecords.map(g=>g.preRomaneio));
@@ -3682,7 +3685,8 @@ function ilCodsDaArea(key){
 function ilTerrCont(cods){
   const cont = {}, vistas = new Set();
   (STATE.cargas||[]).forEach(c=>{
-    if(!c.regiao || !c.placa || c.territorio==null || cods.indexOf(String(parseInt(c.territorio,10)))<0) return;
+    const cs = c.territorios ? Object.keys(c.territorios).map(v=>String(parseInt(v,10))) : (c.territorio==null ? [] : [String(parseInt(c.territorio,10))]);
+    if(!c.regiao || !c.placa || !cs.some(x=>cods.indexOf(x)>=0)) return;
     const k = placaKey(c.placa); if(vistas.has(k)) return; vistas.add(k);
     cont[c.regiao] = (cont[c.regiao]||0)+1;
   });
