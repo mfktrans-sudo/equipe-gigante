@@ -3767,8 +3767,10 @@ function ilDistribuir(){
     if(p) tomar(r, p, false); else sobras.push(r);
   });
   if(sobras.length){
-    const todas = ilPoolDe(()=>true);
-    sobras.forEach(r=>{ const p = todas.find(livre); if(p) tomar(r, p, true); });
+    const todas = ilPoolDe(()=>true), cacheT = {};
+    /* antes de pegar qualquer placa livre, tenta uma placa cujo território (4ª coluna dos arquivos de Região) bate com o da área da isca */
+    const poolTerr = key => cacheT[key] || (cacheT[key] = (cods=>cods.length ? ilPoolDe(c=>{ const cs = c.territorios ? Object.keys(c.territorios) : (c.territorio==null?[]:[c.territorio]); return cs.some(v=>cods.indexOf(String(parseInt(v,10)))>=0); }) : [])(ilCodsDaArea(key).cods));
+    sobras.forEach(r=>{ const pt = poolTerr(r.key).find(livre); if(pt){ tomar(r, pt, false); return; } const p = todas.find(livre); if(p) tomar(r, p, true); });
   }
   saveState();
 }
