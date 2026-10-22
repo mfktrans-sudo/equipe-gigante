@@ -515,13 +515,21 @@
     <div class="panel-head">
       <div>
         <h2>Cadastro Placa → Transportadora</h2>
-        <div class="desc">O veículo (placa) é o vínculo fixo com a transportadora. A ferramenta nunca escolhe transportadora ou doca por conta própria — sempre usa esse cadastro. Cole uma lista (Placa;Transportadora, uma por linha) ou adicione manualmente.</div>
+        <div class="desc">O veículo (placa) é o vínculo fixo com a transportadora. A ferramenta nunca escolhe transportadora ou doca por conta própria — sempre usa esse cadastro. Suba a planilha (colunas <b>TRANSP</b> e <b>PLACA</b>), cole uma lista (Placa;Transportadora, uma por linha) ou adicione manualmente.</div>
+        <div id="cadastroUso" class="desc" style="margin-top:6px;"></div>
       </div>
       <div style="display:flex;gap:8px;">
+        <button class="small" onclick="cadastroUploadClick()">⬆ Subir planilha</button>
+        <input type="file" id="cadastroFile" accept=".xlsx,.xls,.xlsm,.xlsb,.ods,.csv,.tsv" style="display:none" onchange="cadastroUploadArquivo(event)">
         <button class="small" onclick="document.getElementById('cadastroPaste').style.display='block'">Colar lista</button>
         <button class="primary small" onclick="addCadastroRow()">+ Placa</button>
       </div>
     </div>
+
+    <div style="margin-bottom:10px;font-size:13px;">
+      <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="cadastroAtualizar"> Ao subir a planilha, atualizar a transportadora das placas que já estão cadastradas com outra transportadora</label>
+    </div>
+    <div id="cadastroResultado" style="display:none;margin-bottom:14px;padding:12px 14px;border:1px solid var(--border,#ccc);border-radius:8px;font-size:13px;line-height:1.5;"></div>
 
     <div id="cadastroPaste" style="display:none;margin-bottom:14px;">
       <textarea id="cadastroPasteText" rows="5" style="width:100%;" placeholder="Ex:&#10;TBA4J30;R2&#10;END7C89;FASTSHOP&#10;UDJ2J15;AGREGADO"></textarea>
@@ -884,7 +892,48 @@ function defaultState(){
         {nome:'GALLOG', unidade:'caj1', docaIn:157, docaFim:162, prioridade:21},
         {nome:'HELOG', unidade:'caj1', docaIn:162, docaFim:162, prioridade:22}
       ],
-      cadastroPlacas: [],
+      cadastroPlacas: [
+        {placa: "CXA0H58", transportadora: "FLEXX", prioridadeIndividual: null},
+        {placa: "EKH3H11", transportadora: "FLEXX", prioridadeIndividual: null},
+        {placa: "ELK7742", transportadora: "FLEXX", prioridadeIndividual: null},
+        {placa: "EMI7801", transportadora: "FLEXX", prioridadeIndividual: null},
+        {placa: "FDG2B34", transportadora: "FLEXX", prioridadeIndividual: null},
+        {placa: "FKS5A73", transportadora: "FLEXX", prioridadeIndividual: null},
+        {placa: "FKU9I47", transportadora: "FLEXX", prioridadeIndividual: null},
+        {placa: "FLF2E84", transportadora: "FLEXX", prioridadeIndividual: null},
+        {placa: "FPQ7E28", transportadora: "FLEXX", prioridadeIndividual: null},
+        {placa: "PVO2J31", transportadora: "FLEXX", prioridadeIndividual: null},
+        {placa: "TLA5C82", transportadora: "FLEXX", prioridadeIndividual: null},
+        {placa: "TBA4J05", transportadora: "GALLOG", prioridadeIndividual: null},
+        {placa: "TBA4J06", transportadora: "GALLOG", prioridadeIndividual: null},
+        {placa: "TBA4J28", transportadora: "GALLOG", prioridadeIndividual: null},
+        {placa: "TBA4J30", transportadora: "GALLOG", prioridadeIndividual: null},
+        {placa: "TBA4J73", transportadora: "GALLOG", prioridadeIndividual: null},
+        {placa: "TBA4J94", transportadora: "GALLOG", prioridadeIndividual: null},
+        {placa: "TBL2E79", transportadora: "GALLOG", prioridadeIndividual: null},
+        {placa: "TBL2H40", transportadora: "GALLOG", prioridadeIndividual: null},
+        {placa: "TBL2H41", transportadora: "GALLOG", prioridadeIndividual: null},
+        {placa: "TBL2H43", transportadora: "GALLOG", prioridadeIndividual: null},
+        {placa: "TBM0G91", transportadora: "GALLOG", prioridadeIndividual: null},
+        {placa: "TBR0J28", transportadora: "GALLOG", prioridadeIndividual: null},
+        {placa: "TBR4A97", transportadora: "GALLOG", prioridadeIndividual: null},
+        {placa: "TBR5C59", transportadora: "GALLOG", prioridadeIndividual: null},
+        {placa: "EFV9F14", transportadora: "L.COM", prioridadeIndividual: null},
+        {placa: "FYU2F27", transportadora: "L.COM", prioridadeIndividual: null},
+        {placa: "EFR4H46", transportadora: "PRO/FASTWAY", prioridadeIndividual: null},
+        {placa: "FUZ7C61", transportadora: "PRO/FASTWAY", prioridadeIndividual: null},
+        {placa: "TDR1G98", transportadora: "R2", prioridadeIndividual: null},
+        {placa: "TDR1G99", transportadora: "R2", prioridadeIndividual: null},
+        {placa: "TDR1H01", transportadora: "R2", prioridadeIndividual: null},
+        {placa: "TMF3F21", transportadora: "R2", prioridadeIndividual: null},
+        {placa: "TXT8B56", transportadora: "R2", prioridadeIndividual: null},
+        {placa: "TYA8G46", transportadora: "R2", prioridadeIndividual: null},
+        {placa: "TZA8A14", transportadora: "R2", prioridadeIndividual: null},
+        {placa: "UAB1F04", transportadora: "R2", prioridadeIndividual: null},
+        {placa: "FMD3I31", transportadora: "S19", prioridadeIndividual: null},
+        {placa: "EMU5598", transportadora: "SRB", prioridadeIndividual: null},
+        {placa: "EVJ8E94", transportadora: "SRB", prioridadeIndividual: null}
+      ],   // 40 placas da PROGRAMAÇÃO 22/10/2026 (transportadoras já parametrizadas)
       tsColuna: 'doca'     // coluna da base TS que define a doca das cargas: 'doca' (DOCA) ou 'docaTS' (DOCA-05)
     },
     ts: [],               // base TS São Paulo do dia: {placa, loja, pre05[], presOutros[], docaTS:{doca,onda}, doca:{doca,onda}, ...}
@@ -958,8 +1007,8 @@ function avisarFalhaSalvar(e, ctx){
 function saveState(){
   let json;
   try{ json = JSON.stringify(STATE); }
-  catch(e){ avisarFalhaSalvar(e,'serializar'); return; }
-  try{ localStorage.setItem(STORAGE_KEY, json); return; }
+  catch(e){ avisarFalhaSalvar(e,'serializar'); return false; }
+  try{ localStorage.setItem(STORAGE_KEY, json); return true; }
   catch(e1){
     /* 1ª tentativa de recuperação: apaga só chaves ANTIGAS desta ferramenta (prefixo gdn_) e tenta de novo */
     try{
@@ -967,8 +1016,8 @@ function saveState(){
       antigas.forEach(k=>localStorage.removeItem(k));
       localStorage.removeItem(STORAGE_KEY);
       localStorage.setItem(STORAGE_KEY, json);
-      return;
-    }catch(e2){ avisarFalhaSalvar(e2,'gravar'); }
+      return true;
+    }catch(e2){ avisarFalhaSalvar(e2,'gravar'); return false; }
   }
 }
 
@@ -1178,7 +1227,14 @@ function removeTransp(idx){ STATE.config.transportadoras.splice(idx,1); saveStat
 /* =========================================================
    CADASTRO PLACA -> TRANSPORTADORA
    ========================================================= */
+function renderCadastroUso(){
+  const el = document.getElementById('cadastroUso'); if(!el) return;
+  const total = usoLocalStorageKB(), estado = Math.round(JSON.stringify(STATE).length/1024);
+  const cheio = total > 4000;
+  el.innerHTML = 'Armazenamento do navegador (este computador): <b style="color:'+(cheio?'var(--red,#c0392b)':'inherit')+'">'+total+' KB de ~5.000 KB</b> · dados desta ferramenta: ~'+estado+' KB. Os dados ficam salvos só neste navegador, não no Firebase.';
+}
 function renderCadastro(){
+  renderCadastroUso();
   const tbody = document.querySelector('#tblCadastro tbody');
   tbody.innerHTML = '';
   const filtro = (document.getElementById('cadastroFiltro').value || '').toUpperCase();
@@ -1261,6 +1317,96 @@ function processCadastroPaste(){
     const lista = Array.from(new Set(repetidas));
     toast(count+' placa(s) importada(s). '+lista.length+' ignorada(s) por já existir: '+lista.slice(0,5).join(', ')+(lista.length>5?'…':''), count?'ok':'err');
   } else toast(count + ' placa(s) importada(s).', 'ok');
+}
+/* ---------- Upload de planilha (colunas TRANSP + PLACA) ---------- */
+function cadNorm(s){ return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
+function cadEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function cadastroUploadClick(){ document.getElementById('cadastroFile').click(); }
+function cadastroUploadArquivo(ev){
+  const f = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if(!f) return;
+  if(typeof XLSX==='undefined'){ toast('Biblioteca de planilhas não carregou. Verifique a conexão e recarregue a página.', 'err'); return; }
+  const rd = new FileReader();
+  rd.onload = e => {
+    try{ cadastroProcessarPlanilha(new Uint8Array(e.target.result), f.name); }
+    catch(err){ console.error(err); toast('Não foi possível ler a planilha: '+(err && err.message || err), 'err'); }
+  };
+  rd.onerror = () => toast('Não foi possível abrir o arquivo.', 'err');
+  rd.readAsArrayBuffer(f);
+}
+function cadastroProcessarPlanilha(buf, nomeArq){
+  const wb = XLSX.read(buf, {type:'array'});
+  const atualizar = !!document.getElementById('cadastroAtualizar').checked;
+  const RE_PLACA = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/;
+  const novas = [], divergentes = [], invalidas = [], semTransp = [];
+  const vistas = new Set();
+  let achouAba = false, lidas = 0, jaExistem = 0, repetidasArq = 0, atualizadas = 0;
+
+  wb.SheetNames.forEach(sn=>{
+    const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sn], {header:1, defval:'', raw:true});
+    let h=-1, cT=-1, cP=-1;
+    for(let i=0;i<Math.min(aoa.length,30);i++){
+      const ks = (aoa[i]||[]).map(cadNorm);
+      const p = ks.indexOf('PLACA');
+      const t = ks.findIndex(k=>k==='TRANSP' || k==='TRANSPORTADORA');
+      if(p>=0 && t>=0){ h=i; cP=p; cT=t; break; }
+    }
+    if(h<0) return;
+    achouAba = true;
+    for(let i=h+1;i<aoa.length;i++){
+      const r = aoa[i] || [];
+      const pk = placaKey(r[cP]);
+      const tr = String(r[cT]==null?'':r[cT]).replace(/\s+/g,' ').trim().toUpperCase();
+      if(!pk && !tr) continue;                                   // linha em branco
+      if(pk==='PLACA' || cadNorm(tr)==='TRANSP') continue;       // cabeçalho repetido no meio da planilha
+      lidas++;
+      if(!RE_PLACA.test(pk)){ invalidas.push(String(r[cP]||'(vazia)')); continue; }
+      if(!tr){ semTransp.push(pk); continue; }
+      if(vistas.has(pk)){ repetidasArq++; continue; }            // mesma placa duas vezes na planilha: vale a 1ª
+      vistas.add(pk);
+      const ex = findCadastroDaPlaca(pk);
+      if(ex){
+        if((ex.transportadora||'') === tr){ jaExistem++; }
+        else {
+          divergentes.push({placa:pk, antes:ex.transportadora||'(vazia)', depois:tr});
+          if(atualizar){ ex.transportadora = tr; atualizadas++; }
+        }
+        continue;
+      }
+      novas.push({placa:pk, transportadora:tr, prioridadeIndividual:null});
+    }
+  });
+
+  if(!achouAba){
+    toast('Não encontrei as colunas TRANSP e PLACA na planilha. Confira os nomes dos cabeçalhos.', 'err');
+    return;
+  }
+  novas.forEach(n=>STATE.config.cadastroPlacas.push(n));
+  const recalc = revincularTransportadoras();
+  const salvou = saveState();
+  renderCadastro();
+
+  // transportadoras do cadastro que ainda não existem na aba Parâmetros (sem faixa de docas)
+  const paramNomes = new Set(STATE.config.transportadoras.map(t=>String(t.nome||'').trim().toUpperCase()));
+  const semParam = Array.from(new Set(novas.concat(atualizar?[]:[]).map(n=>n.transportadora))).filter(n=>!paramNomes.has(n)).sort();
+
+  let h = '<div style="font-weight:700;margin-bottom:6px;">Planilha '+cadEsc(nomeArq)+'</div>';
+  h += '<div>✔ <b>'+novas.length+'</b> placa(s) nova(s) cadastrada(s) · '+lidas+' linha(s) de dados lidas</div>';
+  if(jaExistem) h += '<div>• '+jaExistem+' já estavam cadastradas com a mesma transportadora (mantidas)</div>';
+  if(divergentes.length){
+    h += '<div>• '+divergentes.length+' já cadastrada(s) com <b>outra</b> transportadora: '+(atualizar?('<b>'+atualizadas+' atualizada(s)</b>'):'mantidas como estavam (marque a opção acima para atualizar)')+'</div>';
+    h += '<div style="margin-left:14px;color:var(--muted,#666);">'+divergentes.slice(0,8).map(d=>cadEsc(d.placa)+': '+cadEsc(d.antes)+' → '+cadEsc(d.depois)).join(' · ')+(divergentes.length>8?' …':'')+'</div>';
+  }
+  if(repetidasArq) h += '<div>• '+repetidasArq+' linha(s) com placa repetida na própria planilha (usei a primeira)</div>';
+  if(invalidas.length) h += '<div>• '+invalidas.length+' linha(s) ignorada(s) por placa inválida: '+cadEsc(invalidas.slice(0,6).join(', '))+(invalidas.length>6?' …':'')+'</div>';
+  if(semTransp.length) h += '<div>• '+semTransp.length+' placa(s) sem transportadora na planilha (ignoradas): '+cadEsc(semTransp.slice(0,6).join(', '))+(semTransp.length>6?' …':'')+'</div>';
+  if(recalc) h += '<div>• '+recalc+' carga(s) já consolidada(s) tiveram a transportadora atualizada</div>';
+  if(semParam.length) h += '<div style="margin-top:6px;color:var(--amber,#b9770e);">⚠ Transportadora(s) novas sem faixa de docas na aba Parâmetros: <b>'+cadEsc(semParam.join(', '))+'</b>. Cadastre-as em Parâmetros para a alocação conseguir usá-las.</div>';
+  if(!salvou) h += '<div style="margin-top:6px;color:var(--red,#c0392b);">⚠ As placas estão na tela, mas <b>não foram gravadas</b>: o armazenamento do navegador está cheio. Faça um backup na aba 7 · Backup &amp; Upload e libere espaço (veja o aviso no topo desta aba).</div>';
+  const box = document.getElementById('cadastroResultado');
+  box.innerHTML = h; box.style.display = 'block';
+  toast(novas.length+' placa(s) importada(s) da planilha.'+(salvou?'':' ATENÇÃO: não foi possível salvar no navegador.'), salvou?'ok':'err');
 }
 function findCadastroDaPlaca(placa){
   const k = placaKey(placa); if(!k) return null;
