@@ -1015,7 +1015,7 @@ function saveState(){
   let json;
   try{ json = JSON.stringify(STATE); }
   catch(e){ avisarFalhaSalvar(e,'serializar'); return false; }
-  try{ localStorage.setItem(STORAGE_KEY, json); if(window.gdnCadastroSync) window.gdnCadastroSync(); return true; }
+  try{ localStorage.setItem(STORAGE_KEY, json); if(window.gdnCadastroSync) window.gdnCadastroSync(); if(window.gdnIscaSync) window.gdnIscaSync(); return true; }
   catch(e1){
     /* 1ª tentativa de recuperação: apaga só chaves ANTIGAS desta ferramenta (prefixo gdn_) e tenta de novo */
     try{
@@ -1023,9 +1023,9 @@ function saveState(){
       antigas.forEach(k=>localStorage.removeItem(k));
       localStorage.removeItem(STORAGE_KEY);
       localStorage.setItem(STORAGE_KEY, json);
-      if(window.gdnCadastroSync) window.gdnCadastroSync();
+      if(window.gdnCadastroSync) window.gdnCadastroSync(); if(window.gdnIscaSync) window.gdnIscaSync();
       return true;
-    }catch(e2){ avisarFalhaSalvar(e2,'gravar'); if(window.gdnCadastroSync) window.gdnCadastroSync(); return false; }
+    }catch(e2){ avisarFalhaSalvar(e2,'gravar'); if(window.gdnCadastroSync) window.gdnCadastroSync(); if(window.gdnIscaSync) window.gdnIscaSync(); return false; }
   }
 }
 
@@ -3596,6 +3596,7 @@ const IL_ZONA_TERR = {'01':['4','5','6','9','10'],'02':['35','36','37','38','39'
 /* ---------- regiões das cargas ---------- */
 function ilRegioes(){
   const s = new Set(); (STATE.cargas||[]).forEach(c=>{ if(c.regiao && c.placa) s.add(String(c.regiao)); });
+  ((STATE.config||{}).iscaRegioesExtra||[]).forEach(r=>{ if(r) s.add(String(r)); });
   return Array.from(s).sort((a,b)=>a.localeCompare(b));
 }
 function ilMapa(){ STATE.config = STATE.config||{}; STATE.config.iscaMapa = STATE.config.iscaMapa||{}; return STATE.config.iscaMapa; }
@@ -3609,7 +3610,12 @@ function ilTerrPadraoNorm(){
 function ilTerrMapa(){
   STATE.config = STATE.config||{};
   const T = STATE.config.iscaTerritorios;
-  return (T && Object.keys(T).length) ? T : ilTerrPadraoNorm();
+  const base = (T && Object.keys(T).length) ? T : ilTerrPadraoNorm();
+  const E = STATE.config.iscaTerrExtra;
+  if(!E || !Object.keys(E).length) return base;
+  const o = {}; Object.keys(base).forEach(k=>{ o[k] = (base[k]||[]).slice(); });
+  Object.keys(E).forEach(k=>{ o[k] = (o[k]||[]).concat((E[k]||[]).filter(x=>(o[k]||[]).indexOf(x)<0)); });
+  return o;
 }
 function ilTerrCustom(){ const T=(STATE.config||{}).iscaTerritorios; return !!(T && Object.keys(T).length); }
 function ilTerrNome(cod){ const p=IL_TERR_PADRAO[cod]; return p?p.n:''; }
@@ -3886,6 +3892,55 @@ function ilBaixarEtiquetas(){
 }
 
 /* ---------- tela ---------- */
+/* ---------- parâmetros de territórios: incluir regiões / áreas+territórios (salvos no navegador e no Firebase) ---------- */
+function ilFormParametros(){
+  const C = STATE.config = STATE.config||{}, regs = ilRegioes(), ext = C.iscaTerrExtra||{}, rx = C.iscaRegioesExtra||[];
+  const itens = []; Object.keys(ext).sort((a,b)=>a-b).forEach(cod=>(ext[cod]||[]).forEach((a,i)=>itens.push({cod,a,i})));
+  const nu = window.__iscaNuvem || {txt:'', err:false};
+  return `<h3 style="font-size:13.5px;margin:16px 0 6px;">Incluir região, território e área de entrega</h3>
+    <div class="desc" id="iscaNuvem" style="max-width:none;margin-bottom:8px;color:${nu.err?'var(--red)':'inherit'}">${pEsc(nu.txt||'☁ Parâmetros (região de cada área, territórios e regiões incluídas) são salvos no navegador e no Firebase.')}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
+      <div><label>Nova região</label><input id="ilNovaReg" type="text" placeholder="ex.: SPTX" style="width:140px"></div>
+      <button class="primary" onclick="ilIncluirRegiao()">Incluir região</button>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;">
+      <div><label>Área de entrega</label><input id="ilNovaArea" type="text" placeholder="cidade ou bairro" style="width:220px"></div>
+      <div><label>Tipo</label><select id="ilNovoTipo"><option value="cidade">Cidade</option><option value="sp">Bairro de São Paulo</option></select></div>
+      <div><label>Território</label><input id="ilNovoTerr" type="number" min="1" placeholder="ex.: 32" style="width:90px"></div>
+      <div><label>Região com carga</label><select id="ilNovaAreaReg"><option value="">— escolher depois —</option>${regs.map(g=>`<option value="${pEsc(g)}">${pEsc(g)}</option>`).join('')}</select></div>
+      <button class="primary" onclick="ilIncluirArea()">Incluir área / território</button>
+    </div>
+    ${(itens.length||rx.length)?`<div class="table-wrap"><table><thead><tr><th>Incluído</th><th>Território</th><th></th></tr></thead><tbody>
+      ${rx.map((r,i)=>`<tr><td>Região <b>${pEsc(r)}</b></td><td class="mono">—</td><td><a href="#" onclick="ilRemoverRegiao(${i});return false;" style="color:var(--red)">remover</a></td></tr>`).join('')}
+      ${itens.map(x=>`<tr><td>${pEsc(ilTitulo(x.a))}</td><td class="mono">${pEsc(x.cod)}</td><td><a href="#" onclick="ilRemoverArea('${pEsc(x.cod)}',${x.i});return false;" style="color:var(--red)">remover</a></td></tr>`).join('')}
+    </tbody></table></div>`:''}`;
+}
+function ilAposParametros(){ if(STATE.iscaLote){ ilSugerirMapa(); ilDistribuir(); } else saveState(); renderIscas(); }
+function ilIncluirRegiao(){
+  const v = String((document.getElementById('ilNovaReg')||{}).value||'').trim().toUpperCase();
+  if(!v){ toast('Digite o nome da região.','err'); return; }
+  if(ilRegioes().some(r=>ilNorm(r)===ilNorm(v))){ toast('A região '+v+' já existe.','err'); return; }
+  const C = STATE.config = STATE.config||{}; C.iscaRegioesExtra = C.iscaRegioesExtra||[]; C.iscaRegioesExtra.push(v);
+  ilAposParametros(); toast('Região '+v+' incluída.','ok');
+}
+function ilRemoverRegiao(i){ const C = STATE.config||{}; if(!C.iscaRegioesExtra) return; C.iscaRegioesExtra.splice(i,1); ilAposParametros(); }
+function ilIncluirArea(){
+  const nome = ilNorm((document.getElementById('ilNovaArea')||{}).value), cod = String(parseInt((document.getElementById('ilNovoTerr')||{}).value,10));
+  const reg = (document.getElementById('ilNovaAreaReg')||{}).value||'', tipo = (document.getElementById('ilNovoTipo')||{}).value||'cidade';
+  if(!nome || cod==='NaN'){ toast('Informe a área de entrega e o código do território.','err'); return; }
+  const C = STATE.config = STATE.config||{}; C.iscaTerrExtra = C.iscaTerrExtra||{};
+  const lst = C.iscaTerrExtra[cod] = C.iscaTerrExtra[cod]||[]; if(lst.indexOf(nome)<0) lst.push(nome);
+  let key = nome;
+  if(tipo==='sp'){ const cods = ilCodigosDoBairro(nome).sort((a,b)=>a-b); key = 'SAO PAULO|T'+cods.join('-'); }
+  if(reg) ilMapa()[key] = reg;
+  ilAposParametros(); toast('Território '+cod+' incluído para '+ilTitulo(nome)+(reg?' (região '+reg+').':'.'),'ok');
+}
+function ilRemoverArea(cod, i){
+  const E = (STATE.config||{}).iscaTerrExtra; if(!E || !E[cod]) return;
+  E[cod].splice(i,1); if(!E[cod].length) delete E[cod];
+  ilAposParametros();
+}
+
 function ilRender(){
   const box = document.getElementById('ilBox'); if(!box) return;
   const L = STATE.iscaLote;
@@ -3906,7 +3961,7 @@ function ilRender(){
   const m = ilMapa();
   const nTerr = Object.keys(ilTerrMapa()).length;
   h += `<div class="desc" style="margin-bottom:10px;max-width:none;">${ilTerrCustom()?`Lista de territórios carregada: <b>${nTerr}</b> códigos (a região é sugerida pelo código da cidade/bairro). <a href="#" onclick="ilLimparTerritorios();return false;" style="color:var(--teal)">voltar para a lista padrão</a>`:nTerr?`Lista de territórios padrão embutida (<b>${nTerr}</b> códigos, planilha Regiões VM): a região de cada área é sugerida pelo código do território (cidade ou, em São Paulo, bairro) cruzado com os arquivos de Região da aba 3. Para trocar, suba outra planilha de territórios.`:'Para a ferramenta sugerir a região pelo código do território (ex.: 65 = Barueri / Carapicuíba / Jandira / Itapevi), suba a planilha de territórios (código → cidades) no mesmo campo “Ou suba um arquivo”.'}</div>`;
-  { const cob = new Set(); (STATE.cargas||[]).forEach(c=>{ if(c.placa && c.territorio!=null) cob.add(String(parseInt(c.territorio,10))); });
+  { const cob = new Set(); (STATE.cargas||[]).forEach(c=>{ if(!c.placa) return; if(c.territorios) Object.keys(c.territorios).forEach(v=>cob.add(String(parseInt(v,10)))); else if(c.territorio!=null) cob.add(String(parseInt(c.territorio,10))); });
     const usados = new Set(); Object.keys(areas).forEach(k=>ilCodsDaArea(k).cods.forEach(c=>usados.add(c)));
     const falt = Array.from(usados).filter(c=>!cob.has(c)).sort((x,y)=>x-y);
     h += `<div class="badge ${falt.length||!regs.length?'alert':''}" style="display:block;margin-bottom:10px;padding:8px;">Regiões com carga carregadas: <b>${regs.length?regs.map(pEsc).join(', '):'nenhuma'}</b>.`+
@@ -3921,6 +3976,7 @@ function ilRender(){
         <td><select onchange="ilMudarRegiao('${pEsc(k).replace(/'/g,"&#39;")}',this.value)"><option value="">— escolher —</option>${regs.map(g=>`<option value="${pEsc(g)}"${g===sel?' selected':''}>${pEsc(g)}</option>`).join('')}</select></td>
         <td class="mono" style="color:${sel&&pool.length<a.n?'var(--amber)':'var(--text-1)'}">${sel?pool.length:'—'}${sel&&pool.length<a.n?' (menos que as iscas — sobra vai p/ próxima placa livre)':''}${mot?`<div style="color:var(--red);font-family:inherit;font-size:11px;margin-top:3px;">${pEsc(mot)}</div>`:''}</td></tr>`;
     }).join('')}</tbody></table></div>`;
+  h += ilFormParametros();
   /* linhas */
   const todas = ilPoolDe(()=>true).map(p=>p.placa);   // todas as placas, uma vez cada, em ordem de onda/doca
   const reservadas = ilReservadas();
@@ -4470,7 +4526,58 @@ function iniciarSyncCadastro(){
     cadStatus('⚠ Sem acesso ao Firestore ('+(err.code||err.message)+'). Confira as regras do banco. O cadastro continua só neste navegador.', true);
   });
 }
-function pararSyncCadastro(){ if(cadUnsub){ cadUnsub(); cadUnsub = null; } cadPronto = false; cadUltimo = null; }
+function pararSyncCadastro(){ if(cadUnsub){ cadUnsub(); cadUnsub = null; } cadPronto = false; cadUltimo = null; pararSyncIscas(); }
+
+/* ---------- Parâmetros das iscas no Firestore (gdn_docas / iscaParametros) ----------
+   Região de cada área de entrega, territórios e regiões incluídos pelo usuário: mesmos dados em todos os computadores. */
+const iscaRef = doc(db, 'gdn_docas', 'iscaParametros');
+let iscaUltimo = null, iscaTimer = null, iscaUnsub = null, iscaPronto = false;
+const canon = o => Array.isArray(o) ? '['+o.map(canon).join(',')+']' : (o && typeof o==='object') ? '{'+Object.keys(o).sort().map(k=>JSON.stringify(k)+':'+canon(o[k])).join(',')+'}' : JSON.stringify(o===undefined?null:o);
+function iscaDados(){ const C = STATE.config||{}; return {mapa:C.iscaMapa||{}, terrExtra:C.iscaTerrExtra||{}, regioesExtra:C.iscaRegioesExtra||[], territorios:C.iscaTerritorios||{}}; }
+function iscaVazio(d){ return !Object.keys(d.mapa).length && !Object.keys(d.terrExtra).length && !d.regioesExtra.length && !Object.keys(d.territorios).length; }
+function iscaStatus(txt, erro){
+  window.__iscaNuvem = {txt, err:!!erro};
+  const el = document.getElementById('iscaNuvem');
+  if(el){ el.textContent = txt; el.style.color = erro ? 'var(--red,#c0392b)' : 'inherit'; }
+}
+async function iscaEnviar(){
+  if(!iscaPronto || !auth.currentUser) return;
+  const d = iscaDados(), j = canon(d); if(j === iscaUltimo) return;
+  if(iscaUltimo === null && iscaVazio(d)) return;      // nada para subir ainda
+  try{
+    await setDoc(iscaRef, Object.assign({}, d, {atualizadoEm: serverTimestamp(), atualizadoPor: auth.currentUser.email || ''}));
+    iscaUltimo = j;
+    iscaStatus('☁ Parâmetros das iscas salvos no Firebase ('+Object.keys(d.mapa).length+' áreas com região) — iguais em todos os computadores.');
+  }catch(e){
+    console.error('Firestore iscas (gravar)', e);
+    iscaStatus('⚠ Não foi possível gravar os parâmetros das iscas no Firebase ('+(e.code||e.message)+'). Confira as regras do Firestore para gdn_docas/iscaParametros. Os dados continuam salvos neste navegador.', true);
+  }
+}
+window.gdnIscaSync = function(){ clearTimeout(iscaTimer); iscaTimer = setTimeout(iscaEnviar, 800); };
+function iniciarSyncIscas(){
+  if(iscaUnsub) return;
+  iscaStatus('☁ Conectando ao Firebase…');
+  iscaUnsub = onSnapshot(iscaRef, snap => {
+    if(snap.metadata.hasPendingWrites) return;
+    iscaPronto = true;
+    if(!snap.exists()){ iscaUltimo = null; iscaEnviar(); return; }   // primeira vez: sobe os parâmetros deste computador
+    const x = snap.data();
+    const rem = {mapa:x.mapa||{}, terrExtra:x.terrExtra||{}, regioesExtra:Array.isArray(x.regioesExtra)?x.regioesExtra:[], territorios:x.territorios||{}};
+    iscaUltimo = canon(rem);
+    if(iscaUltimo !== canon(iscaDados())){                           // o banco é a fonte da verdade
+      const C = STATE.config = STATE.config||{};
+      C.iscaMapa = rem.mapa; C.iscaTerrExtra = rem.terrExtra; C.iscaRegioesExtra = rem.regioesExtra; C.iscaTerritorios = rem.territorios;
+      try{ if(STATE.iscaLote) ilDistribuir(); else saveState(); }catch(e){}
+      try{ renderIscas(); }catch(e){}
+    }
+    iscaStatus('☁ Parâmetros das iscas salvos no Firebase ('+Object.keys(rem.mapa).length+' áreas com região) — iguais em todos os computadores.');
+  }, err => {
+    console.error('Firestore iscas (ler)', err);
+    iscaPronto = false;
+    iscaStatus('⚠ Sem acesso ao Firestore para os parâmetros das iscas ('+(err.code||err.message)+'). Confira as regras do banco para gdn_docas/iscaParametros. Os dados continuam salvos neste navegador.', true);
+  });
+}
+function pararSyncIscas(){ if(iscaUnsub){ iscaUnsub(); iscaUnsub = null; } iscaPronto = false; iscaUltimo = null; }
 
 onAuthStateChanged(auth, (user) => {
   splash.hidden = true;
@@ -4482,6 +4589,7 @@ onAuthStateChanged(auth, (user) => {
     limpaErro();
     entrarNaFerramenta();
     iniciarSyncCadastro();
+    iniciarSyncIscas();
   }else{
     elWho.textContent = '—';
     pararSyncCadastro();
