@@ -4211,7 +4211,10 @@ async function iscaGerarDocx(){
   /* Mesma configuração de página de antes: 1 página = 1 etiqueta (tamanho configurado), margens de página 0.
      Dentro dela: um espaçador no topo + TABELA de 2 linhas de altura fixa (1 carga por linha) recuada da esquerda, com a
      moldura nas bordas da tabela e a linha de corte tracejada entre as linhas. Textos = mesmo layout da prévia/ZPL. */
-  const SECT = `<w:sectPr><w:pgSz w:w="${TW}" w:h="${TH}"/><w:pgMar w:top="0" w:right="0" w:bottom="0" w:left="0" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr>`;
+  /* Orientação explícita: página quadrada (w=h) é ambígua e o driver da Zebra imprimia a 1ª etiqueta em paisagem e as demais em retrato.
+     Altura +10 twips (~0,18 mm, invisível) torna a página inequivocamente RETRATO em todas as seções. */
+  const PH = (TW===TH) ? TH+10 : TH, ORI = TW>PH ? 'landscape' : 'portrait';
+  const SECT = `<w:sectPr><w:pgSz w:w="${TW}" w:h="${PH}" w:orient="${ORI}"/><w:pgMar w:top="0" w:right="0" w:bottom="0" w:left="0" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr>`;
   const bw8 = Math.max(2, Math.round(G.bw/25.4*72*8));
   const WT = tw(G.aw), ROW = Math.floor((TH - 2*MGY - 220)/2);
   const bd = (k,v)=>`<w:${k} w:val="${v||'single'}" w:sz="${bw8}" w:space="0" w:color="000000"/>`;
