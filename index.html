@@ -787,7 +787,7 @@
     <div id="iscaTabela"></div>
   </div>
   <div class="panel">
-    <div class="panel-head"><div><h2>Etiqueta Zebra</h2><div class="desc">Cada etiqueta é dividida exatamente ao meio por uma linha de corte/dobra e leva <b>2 cargas diferentes</b> (metade de cima e metade de baixo), com PRÉ, DOCA e ONDA em destaque. Padrão: 100 × 100 mm (10 × 10 cm), igual ao driver Zebra TP.</div></div>
+    <div class="panel-head"><div><h2>Etiqueta Zebra</h2><div class="desc">Uma etiqueta por isca, dentro de uma moldura: <b>nome do cliente</b>, <b>PRÉ</b> e <b>DOCA - onda</b> (1ª, 2ª, 3ª, 4ª…) em destaque. Padrão: 100 × 100 mm (10 × 10 cm), igual ao driver Zebra TP.</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <button class="primary" onclick="iscaBaixarWord()">⬇ Baixar Word (.docx) 10×10 cm</button>
         <button class="primary" onclick="iscaImprimir()">🖨 Imprimir / salvar PDF</button></div></div>
@@ -3288,7 +3288,7 @@ function iscaTodas(){
   const L = STATE.iscaLote;
   if(L) L.rows.forEach((r,i)=>{
     if(!r.placa) return; const k = placaKey(r.placa); if(ks.has(k)) return; ks.add(k);
-    base.push({id:'L'+i, lote:true, tipo:'placa', placa:r.placa, docaInformada:null, ondaInformada:null, entrada:[r.cliente, r.equip].filter(Boolean).join(' · ')+' (arquivo'+(r.sobra?', sobra':'')+')'});
+    base.push({id:'L'+i, lote:true, cliente:r.cliente||'', tipo:'placa', placa:r.placa, docaInformada:null, ondaInformada:null, entrada:[r.cliente, r.equip].filter(Boolean).join(' · ')+' (arquivo'+(r.sobra?', sobra':'')+')'});
   });
   return base;
 }
@@ -3303,17 +3303,23 @@ function iscaPreTexto(pres){
   const pr = pres.filter(p=>isFilialPrincipal(p.filial)); const ls = (pr.length?pr:pres).map(p=>String(p.preRomaneio)).filter(Boolean);
   return Array.from(new Set(ls)).sort((a,b)=>(parseInt(a)||0)-(parseInt(b)||0)).join('/');
 }
-/* cada etiqueta física leva 2 iscas (2 cargas diferentes): metade de cima = a, metade de baixo = b */
+/* cada etiqueta física leva 1 isca (1 carga): nome do cliente, PRÉ e DOCA - ONDA */
 function iscaFolhas(){
-  const et = iscaEtiquetas(), out = [];
-  for(let i=0;i<et.length;i+=2) out.push({n:out.length+1, a:et[i], b:et[i+1]||null});
-  return out;
+  return iscaEtiquetas().map((e,i)=>({n:i+1, a:e, b:null}));
+}
+/* nome do cliente da isca: o da própria isca (arquivo de iscas) ou, se foi digitada, o da linha do arquivo com a mesma placa */
+function iscaClienteDe(isca){
+  if(isca && isca.cliente) return String(isca.cliente).trim();
+  const L = STATE.iscaLote, k = placaKey(isca && isca.placa);
+  if(L && k){ const r = L.rows.find(x=>x.placa && placaKey(x.placa)===k); if(r && r.cliente) return String(r.cliente).trim(); }
+  return '';
 }
 function iscaEtiquetas(){
   return iscaOrdenadas().filter(x=>['ok','semdoca','semalocacao'].includes(x.v.st)).map((x,i)=>{
     const r = x.v.row, car = x.v.carga;
     return {n:i+1, placa:(r&&r.placa)||(car&&car.placa)||x.isca.placa, doca:x.v.doca!=null?x.v.doca:null, onda:x.v.onda!=null?x.v.onda:null,
-            transp:(r&&r.transportadora)||(car&&car.transportadora)||'', pre:iscaPreTexto((r&&r.pres)||(car&&car.pres))};
+            transp:(r&&r.transportadora)||(car&&car.transportadora)||'', pre:iscaPreTexto((r&&r.pres)||(car&&car.pres)),
+            cliente:iscaClienteDe(x.isca)};
   });
 }
 
@@ -4043,42 +4049,69 @@ function renderIscas(){
 }
 
 /* ---------- etiqueta: tamanho dos textos (mm), igual para tela, impressão e ZPL ---------- */
-function iscaMedidas(larg, alt, placaLen, info){
-  /* layout novo: só PRÉ / DOCA / ONDA em cada metade (sem placa e sem o título ISCA) */
-  const half = alt/2;
-  return {
-    half,
-    fsPre: half*0.17,            // linha do PRÉ
-    fsLin: half*0.20,            // linhas de DOCA e ONDA
-    yL: [half*0.11, half*0.11+half*0.30, half*0.11+half*0.60]   // posição de cada linha
-  };
-}
-function iscaTextoInfo(e){
-  return (e.doca!=null ? 'DOCA '+e.doca+' | ONDA '+e.onda : 'SEM DOCA') + (e.transp ? ' | '+e.transp : '');
-}
-/* bloco de identificação da carga: PRÉ / DOCA / ONDA, uma por linha, em letra grande */
+/* ============ LAYOUT DA ETIQUETA (único para prévia, impressão, Word e ZPL) ============
+   1 etiqueta = 1 isca, dentro de uma moldura:
+        NOME DO CLIENTE        (até 2 linhas, encolhe para caber)
+        PRÉ 20365              (grande)
+        DOCA 131 - 1ª          (grande; a onda aparece como 1ª, 2ª, 3ª, 4ª…) */
+function iscaOndaTxt(o){ return o!=null ? o+'ª' : '—'; }
 function iscaLinhasInfo(e){
-  return ['PRÉ '+(e.pre||'—'), 'DOCA '+(e.doca!=null?e.doca:'—'), 'ONDA '+(e.onda!=null?e.onda:'—')];
+  return ['PRÉ '+(e.pre||'—'), e.doca!=null ? 'DOCA '+e.doca+' - '+iscaOndaTxt(e.onda) : 'SEM DOCA'];
 }
-function iscaFsLinha(m, txt, larg, k){ return Math.min(k===0 ? m.fsPre : m.fsLin, larg*0.9/(Math.max(txt.length,5)*0.62)); }
-function iscaLabelHTML(fa, c, px){   /* fa = {a, b} */
-  const e = fa.a;   // px = pixels por mm (prévia) ou 0 para usar mm (impressão)
-  const m = iscaMedidas(c.larg, c.alt, e.placa.length, c.info);
-  const u = v => px ? (v*px).toFixed(1)+'px' : v.toFixed(2)+'mm';
-  const W = u(c.larg), H = u(c.alt);
-  const meia = (borda)=>{ const e = borda ? fa.b : fa.a; return `<div class="mhalf" style="position:relative;flex:1 1 0;min-height:0;${borda?`border-top:${px?'1px':'0.4mm'} dashed #000;`:''}overflow:hidden;">
-      ${!e ? '' : iscaLinhasInfo(e).map((t,k)=>`<div style="position:absolute;left:0;right:0;top:${u(m.yL[k])};text-align:center;font-weight:900;font-size:${u(iscaFsLinha(m,t,c.larg,k))};line-height:1;white-space:nowrap;overflow:hidden;">${pEsc(t)}</div>`).join('')}
-    </div>`; };
-  return `<div class="lbl" style="width:${W};height:${H};box-sizing:border-box;display:flex;flex-direction:column;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;overflow:hidden;">${meia(false)}${meia(true)}</div>`;
+let _iscaCtx = null;
+/* largura do texto, em "em" (1 = tamanho da fonte), medida com Arial negrito; se o navegador não medir, estima pelo nº de letras */
+function iscaEm(txt, k){
+  try{
+    if(!_iscaCtx){ _iscaCtx = document.createElement('canvas').getContext('2d'); _iscaCtx.font = '900 100px Arial, Helvetica, sans-serif'; }
+    const w = _iscaCtx.measureText(String(txt)).width / 100;
+    if(w > 0) return w * 1.02;                       // 2% de folga (diferenças entre fontes/impressoras)
+  }catch(e){}
+  return Math.max(String(txt).length,3) * k;
+}
+function iscaFit(txt, wMm, maxFs, k){ return Math.min(maxFs, wMm/iscaEm(txt, k)); }
+function iscaNomeLinhas(nome, wMm, maxFs){
+  const n = String(nome||'').replace(/\s+/g,' ').trim().toUpperCase();
+  if(!n) return {linhas:[], fs:0};
+  const f1 = iscaFit(n, wMm, maxFs, 0.7);
+  if(f1 >= maxFs*0.8 || n.indexOf(' ')<0) return {linhas:[n], fs:f1};       // cabe em 1 linha com letra boa
+  let melhor = null;                                                         // senão quebra em 2 linhas, no espaço mais central
+  for(let i=1;i<n.length-1;i++){ if(n[i]!==' ') continue; const a=n.slice(0,i), b=n.slice(i+1), m=Math.max(a.length,b.length); if(!melhor || m<melhor.m) melhor={a,b,m}; }
+  const f2 = iscaFit('X'.repeat(melhor.m), wMm, maxFs, 0.7);
+  return f2 > f1*1.15 ? {linhas:[melhor.a, melhor.b], fs:f2} : {linhas:[n], fs:f1};
+}
+function iscaLayout(e, c){
+  const W = c.larg, H = c.alt, mn = Math.min(W,H);
+  const mg = Math.max(3, mn*0.03), bw = Math.max(0.8, mn*0.012), tw = W*0.87;   // margem, espessura da moldura, largura útil do texto
+  const it = [];
+  const nome = iscaNomeLinhas(e.cliente, tw, H*0.085), lh = nome.fs*1.05;
+  if(nome.linhas.length){
+    const y0 = H*0.15 + (H*0.24 - nome.linhas.length*lh)/2;
+    nome.linhas.forEach((t,i)=> it.push({txt:t, fs:nome.fs, y:y0+i*lh, h:nome.fs}));
+  }
+  const L = iscaLinhasInfo(e);
+  let f0 = iscaFit(L[0], tw, H*0.18, 0.62), f1 = iscaFit(L[1], tw, H*0.18, 0.62);
+  if(String(e.pre||'').indexOf('/')<0) f0 = f1 = Math.min(f0, f1);     // PRÉ e DOCA com o mesmo tamanho; com vários PRÉs, cada linha encolhe sozinha
+  it.push({txt:L[0], fs:f0, y:H*0.45, h:f0});
+  it.push({txt:L[1], fs:f1, y:H*0.65, h:f1});
+  return {W, H, mg, bw, it};
+}
+function iscaLabelHTML(fa, c, px){   /* px = pixels por mm (prévia) ou 0 para usar mm (impressão) */
+  const e = fa.a, Ly = iscaLayout(e, c);
+  const u = v => px ? Math.max(0.5, v*px).toFixed(1)+'px' : v.toFixed(2)+'mm';
+  const bwu = px ? Math.max(1, Ly.bw*px).toFixed(1)+'px' : Ly.bw.toFixed(2)+'mm';
+  return `<div class="lbl" style="position:relative;width:${u(c.larg)};height:${u(c.alt)};box-sizing:border-box;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;overflow:hidden;">`
+    + `<div style="position:absolute;left:${u(Ly.mg)};top:${u(Ly.mg)};right:${u(Ly.mg)};bottom:${u(Ly.mg)};border:${bwu} solid #000;box-sizing:border-box;"></div>`
+    + Ly.it.map(t=>`<div style="position:absolute;left:0;right:0;top:${u(t.y)};text-align:center;font-weight:900;font-size:${u(t.fs)};line-height:1;white-space:nowrap;overflow:hidden;">${pEsc(t.txt)}</div>`).join('')
+    + `</div>`;
 }
 function iscaRenderPreview(et){
   const el = document.getElementById('iscaPreview'); if(!el) return;
   const c = iscaCfg();
   if(!et.length){ el.innerHTML = '<div class="empty">Nenhuma etiqueta pronta ainda.</div>'; return; }
-  const px = 150 / c.larg;
+  const px = 220 / c.larg;
   const fl = iscaFolhas();
-  el.innerHTML = `<div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">Prévia — ${et.length} isca(s) em ${fl.length} etiqueta(s) de ${c.larg/10} × ${c.alt/10} cm, na ordem de impressão (doca menor → maior). Cada etiqueta tem 2 cargas diferentes: uma na metade de cima e outra na de baixo.</div>
-    <div style="display:flex;flex-wrap:wrap;gap:14px;max-height:480px;overflow:auto;padding:4px;">
+  el.innerHTML = `<div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">Prévia — ${fl.length} etiqueta(s) de ${c.larg/10} × ${c.alt/10} cm (1 por isca), na ordem de impressão (doca menor → maior).</div>
+    <div style="display:flex;flex-wrap:wrap;gap:14px;max-height:520px;overflow:auto;padding:4px;">
     ${fl.map(f=>`<div><div style="font-size:11px;color:var(--text-2);margin-bottom:3px;">#${f.n}</div><div style="border:1px solid var(--line);">${iscaLabelHTML(f,c,px)}</div></div>`).join('')}</div>`;
 }
 
@@ -4095,18 +4128,14 @@ function iscaZEnc(t){
 }
 function iscaZPL(){
   const c = iscaCfg(), et = iscaEtiquetas(); if(!et.length) return '';
-  const dpmm = c.dpi/25.4, W = Math.round(c.larg*dpmm), H = Math.round(c.alt*dpmm), half = Math.floor(H/2);
+  const dpmm = c.dpi/25.4, W = Math.round(c.larg*dpmm), H = Math.round(c.alt*dpmm), d = v => Math.max(1, Math.round(v*dpmm));
   let z = '';
   iscaFolhas().forEach(f=>{
-    const m = iscaMedidas(c.larg, c.alt, 0, true), d = v => Math.max(1, Math.round(v*dpmm));
+    const Ly = iscaLayout(f.a, c);
     z += '^XA\r\n^CI28\r\n^PW'+W+'\r\n^LL'+H+'\r\n^LH0,0\r\n';
-    z += '^FO0,'+(half-2)+'^GB'+W+',4,4^FS\r\n';             // linha exatamente na metade
-    [[0,f.a],[half,f.b]].forEach(([off,e])=>{
-      if(!e) return;
-      iscaLinhasInfo(e).forEach((t,k)=>{
-        const fs = iscaFsLinha(m, t, c.larg, k);
-        z += `^FO0,${off+d(m.yL[k])}^A0N,${d(fs)},${d(fs)}^FB${W},1,0,C,0^FH^FD${iscaZEnc(t)}^FS\r\n`;
-      });
+    z += '^FO'+d(Ly.mg)+','+d(Ly.mg)+'^GB'+(W-2*d(Ly.mg))+','+(H-2*d(Ly.mg))+','+d(Ly.bw)+'^FS\r\n';      // moldura
+    Ly.it.forEach(t=>{
+      z += `^FO0,${d(t.y)}^A0N,${d(t.fs)},${d(t.fs)}^FB${W},1,0,C,0^FH^FD${iscaZEnc(t.txt)}^FS\r\n`;
     });
     z += '^PQ1,0,1,N\r\n^XZ\r\n';
   });
@@ -4117,35 +4146,35 @@ function iscaBaixarZPL(){
   const ts = new Date().toISOString().slice(0,10);
   /* .txt (e não .zpl): no Windows a extensão .zpl é associada ao Windows Media Player (playlist) e o arquivo vira "vídeo" */
   bkBaixar(new Blob([z],{type:'text/plain;charset=utf-8'}), 'iscas_zebra_'+ts+'.txt');
-  toast(iscaFolhas().length+' etiqueta(s) com 2 cargas cada geradas em ZPL (ordem: doca menor → maior).','ok');
+  toast(iscaFolhas().length+' etiqueta(s) geradas em ZPL, 1 por isca (ordem: doca menor → maior).','ok');
 }
-/* ---------- Word (.docx): 1 página = 1 etiqueta (tamanho configurado, margens 0), 2 cargas por página ---------- */
+/* ---------- Word (.docx): 1 página = 1 etiqueta (tamanho configurado), 1 carga por página ---------- */
 function iscaXmlEsc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 async function iscaGerarDocx(){
   const fl = iscaFolhas(); if(!fl.length) return null;
-  const c = iscaCfg(), TW = Math.round(c.larg/25.4*1440), TH = Math.round(c.alt/25.4*1440);   // mm -> twips
-  /* Layout em TABELA de 2 linhas de altura fixa (1 carga por linha) + parágrafo mínimo com a quebra de seção.
-     Usa só ~88% da altura da página (folga p/ a área não imprimível do driver Zebra). Tabela não sofre o corte de
-     "altura exata de linha" que fazia a 2ª carga sumir na impressão. */
-  const ROW = Math.floor(TH*0.44), base = ROW/20*0.25;   // pt
-  const larPt = TW/20*0.92;
-  const SECT = `<w:sectPr><w:pgSz w:w="${TW}" w:h="${TH}"/><w:pgMar w:top="0" w:right="0" w:bottom="0" w:left="0" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr>`;
-  const par = (txt, k)=>{
-    let fs = k===0 ? base*0.95 : base*1.08; if(txt) fs = Math.min(fs, larPt/(Math.max(txt.length,4)*0.64));
-    const sz = Math.max(8, Math.floor(fs*2));
-    return `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr>`+
-           `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/></w:rPr><w:t xml:space="preserve">${iscaXmlEsc(txt||'')}</w:t></w:r></w:p>`;
+  const c = iscaCfg(), tw = v => Math.round(v/25.4*1440);   // mm -> twips
+  const TW = tw(c.larg), TH = tw(c.alt), MG = tw(iscaLayout(fl[0].a, c).mg);
+  /* 1 página = 1 etiqueta (tamanho configurado). A moldura é a borda de uma tabela de 1 célula, com margem de página
+     igual à margem da moldura; os textos usam exatamente o mesmo layout da prévia/ZPL (iscaLayout). */
+  const SECT = `<w:sectPr><w:pgSz w:w="${TW}" w:h="${TH}"/><w:pgMar w:top="${MG}" w:right="${MG}" w:bottom="${MG}" w:left="${MG}" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr>`;
+  const corpoEtiqueta = (e, ultima)=>{
+    const Ly = iscaLayout(e, c), bw8 = Math.max(2, Math.round(Ly.bw/25.4*72*8));
+    let prev = Ly.mg + Ly.bw;                                   // topo útil da célula (mm, a partir do topo da etiqueta)
+    const ps = Ly.it.map(t=>{
+      const ptSz = t.fs*72/25.4, sz = Math.max(8, Math.round(ptSz*2)), linha = Math.round(ptSz*1.15*20);
+      const antes = Math.max(0, tw(t.y - prev));
+      prev = t.y + ptSz*1.15*25.4/72;
+      return `<w:p><w:pPr><w:spacing w:before="${antes}" w:after="0" w:line="${linha}" w:lineRule="exact"/><w:jc w:val="center"/></w:pPr>`+
+        `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/></w:rPr><w:t xml:space="preserve">${iscaXmlEsc(t.txt)}</w:t></w:r></w:p>`;
+    }).join('');
+    const W = TW - 2*MG, ROW = TH - 2*MG - 200;
+    const bd = k=>`<w:${k} w:val="single" w:sz="${bw8}" w:space="0" w:color="000000"/>`;
+    const tabela = `<w:tbl><w:tblPr><w:tblW w:w="${W}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders>${bd('top')}${bd('left')}${bd('bottom')}${bd('right')}</w:tblBorders><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${W}"/></w:tblGrid>`+
+      `<w:tr><w:trPr><w:cantSplit/><w:trHeight w:val="${ROW}" w:hRule="exact"/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${W}" w:type="dxa"/><w:vAlign w:val="top"/></w:tcPr>${ps}</w:tc></w:tr></w:tbl>`;
+    const fim = `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/>${ultima?'':SECT}</w:pPr><w:r><w:rPr><w:sz w:val="2"/></w:rPr><w:t></w:t></w:r></w:p>`;
+    return tabela + fim;
   };
-  const cel = (e, borda)=>{
-    const L = e ? iscaLinhasInfo(e) : ['','',''];
-    return `<w:tc><w:tcPr><w:tcW w:w="${TW}" w:type="dxa"/>`+
-      (borda?'<w:tcBorders><w:bottom w:val="dashed" w:sz="8" w:space="0" w:color="000000"/></w:tcBorders>':'')+
-      `<w:vAlign w:val="center"/></w:tcPr>${L.map(par).join('')}</w:tc>`;
-  };
-  const linha = (e, borda)=>`<w:tr><w:trPr><w:cantSplit/><w:trHeight w:val="${ROW}" w:hRule="exact"/></w:trPr>${cel(e,borda)}</w:tr>`;
-  const tabela = f => `<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${TW}"/></w:tblGrid>${linha(f.a,true)}${linha(f.b,false)}</w:tbl>`;
-  const fim = (ult)=>`<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/>${ult?'':SECT}</w:pPr><w:r><w:rPr><w:sz w:val="2"/></w:rPr><w:t></w:t></w:r></w:p>`;
-  const corpo = fl.map((f,i)=> tabela(f) + fim(i===fl.length-1)).join('');
+  const corpo = fl.map((f,i)=> corpoEtiqueta(f.a, i===fl.length-1)).join('');
   const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${corpo}`+
     SECT+`</w:body></w:document>`;
   const zip = new JSZip();
@@ -4159,7 +4188,7 @@ async function iscaBaixarWord(){
   if(typeof JSZip==='undefined'){ toast('Biblioteca de ZIP não carregou (verifique a internet).','err'); return; }
   const c = iscaCfg(), blob = await iscaGerarDocx();
   bkBaixar(blob, 'iscas_etiquetas_'+new Date().toISOString().slice(0,10)+'.docx');
-  toast(iscaFolhas().length+' etiqueta(s) de '+(c.larg/10)+' × '+(c.alt/10)+' cm geradas em Word (2 cargas por etiqueta). Imprima na Zebra TP com margens 0 e escala 100%.','ok');
+  toast(iscaFolhas().length+' etiqueta(s) de '+(c.larg/10)+' × '+(c.alt/10)+' cm geradas em Word (1 por isca). Imprima na Zebra TP com escala 100%.','ok');
 }
 function iscaCopiarZPL(){
   const z = iscaZPL(); if(!z){ toast('Não há etiquetas prontas para copiar.','err'); return; }
