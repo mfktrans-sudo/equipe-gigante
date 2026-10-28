@@ -784,7 +784,7 @@
       </div></div>
     <div id="ilBox"></div>
   </div>
-  <div class="panel">
+  <div class="panel" style="display:none"><!-- "Iscas vinculadas" oculto a pedido: sem ações, sobrecarregava a tela -->
     <div class="panel-head"><div><h2>Iscas vinculadas</h2><div class="desc">Ordem = sequência de impressão: docas da menor para a maior (e, na mesma doca, da 1ª onda em diante).</div></div></div>
     <div id="iscaTabela"></div>
   </div>
@@ -3359,7 +3359,7 @@ function adicionarIscasDeTexto(texto, origem){
     if(isca.placa && STATE.iscas.some(x=>placaKey(x.placa)===placaKey(isca.placa))){ dup.push(isca.placa); return; }
     STATE.iscas.push(isca); add++;
   });
-  if(STATE.iscaLote) ilDistribuir(); else saveState();
+  if(STATE.iscaLote) ilDistribuir(true); else saveState();
   renderIscas();
   const partes = [add+' isca(s) vinculada(s).'];
   if(escolher.length) partes.push('Doca com mais de uma carga: escolha a placa na tabela.');
@@ -3473,13 +3473,13 @@ async function iscaArquivos(fileList){
 function iscaEscolher(id, placa){
   const isca = STATE.iscas.find(x=>x.id===id); if(!isca || !placa) return;
   if(STATE.iscas.some(x=>x!==isca && placaKey(x.placa)===placaKey(placa))){ toast('A placa '+placa+' já possui isca.','err'); renderIscas(); return; }
-  isca.placa = placa; if(STATE.iscaLote) ilDistribuir(); else saveState(); renderIscas();
+  isca.placa = placa; if(STATE.iscaLote) ilDistribuir(true); else saveState(); renderIscas();
 }
-function removerIsca(id){ STATE.iscas = STATE.iscas.filter(x=>x.id!==id); if(STATE.iscaLote) ilDistribuir(); else saveState(); renderIscas(); }
+function removerIsca(id){ STATE.iscas = STATE.iscas.filter(x=>x.id!==id); if(STATE.iscaLote) ilDistribuir(true); else saveState(); renderIscas(); }
 function limparIscas(){
   if(!(STATE.iscas||[]).length) return;
   if(!confirm('Remover todas as iscas cadastradas?')) return;
-  STATE.iscas = []; if(STATE.iscaLote) ilDistribuir(); else saveState(); renderIscas();
+  STATE.iscas = []; if(STATE.iscaLote) ilDistribuir(true); else saveState(); renderIscas();
 }
 
 /* =========================================================
@@ -3771,10 +3771,16 @@ function ilReservadas(){ const s = new Set(); (STATE.iscas||[]).forEach(x=>{ if(
    2) a isca que sobra (região com menos placas que iscas) vai para a próxima placa livre de qualquer região, na mesma ordem;
    placas já usadas na digitação (prioridade) e as escolhidas por você ficam reservadas.
    Área sem região escolhida continua sem placa até você escolher. */
-function ilDistribuir(){
+function ilDistribuir(manter){
   const L = STATE.iscaLote; if(!L) return;
   const usada = ilReservadas();
   L.rows.forEach(r=>{ if(r.manual && r.placa) usada.add(placaKey(r.placa)); });
+  /* manter=true (ao incluir/remover isca digitada): quem já tem placa continua com ela; só é refeita a linha que perdeu a placa para a isca digitada */
+  if(manter){ const tip = ilReservadas(), kept = new Set();
+    L.rows.forEach(r=>{ if(r.manual || !r.placa) return; const k = placaKey(r.placa);
+      /* linha que já está com a placa digitada fica como está: é ela que fornece o nome do cliente da isca digitada */
+      if(kept.has(k) || (usada.has(k) && !tip.has(k))){ r.placa=''; r.sobra=false; return; }
+      kept.add(k); usada.add(k); }); }
   const livre = p => !usada.has(placaKey(p.placa));
   const tomar = (r, p, sobra) => { r.placa = p.placa; r.sobra = !!sobra; usada.add(placaKey(p.placa)); };
   const cachePool = {}, cacheT = {};
@@ -3784,7 +3790,7 @@ function ilDistribuir(){
   /* placas (de qualquer região) cujo território — 4ª coluna dos arquivos de Região — bate com o da área da isca */
   const poolTerr = r => cacheT[r.key] || (cacheT[r.key] = ilPoolDe(()=>true).filter(p=>bate(p, codsDe(r))));
   const pend = [];
-  L.rows.forEach(r=>{ if(r.manual && r.placa) return; r.placa = ''; r.sobra = false; pend.push(r); });
+  L.rows.forEach(r=>{ if(r.manual && r.placa) return; if(manter && r.placa) return; r.placa = ''; r.sobra = false; pend.push(r); });
   const comReg = pend.filter(r=>ilRegiaoDe(r.key)), semReg = pend.filter(r=>!ilRegiaoDe(r.key));
   /* 1ª passada: placa da região escolhida E com o mesmo território da isca */
   const resto = [];
@@ -3799,6 +3805,10 @@ function ilDistribuir(){
   }
   /* área sem região escolhida: se o território da isca tem placa nos arquivos de Região, já vincula */
   semReg.forEach(r=>{ const pt = poolTerr(r).find(livre); if(pt) tomar(r, pt, false); });
+  /* isca digitada (prioridade) cuja placa não está em nenhuma linha do arquivo: assume uma linha ainda sem placa, para trazer o nome do cliente */
+  const tem = new Set(L.rows.filter(r=>r.placa).map(r=>placaKey(r.placa)));
+  (STATE.iscas||[]).forEach(x=>{ const k = placaKey(x.placa); if(!k || tem.has(k)) return;
+    const r = L.rows.find(y=>!y.manual && !y.placa); if(r){ r.placa = x.placa; r.sobra = false; tem.add(k); } });
   saveState();
 }
 
@@ -4051,7 +4061,7 @@ function renderIscas(){
         <td class="mono">${v.doca!=null?v.doca:(v.st==='escolher'?x.isca.docaInformada:'—')}</td>
         <td class="mono">${v.onda!=null?v.onda+'ª':(v.st==='escolher'&&x.isca.ondaInformada?x.isca.ondaInformada+'ª':'—')}</td>
         <td>${pEsc(r.transportadora||car.transportadora||'—')}</td><td>${pEsc(r.regiao||car.regiao||'—')}</td>
-        <td style="color:var(--text-2)">${pEsc(x.isca.entrada||'')}</td><td>${badge(v)}</td>
+        <td style="color:var(--text-2)">${pEsc(x.isca.lote ? (x.isca.entrada||'') : [x.isca.entrada, iscaClienteDe(x.isca)].filter(Boolean).join(' · '))}</td><td>${badge(v)}</td>
         <td>${x.isca.lote?'<span style="color:var(--text-2);font-size:11px;">ajuste na lista do arquivo</span>':`<button class="small ghost" onclick="removerIsca('${x.isca.id}')">remover</button>`}</td></tr>`;
     }).join('')}</tbody></table></div>`;
   iscaRenderPreview(et);
