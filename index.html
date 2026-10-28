@@ -789,8 +789,6 @@
   <div class="panel">
     <div class="panel-head"><div><h2>Etiqueta Zebra</h2><div class="desc">Cada etiqueta é dividida exatamente ao meio por uma linha de corte/dobra e leva <b>2 cargas diferentes</b> (metade de cima e metade de baixo), com PRÉ, DOCA e ONDA em destaque. Padrão: 100 × 100 mm (10 × 10 cm), igual ao driver Zebra TP.</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        <button class="primary" onclick="iscaBaixarZPL()">⬇ Baixar ZPL (Zebra) .txt</button>
-        <button onclick="iscaCopiarZPL()">📋 Copiar ZPL</button>
         <button class="primary" onclick="iscaBaixarWord()">⬇ Baixar Word (.docx) 10×10 cm</button>
         <button class="primary" onclick="iscaImprimir()">🖨 Imprimir / salvar PDF</button></div></div>
     <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
@@ -2982,10 +2980,10 @@ function mxOcupantes(doca, onda){
 }
 /* Rótulo do campo ocupado: VM = carga da ferramenta; VM + TS = a mesma carga (placa) também consta na base TS.
    Campo só com placa da base TS (sem carga) continua sendo "TS". Mais de uma carga no mesmo campo: VM2, VM3... */
-function mxRotuloCampo(oc, tsMapa){
+function mxRotuloCampo(oc, tsMapa, tsNoCampo){
   const ehTS = x => !!(x.a.ts || (tsMapa && tsMapa[placaKey(x.a.placa)]));
   const base = oc.length>1 ? 'VM'+oc.length : 'VM';
-  return oc.some(ehTS) ? base+' + TS' : base;
+  return (oc.some(ehTS) || tsNoCampo) ? base+' + TS' : base;
 }
 function renderMatrizDocas(){
   const el = document.getElementById('pMatriz'); if(!el) return;
@@ -3001,8 +2999,9 @@ function renderMatrizDocas(){
       if(!oc.length && tsRes[d+'|'+o]){ h += `<td class="mx-cell mx-busy mx-ts mx-tsonly" data-doca="${d}" data-onda="${o}" data-tsplaca="${pEsc(tsRes[d+'|'+o])}" title="Doca ${d} · ${o}ª onda reservada pela base TS (placa ${pEsc(tsRes[d+'|'+o])}, sem carga na ferramenta).\nArraste para mover a reserva ou clique para alocar uma carga aqui." onclick="abrirCelulaMatriz(${d},${o})">TS</td>`; continue; }
       if(!oc.length){ h += `<td class="mx-cell mx-free" data-doca="${d}" data-onda="${o}" title="Doca ${d} · ${o}ª onda — livre. Clique ou solte uma carga aqui." onclick="abrirCelulaMatriz(${d},${o})"></td>`; continue; }
       const tip = oc.map(x=>`${x.a.placa} · ${x.a.transportadora||'sem transportadora'} · ${x.a.pres.length} PRÉ · ${pEntregas(x.a)} ent.`).join('\n');
-      const cls = 'mx-cell mx-busy'+(oc.some(x=>x.a.ts||tsMapa[placaKey(x.a.placa)])?' mx-ts':'')+(oc.length>1?' mx-dup':'')+(oc.some(x=>x.a.status==='AJUSTADO')?' mx-adj':'');
-      h += `<td class="${cls}" data-doca="${d}" data-onda="${o}" title="${pEsc(tip+(oc.some(x=>x.a.ts)?'\nDoca/onda definida pela base TS São Paulo':(oc.some(x=>tsMapa[placaKey(x.a.placa)])?'\nPlaca também consta na base TS São Paulo':''))+'\nArraste para mover')}" onclick="abrirCelulaMatriz(${d},${o})">${mxRotuloCampo(oc, tsMapa)}</td>`;
+      const tsNoCampo = !!tsRes[d+'|'+o];      // reserva da base TS (outra placa) no mesmo campo da carga VM
+      const cls = 'mx-cell mx-busy'+((tsNoCampo||oc.some(x=>x.a.ts||tsMapa[placaKey(x.a.placa)]))?' mx-ts':'')+(oc.length>1?' mx-dup':'')+(oc.some(x=>x.a.status==='AJUSTADO')?' mx-adj':'');
+      h += `<td class="${cls}" data-doca="${d}" data-onda="${o}" title="${pEsc(tip+(oc.some(x=>x.a.ts)?'\nDoca/onda definida pela base TS São Paulo':(oc.some(x=>tsMapa[placaKey(x.a.placa)])?'\nPlaca também consta na base TS São Paulo':''))+(tsNoCampo?'\nReserva da base TS (placa '+tsRes[d+'|'+o]+') neste mesmo campo — saem juntas (VM + TS)':'')+'\nArraste para mover')}" onclick="abrirCelulaMatriz(${d},${o})">${mxRotuloCampo(oc, tsMapa, tsNoCampo)}</td>`;
     }
     h += '</tr>';
   });
