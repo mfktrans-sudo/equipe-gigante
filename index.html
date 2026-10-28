@@ -3236,9 +3236,10 @@ function abrirCelulaMatriz(doca, onda){
    e gera as etiquetas Zebra na ordem das docas (menor → maior).
    ========================================================= */
 function iscaCfg(){
-  STATE.config.etiquetaIsca = Object.assign({larg:100, alt:100, dpi:203, info:true, mgEsq:6, areaLarg:78}, STATE.config.etiquetaIsca||{});
+  STATE.config.etiquetaIsca = Object.assign({larg:100, alt:100, dpi:203, info:true, mgEsq:6, areaLarg:74}, STATE.config.etiquetaIsca||{});
   const cfg = STATE.config.etiquetaIsca;
-  if(cfg.v!==2){ cfg.v=2; cfg.larg=100; cfg.alt=100; }   /* migração: padrão agora é 10 x 10 cm (driver Zebra TP) */
+  if(cfg.v!==2){ cfg.v=2; cfg.larg=100; cfg.alt=100; }
+  if(!cfg.vArea74){ cfg.vArea74 = 1; if(cfg.areaLarg===78) cfg.areaLarg = 74; }   /* migração: moldura 4 mm mais estreita para a borda direita aparecer */   /* migração: padrão agora é 10 x 10 cm (driver Zebra TP) */
   return cfg;
 }
 function iscaSalvarCfg(){
@@ -3247,7 +3248,7 @@ function iscaSalvarCfg(){
   c.alt  = Math.min(400, Math.max(30, parseFloat(document.getElementById('iscaAlt').value)||100));
   c.dpi  = parseInt(document.getElementById('iscaDpi').value)||203;
   c.mgEsq = Math.min(c.larg-20, Math.max(0, parseFloat(document.getElementById('iscaMgEsq').value)));  if(isNaN(c.mgEsq)) c.mgEsq = 6;
-  c.areaLarg = Math.min(c.larg-c.mgEsq, Math.max(20, parseFloat(document.getElementById('iscaAreaL').value)||78));
+  c.areaLarg = Math.min(c.larg-c.mgEsq, Math.max(20, parseFloat(document.getElementById('iscaAreaL').value)||74));
   c.info = document.getElementById('iscaInfo').checked;
   saveState(); renderIscas();
 }
@@ -4060,7 +4061,7 @@ function renderIscas(){
    Cada metade:   NOME DO CLIENTE (até 2 linhas, encolhe para caber)
                   PRÉ 20365
                   DOCA 131 - 1ª   (a onda aparece como 1ª, 2ª, 3ª, 4ª…)
-   Tudo fica dentro de uma ÁREA ÚTIL configurável (padrão: começa a 6 mm da esquerda e tem 78 mm de largura): a
+   Tudo fica dentro de uma ÁREA ÚTIL configurável (padrão: começa a 6 mm da esquerda e tem 74 mm de largura): a
    impressora não imprime o lado direito da folha, então nada é desenhado fora dessa área. */
 function iscaOndaTxt(o){ return o!=null ? o+'ª' : '—'; }
 function iscaLinhasInfo(e){
@@ -4090,7 +4091,7 @@ function iscaNomeLinhas(nome, wMm, maxFs){
 /* geometria da moldura: área útil (x0 = margem esquerda, aw = largura), espessura, altura de cada metade (Hs) e largura do texto (tw) */
 function iscaGeom(c){
   const W = c.larg, H = c.alt;
-  const x0 = Math.max(0, c.mgEsq!=null ? c.mgEsq : 6), aw = Math.max(20, Math.min(W-x0, c.areaLarg!=null ? c.areaLarg : 78));   // área útil: começa em x0 e tem largura aw
+  const x0 = Math.max(0, c.mgEsq!=null ? c.mgEsq : 6), aw = Math.max(20, Math.min(W-x0, c.areaLarg!=null ? c.areaLarg : 74));   // área útil: começa em x0 e tem largura aw
   const mgy = Math.max(3, H*0.04), bw = Math.max(0.7, Math.min(W,H)*0.0075);
   return {W, H, x0, aw, mgy, bw, Hs:(H-2*mgy)/2, tw:aw*0.9};
 }
