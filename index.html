@@ -773,16 +773,19 @@
       <div class="desc">Suba a <b>PROGRAMAÇÃO</b> do dia. A ferramenta cria <b>uma folha por placa</b>, em ordem alfabética, já com transportador, motorista, RG, CPF, placa e data. A <b>doca</b> (1° e 2°) é preenchida com a alocação desta ferramenta quando a placa já tem doca. Mesma placa em mais de um bloco (ex.: TV CENTRO) gera uma folha só.</div></div>
       <div id="ffBotoes" style="display:none;gap:8px;flex-wrap:wrap;">
         <button class="primary" onclick="ffBaixar()">⬇ Baixar folhas (.xlsx)</button>
+        <button class="primary" id="ffBtnZip" style="display:none" onclick="ffBaixarTodos()">⬇ Baixar todos (.zip)</button>
         <button class="danger" onclick="ffLimpar()">Remover arquivo</button>
+        <button class="danger" id="ffBtnTodos" style="display:none" onclick="ffLimpar(true)">Remover todos</button>
       </div></div>
     <div class="dropzone" id="ffDrop" onclick="document.getElementById('ffFile').click()"
          ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')"
          ondrop="event.preventDefault();this.classList.remove('drag');ffArquivos(event.dataTransfer.files)">
-      <b>Clique ou arraste a planilha da programação aqui</b>
-      <div class="desc">Aceita XLSX, XLSM, XLS, XLSB, ODS e CSV. Ao carregar, as folhas são geradas e o download começa automaticamente. A data da folha vem do nome do arquivo (ex.: PROGRAMAÇÃO_30_10_2026).</div>
-      <input type="file" id="ffFile" style="display:none" onchange="ffArquivos(this.files);this.value=''">
+      <b>Clique ou arraste as planilhas da programação aqui (pode selecionar vários arquivos de uma vez)</b>
+      <div class="desc">Aceita XLSX, XLSM, XLS, XLSB, ODS e CSV. Ao carregar, as folhas são geradas e o download começa automaticamente (com vários arquivos, baixa um único .zip com uma planilha por arquivo). A data de cada folha vem do nome do seu arquivo (ex.: PROGRAMAÇÃO_30_10_2026).</div>
+      <input type="file" id="ffFile" multiple style="display:none" onchange="ffArquivos(this.files);this.value=''">
     </div>
     <div id="ffLog" class="desc" style="margin-top:6px;"></div>
+    <div id="ffArqs" style="display:none;margin-top:10px;"></div>
   </div>
   <div class="panel" id="ffPanelLista" style="display:none">
     <div class="panel-head"><div><h2>Folhas geradas</h2><div class="desc" id="ffSub"></div></div></div>
@@ -1182,7 +1185,7 @@ function novaOperacao(){
   STATE.ondaStatus = {};
   STATE.iscas = [];
   STATE.iscaLote = null; IL_MEM.buf = null;
-  STATE.folhas = null;
+  STATE.folhas = null; STATE.folhasArqs = [];
   STATE.ts = [];
   saveState();
   // arquivos carregados na aba 3 (ainda não consolidados) e avisos
@@ -4907,32 +4910,86 @@ function ffDataDoNome(nome){
   const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 
+/* sobe um ou VÁRIOS arquivos de uma vez: cada arquivo vira o seu próprio conjunto de folhas (a data vem do nome dele) */
 async function ffArquivos(fileList){
-  const f = (Array.from(fileList||[]))[0]; if(!f) return;
-  const log = document.getElementById('ffLog'); if(log) log.textContent = 'Lendo '+f.name+'…';
-  try{
-    const buf = await f.arrayBuffer();
-    await new Promise(r=>setTimeout(r,40));
-    const res = ffLerProgramacao(buf);
-    if(!res.rows.length){ if(log) log.textContent = ''; toast('Não encontrei placas nesta planilha. Ela precisa ter as colunas PLACA e MOTORISTA.', 'err'); return; }
-    STATE.folhas = {nome:f.name, dataISO:ffDataDoNome(f.name), rows:res.rows, repetidas:res.repetidas};
-    saveState(); renderFolhas();
-    if(log) log.textContent = 'Lido: '+f.name+' — '+res.rows.length+' placa(s)'+(res.repetidas?' ('+res.repetidas+' repetida(s) ignorada(s))':'')+'.';
-    toast(res.rows.length+' folhas geradas. Baixando o arquivo…', 'ok');
-    await ffBaixar();
-  }catch(e){ console.error(e); if(log) log.textContent=''; toast('Não foi possível ler o arquivo: '+(e&&e.message||'erro'), 'err'); }
+  const files = Array.from(fileList||[]); if(!files.length) return;
+  const log = document.getElementById('ffLog');
+  const novos = [], falhas = [];
+  for(let i=0;i<files.length;i++){
+    const f = files[i];
+    if(log) log.textContent = 'Lendo '+(i+1)+' de '+files.length+': '+f.name+'…';
+    try{
+      const buf = await f.arrayBuffer();
+      await new Promise(r=>setTimeout(r,40));
+      const res = ffLerProgramacao(buf);
+      if(!res.rows.length){ falhas.push(f.name+' (não achei placas; precisa das colunas PLACA e MOTORISTA)'); continue; }
+      novos.push({nome:f.name, dataISO:ffDataDoNome(f.name), rows:res.rows, repetidas:res.repetidas});
+    }catch(e){ console.error(e); falhas.push(f.name+' ('+(e&&e.message||'erro')+')'); }
+  }
+  if(!novos.length){ if(log) log.textContent = ''; toast('Nenhum arquivo válido. '+falhas.join('; '), 'err'); return; }
+  ffMigrar();
+  STATE.folhasArqs = STATE.folhasArqs.filter(x=>!novos.some(n=>n.nome===x.nome)).concat(novos);
+  STATE.folhas = novos[novos.length-1];
+  saveState(); renderFolhas();
+  const totPl = novos.reduce((s,n)=>s+n.rows.length,0);
+  if(log) log.textContent = 'Lido'+(novos.length>1?'s '+novos.length+' arquivos':': '+novos[0].nome)+' — '+totPl+' placa(s)'
+    + (novos.length===1 && novos[0].repetidas ? ' ('+novos[0].repetidas+' repetida(s) ignorada(s))' : '')
+    + (falhas.length ? '. Não lido(s): '+falhas.join('; ') : '')+'.';
+  if(falhas.length) toast('Não consegui ler: '+falhas.join('; '), 'err');
+  const msgFinal = log ? log.textContent : '';
+  if(novos.length===1){ toast(novos[0].rows.length+' folhas geradas. Baixando o arquivo…', 'ok'); await ffBaixar(novos[0]); }
+  else { toast(totPl+' folhas em '+novos.length+' arquivos. Baixando o .zip…', 'ok'); await ffBaixarTodos(novos); }
+  if(log) log.textContent = msgFinal;
 }
 
-function ffLimpar(){
-  if(!STATE.folhas) return;
-  if(!confirm('Remover a programação carregada nesta aba?')) return;
-  STATE.folhas = null; saveState(); renderFolhas();
+/* garante a lista de arquivos (estados salvos antes desta versão só tinham STATE.folhas) */
+function ffMigrar(){
+  if(!Array.isArray(STATE.folhasArqs)) STATE.folhasArqs = [];
+  if(STATE.folhas && !STATE.folhasArqs.some(x=>x.nome===STATE.folhas.nome)) STATE.folhasArqs.push(STATE.folhas);
+}
+function ffSelecionar(i){ ffMigrar(); const F = STATE.folhasArqs[i]; if(!F) return; STATE.folhas = F; saveState(); renderFolhas(); }
+
+function ffLimpar(todos){
+  ffMigrar();
+  if(!STATE.folhas && !STATE.folhasArqs.length) return;
+  if(todos===true){
+    if(!confirm('Remover TODAS as programações carregadas nesta aba ('+STATE.folhasArqs.length+' arquivo(s))?')) return;
+    STATE.folhasArqs = []; STATE.folhas = null;
+  }else{
+    if(!confirm('Remover a programação selecionada ('+(STATE.folhas?STATE.folhas.nome:'')+')?')) return;
+    const sel = STATE.folhas;
+    STATE.folhasArqs = STATE.folhasArqs.filter(x=>x!==sel && !(sel && x.nome===sel.nome));
+    STATE.folhas = STATE.folhasArqs.length ? STATE.folhasArqs[STATE.folhasArqs.length-1] : null;
+  }
+  saveState(); renderFolhas();
   const log = document.getElementById('ffLog'); if(log) log.textContent='';
+}
+
+/* lista dos arquivos carregados (só aparece com 2 ou mais) */
+function ffRenderArqs(){
+  ffMigrar();
+  const box = document.getElementById('ffArqs'), L = STATE.folhasArqs;
+  const zip = document.getElementById('ffBtnZip'), tod = document.getElementById('ffBtnTodos');
+  const varios = L.length > 1;
+  if(zip) zip.style.display = varios ? '' : 'none';
+  if(tod) tod.style.display = varios ? '' : 'none';
+  if(!box) return;
+  if(!varios){ box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = '';
+  box.innerHTML = '<div class="table-wrap"><table><thead><tr><th></th><th>Arquivo</th><th>Data da folha</th><th>Folhas (placas)</th><th></th></tr></thead><tbody>'
+    + L.map((F,i)=>{
+        const sel = (F===STATE.folhas) || (STATE.folhas && F.nome===STATE.folhas.nome);
+        return '<tr style="cursor:pointer;'+(sel?'background:var(--bg-3);':'')+'" onclick="ffSelecionar('+i+')" title="Clique para ver as folhas deste arquivo">'
+          + '<td>'+(sel?'●':'')+'</td><td><b>'+pEsc(F.nome)+'</b></td><td>'+pEsc(isoParaBR(F.dataISO))+'</td><td>'+F.rows.length+'</td>'
+          + '<td><button class="small" onclick="event.stopPropagation();ffBaixar(STATE.folhasArqs['+i+'])">⬇ .xlsx</button></td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
 }
 
 function renderFolhas(){
   const F = STATE.folhas, pnl = document.getElementById('ffPanelLista'), bt = document.getElementById('ffBotoes');
   if(!pnl) return;
+  ffRenderArqs();
   if(!F || !F.rows || !F.rows.length){ pnl.style.display='none'; if(bt) bt.style.display='none'; return; }
   pnl.style.display=''; if(bt) bt.style.display='flex';
   let comDoca = 0, conferir = 0;
@@ -5000,12 +5057,34 @@ async function ffGerarXlsx(F){
   out.file('xl/_rels/workbook.xml.rels', wrels.replace(/<Relationship [^>]*relationships\/worksheet"[^>]*\/>/g,'').replace('</Relationships>', rels+'</Relationships>'));
   return out.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', compression:'DEFLATE'});
 }
-async function ffBaixar(){
-  const F = STATE.folhas; if(!F || !F.rows.length){ toast('Carregue a programação primeiro.','err'); return; }
+async function ffBaixar(F){
+  F = (F && F.rows) ? F : STATE.folhas; if(!F || !F.rows.length){ toast('Carregue a programação primeiro.','err'); return; }
   try{
     const blob = await ffGerarXlsx(F);
     bkBaixar(blob, 'FOLHAS_FLUXO_ENTRADA_SAIDA_'+isoParaBR(F.dataISO).replace(/\//g,'_')+'.xlsx');
   }catch(e){ console.error(e); toast('Erro ao gerar as folhas: '+(e&&e.message||e), 'err'); }
+}
+/* vários arquivos: uma planilha por arquivo, tudo num único .zip (evita o bloqueio de vários downloads do navegador) */
+async function ffBaixarTodos(lista){
+  ffMigrar();
+  const L = (Array.isArray(lista) ? lista : STATE.folhasArqs).filter(x=>x && x.rows && x.rows.length);
+  if(!L.length){ toast('Carregue a programação primeiro.','err'); return; }
+  if(L.length===1){ await ffBaixar(L[0]); return; }
+  const log = document.getElementById('ffLog');
+  try{
+    const zip = new JSZip(), usados = {};
+    for(let i=0;i<L.length;i++){
+      if(log) log.textContent = 'Gerando planilha '+(i+1)+' de '+L.length+': '+L[i].nome+'…';
+      const blob = await ffGerarXlsx(L[i]);
+      let nome = 'FOLHAS_FLUXO_ENTRADA_SAIDA_'+isoParaBR(L[i].dataISO).replace(/\//g,'_');
+      usados[nome] = (usados[nome]||0)+1; if(usados[nome]>1) nome += '_'+usados[nome];
+      zip.file(nome+'.xlsx', blob);
+      await new Promise(r=>setTimeout(r,20));
+    }
+    const z = await zip.generateAsync({type:'blob', compression:'STORE'});
+    bkBaixar(z, 'FOLHAS_FLUXO_ENTRADA_SAIDA_'+L.length+'_arquivos.zip');
+    if(log) log.textContent = 'Pronto: '+L.length+' planilhas no .zip.';
+  }catch(e){ console.error(e); toast('Erro ao gerar o .zip: '+(e&&e.message||e), 'err'); }
 }
 </script>
 
@@ -5408,6 +5487,153 @@ var _sw = window.switchTab;
 window.switchTab = function(tab){ _sw.apply(this, arguments); if(tab==='saida') window.csRender(); };
 restore();
 if(!S.opts.data) S.opts.data = hojeISO();
+})();
+</script>
+
+<script type="module">
+/* =========================================================
+   VERSÃO / ATUALIZAÇÃO AUTOMÁTICA DA FERRAMENTA
+   - Mostra no cabeçalho a data/hora da última atualização publicada (a mesma em todos os computadores).
+   - Avisa quando existe versão nova publicada e oferece atualizar.
+
+   Como funciona (não depende do GitHub nem do Firebase Hosting, e não precisa editar nada à mão):
+   1) A página lê o próprio arquivo publicado e calcula uma "impressão digital" (SHA-256). Qualquer
+      mudança publicada muda essa impressão digital.
+   2) A hora fica no Firestore: coleção gdn_docas, documento versaoFerramenta {hash, versao, atualizadoEm}.
+      Quem abre a versão publicada mais nova (e ainda não registrada) grava a hora do servidor; os demais só leem.
+   3) A cada 5 min (e ao voltar para a aba) a página confere se o arquivo publicado mudou; se mudou, mostra o aviso.
+   Se o Firestore recusar a gravação, mostra a hora em que ESTE navegador viu a versão pela primeira vez.
+   O texto "vX.Y" do cabeçalho continua o que está no HTML; só a data/hora é automática.
+   ========================================================= */
+import { getApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, doc, getDoc, onSnapshot, setDoc, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+(function(){
+  const tag = document.querySelector('.ver-tag');
+  if(!tag) return;
+  let app, auth, db;
+  try{ app = getApp(); auth = getAuth(app); db = getFirestore(app); }
+  catch(e){ console.warn('versão: Firebase indisponível, mantendo o texto do cabeçalho', e); return; }
+
+  const LSK  = 'ver_ferramenta_v1';                 /* sem prefixo gdn_: a limpeza de espaço do saveState só apaga chaves gdn_ */
+  const POLL = (window.GDN_VER_POLL_MS|0) || 300000; /* 5 min */
+  const VER  = (/^\s*(v[\d.]+)/i.exec(tag.textContent||'')||[,'v2.1'])[1];
+  const BASE = location.href.split('#')[0].split('?')[0];
+
+  /* ---------- exibição ---------- */
+  function fmt(ms){
+    const p = {};
+    new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'})
+      .formatToParts(new Date(ms)).forEach(x=>{ p[x.type]=x.value; });
+    return p.day+'/'+p.month+'/'+p.year+' às '+p.hour+':'+p.minute;
+  }
+  function mostrar(ms){ if(ms) tag.textContent = VER+' · atualizado em '+fmt(ms); }
+  function lerLocal(){ try{ return JSON.parse(localStorage.getItem(LSK)||'null'); }catch(e){ return null; } }
+  function gravarLocal(hash, ts){ try{ localStorage.setItem(LSK, JSON.stringify({hash, ts})); }catch(e){} }
+
+  /* mostra já a última hora conhecida neste navegador (antes de o login/Firestore responderem) */
+  const _c = lerLocal(); if(_c && _c.ts) mostrar(_c.ts);
+
+  /* ---------- impressão digital do arquivo publicado ---------- */
+  async function sha(t){
+    if(window.crypto && crypto.subtle){
+      const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t));
+      return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('').slice(0,24);
+    }
+    let h = 2166136261; for(let i=0;i<t.length;i++){ h ^= t.charCodeAt(i); h = Math.imul(h,16777619); }
+    return 'f'+(h>>>0).toString(16)+'-'+t.length;
+  }
+  async function hashPublicado(){            /* o que está publicado AGORA (ignora qualquer cache) */
+    const r = await fetch(BASE+'?_v='+Date.now(), {cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return sha(await r.text());
+  }
+  async function hashRodando(){              /* a cópia que este navegador guardou ao abrir a página (se houver) */
+    try{
+      const r = await fetch(BASE, {cache:'only-if-cached', mode:'same-origin'});
+      if(r && r.ok) return sha(await r.text());
+    }catch(e){}
+    return null;
+  }
+
+  /* ---------- aviso de versão nova ---------- */
+  let avisado = false;
+  function avisoNova(){
+    if(avisado) return; avisado = true;
+    let b = document.getElementById('verBanner');
+    if(!b){
+      b = document.createElement('div'); b.id = 'verBanner';
+      b.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);top:10px;z-index:100000;display:flex;gap:12px;align-items:center;flex-wrap:wrap;'
+        + 'background:var(--bg-3,#1B2A47);border:1px solid var(--amber,#F5A623);color:var(--text-0,#EAF0FB);border-radius:10px;padding:10px 14px;'
+        + 'box-shadow:0 6px 24px rgba(0,0,0,.55);font:13px var(--sans,Arial);max-width:92vw;';
+      b.innerHTML = '<span>🔄 <b>Nova atualização disponível.</b> Termine o que estiver fazendo e atualize (os dados da operação ficam salvos).</span>'
+        + '<button class="primary small" id="verBtnAtualizar">Atualizar agora</button><button class="small ghost" id="verBtnDepois">Depois</button>';
+      document.body.appendChild(b);
+      b.querySelector('#verBtnAtualizar').onclick = function(){
+        try{ if(typeof window.saveState==='function') window.saveState(); }catch(e){}
+        location.href = BASE+'?_v='+Date.now();   /* o ?_v= força buscar o arquivo novo, sem cache */
+      };
+      b.querySelector('#verBtnDepois').onclick = function(){ b.style.display='none'; setTimeout(function(){ avisado = false; }, 10*60*1000); };
+    }
+    b.style.display = 'flex';
+  }
+
+  /* ---------- fluxo principal (depois do login) ---------- */
+  let iniciado = false;
+  async function iniciar(){
+    let hLive, hRun;
+    try{
+      hLive = await hashPublicado();
+      const h2 = await hashPublicado();
+      if(h2 !== hLive){ console.warn('versão: o servidor entrega conteúdo diferente a cada pedido; detecção automática desativada.'); return; }
+      hRun = await hashRodando();
+    }catch(e){ console.warn('versão: não consegui ler o arquivo publicado (abrindo direto do disco?)', e); return; }
+    const hLoad = hRun || hLive;                 /* versão que este navegador está realmente executando */
+    const desatualizado = hLoad !== hLive;       /* abriu uma cópia antiga guardada em cache */
+
+    function fallbackLocal(){
+      const c = lerLocal();
+      const ts = (c && c.hash === hLoad && c.ts) ? c.ts : Date.now();
+      gravarLocal(hLoad, ts); mostrar(ts);
+    }
+    async function registrar(){
+      try{
+        const atual = await getDoc(ref);
+        if(atual.exists() && atual.data().hash === hLoad) return;
+        await setDoc(ref, {hash:hLoad, versao:VER, atualizadoEm:serverTimestamp(), atualizadoPor:(auth.currentUser && auth.currentUser.email) || ''});
+      }catch(e){ console.warn('versão: não consegui gravar a hora no Firestore (regras?); usando a hora deste navegador.', e); fallbackLocal(); }
+    }
+
+    const ref = doc(db, 'gdn_docas', 'versaoFerramenta');
+    if(desatualizado) avisoNova();
+
+    onSnapshot(ref, async snap => {
+      const d = snap.exists() ? snap.data() : null;
+      const ts = d && d.atualizadoEm && d.atualizadoEm.toMillis ? d.atualizadoEm.toMillis() : null;
+      if(d && d.hash === hLoad){                 /* é a versão que estou rodando: mostra a hora registrada */
+        if(ts){ gravarLocal(hLoad, ts); mostrar(ts); }
+        return;                                  /* (sem ts = gravação pendente; o próximo snapshot traz a hora) */
+      }
+      /* documento ausente ou de outra versão */
+      if(desatualizado){ avisoNova(); return; }  /* estou numa cópia antiga: nunca sobrescrevo */
+      let aindaPublicada = true;
+      try{ aindaPublicada = (await hashPublicado()) === hLoad; }catch(e){}
+      if(aindaPublicada) await registrar(); else avisoNova();
+    }, err => { console.warn('versão: não consegui ler o Firestore; usando a hora deste navegador.', err); fallbackLocal(); });
+
+    async function checar(){
+      if(avisado || document.hidden) return;
+      try{ if((await hashPublicado()) !== hLoad) avisoNova(); }catch(e){}
+    }
+    setInterval(checar, POLL);
+    document.addEventListener('visibilitychange', function(){ if(!document.hidden) checar(); });
+  }
+
+  onAuthStateChanged(auth, function(user){
+    if(user && !iniciado){ iniciado = true; iniciar().catch(function(e){ console.warn('versão:', e); }); }
+  });
 })();
 </script>
 
