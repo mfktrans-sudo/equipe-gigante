@@ -496,6 +496,7 @@
   <button class="tab-btn" data-tab="backup" onclick="switchTab('backup')">7 · Backup &amp; Upload</button>
   <button class="tab-btn" data-tab="folhas" onclick="switchTab('folhas')">8 · Folhas de Fluxo</button>
   <button class="tab-btn" data-tab="saida" onclick="switchTab('saida')">9 · Controle de Saída</button>
+  <button class="tab-btn" data-tab="kitcoletas" onclick="switchTab('kitcoletas')">10 · Kit Coletas</button>
 </div>
 
 <!-- ================= TAB 1: PARAMETROS ================= -->
@@ -947,6 +948,50 @@
   <div class="panel" id="csSemPanel" style="display:none;">
     <div class="panel-head"><div><h2>⚠ Coletas sem veículo</h2><div class="desc">Não entram em nenhum formulário. Ajuste a tabela de regiões acima ou confira a REGIÃO na Programação.</div></div></div>
     <div class="table-wrap" style="max-height:300px;overflow-y:auto;"><table id="csSem"><thead><tr><th>ORM</th><th>NFDV</th><th>Tipo</th><th>CEP</th><th>Motivo</th></tr></thead><tbody></tbody></table></div>
+  </div>
+</div>
+
+<!-- ================= TAB 10: KIT COLETAS ================= -->
+<div class="view" id="view-kitcoletas">
+
+  <div class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>Kit Coletas</h2>
+        <div class="desc">Carregue a <b>planilha de Coletas</b> do dia, o <b>Tipo de Residência</b> (.xlsm) e a <b>Lista de carga</b> finalizada (o Excel “lista por onda” ou “cargas acumuladas por filial” gerado pela ferramenta). A ferramenta reconhece cada arquivo pelas colunas, acha a <b>placa</b> de cada coleta pela ORM no Tipo de Residência e traz <b>CARGA, PRÉ, ONDA e TRANSP.</b> da Lista de carga. A coluna KIT/Nº fica em branco para preenchimento à mão.</div>
+      </div>
+      <button class="danger small" onclick="kcLimpar()">Limpar arquivos</button>
+    </div>
+    <div class="dropzone" onclick="document.getElementById('kcInp').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="kcDrop(event)">
+      <span class="k">Clique ou arraste os arquivos aqui</span>Coletas · Tipo de Residência · Lista de carga — .xlsx / .xlsm / .xls (pode soltar os três juntos)
+    </div>
+    <input type="file" id="kcInp" multiple accept=".xlsx,.xlsm,.xls,.xlsb,.ods,.csv" style="display:none" onchange="kcFiles(this.files); this.value=''">
+    <div id="kcArqs" class="filelist"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>Kit coleta</h2><div class="desc">Ordem: doca, onda e ORM. Linhas em vermelho não encontraram placa ou carga e ficam por último.</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <label style="margin:0;font-size:12px;color:var(--text-2);">Data <input type="date" id="kcData" onchange="kcOpt()" style="margin-left:4px;"></label>
+        <button class="primary" onclick="kcBaixar()">⬇ Baixar Excel</button>
+        <button class="primary" onclick="kcImprimir()">Imprimir</button>
+      </div>
+    </div>
+    <div class="cs-kpis" id="kcKpis"></div>
+    <div id="kcVazio" class="empty">Carregue a <b>Coletas</b>, o <b>Tipo de Residência</b> e a <b>Lista de carga</b> acima para montar o kit coleta.</div>
+    <div class="table-wrap" id="kcTabWrap" style="max-height:560px;overflow-y:auto;display:none;">
+      <table id="kcTab">
+        <thead><tr><th>ORM</th><th>KIT/Nº</th><th>Descrição do Produto</th><th>PLACA</th><th>CARGA</th><th>PRÉ</th><th>ONDA</th><th>TRANSP.</th><th>Qtd</th><th>Tipo de Coleta</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel" id="kcSemPanel" style="display:none;">
+    <div class="panel-head"><div><h2>⚠ Coletas sem placa ou sem carga</h2><div class="desc">Confira se a ORM está no Tipo de Residência e se a placa está na Lista de carga.</div></div></div>
+    <div class="table-wrap" style="max-height:300px;overflow-y:auto;"><table id="kcSem"><thead><tr><th>ORM</th><th>Descrição do Produto</th><th>Placa</th><th>Motivo</th></tr></thead><tbody></tbody></table></div>
   </div>
 </div>
 
@@ -5487,6 +5532,236 @@ var _sw = window.switchTab;
 window.switchTab = function(tab){ _sw.apply(this, arguments); if(tab==='saida') window.csRender(); };
 restore();
 if(!S.opts.data) S.opts.data = hojeISO();
+})();
+</script>
+
+<script>
+/* =========================================================
+   KIT COLETAS (aba 10)
+   Coletas (ORM, descrição, qtd, tipo) + Tipo de Residência (ORM -> placa) + Lista de carga (placa -> carga, PRÉ, onda, transp.)
+   Dados próprios em localStorage['kc_kit_v1'] (prefixo diferente de gdn_). Não altera nenhuma outra aba.
+   ========================================================= */
+(function(){
+'use strict';
+var KEY = 'kc_kit_v1';
+var S = { coletas:[], tipo:{}, lista:{}, arqs:[], data:'' };
+var ROWS = [];
+
+function nm(s){ return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
+function tx(v){ return v==null ? '' : String(v).trim(); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function $(id){ return document.getElementById(id); }
+function say(m,t){ try{ toast(m,t); }catch(e){ console.log(m); } }
+function hojeISO(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function dataBR(iso){ var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||''); return m ? m[3]+'/'+m[2]+'/'+m[1] : ''; }
+function dataDoNome(nome){ var m=/(\d{2})[._-](\d{2})[._-](\d{4})/.exec(String(nome||'')); return m ? m[3]+'-'+m[2]+'-'+m[1] : ''; }
+
+function persist(){
+  try{ localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch(e){ console.warn('Kit coletas: não consegui salvar no navegador', e); }
+}
+function restore(){
+  try{
+    var raw = localStorage.getItem(KEY); if(!raw) return;
+    var p = JSON.parse(raw);
+    S.coletas = p.coletas||[]; S.tipo = p.tipo||{}; S.lista = p.lista||{}; S.arqs = p.arqs||[]; S.data = p.data||'';
+  }catch(e){ console.warn('Kit coletas: estado salvo ilegível, ignorando', e); }
+}
+
+/* ---------- leitura dos arquivos ---------- */
+function findHeader(rows, needs){
+  for(var i=0;i<Math.min(rows.length,40);i++){
+    var m = {};
+    (rows[i]||[]).forEach(function(c,j){ var k=nm(c); if(k && !(k in m)) m[k]=j; });
+    if(needs.every(function(n){ return n in m; })) return {row:i, map:m};
+  }
+  return null;
+}
+function detectar(rows){
+  var h = findHeader(rows,['CARGA','PLACAS']);
+  if(h && Object.keys(h.map).some(function(k){ return k.indexOf('PREROMANEIO')===0; })) return 'lista';
+  if(findHeader(rows,['NFDV','ORM'])) return 'coletas';
+  if(findHeader(rows,['PLACA','CLIENTE','FILIAL','NF'])) return 'tipo';
+  return null;
+}
+function parseLista(rows){
+  var h = findHeader(rows,['CARGA','PLACAS']);
+  var keys = Object.keys(h.map);
+  var docaCols = keys.filter(function(k){ return k.indexOf('DOCA')===0; }).map(function(k){ return h.map[k]; });
+  var preCols = keys.filter(function(k){ return k.indexOf('PREROMANEIO')===0; })
+    .map(function(k){ return {f: k.replace('PREROMANEIO','').replace(/^CAJ/,''), c: h.map[k]}; })
+    .sort(function(a,b){ return a.c-b.c; });
+  var out = {};
+  for(var i=h.row+1;i<rows.length;i++){
+    var r = rows[i]||[];
+    var placa = tx(r[h.map.PLACAS]).toUpperCase(), carga = r[h.map.CARGA];
+    if(!placa || carga==null || carga==='' || isNaN(Number(carga))) continue;
+    var k = nm(placa); if(out[k]) continue;
+    var doca = ''; docaCols.forEach(function(c){ if(!doca && tx(r[c])) doca = tx(r[c]); });
+    var pres = []; preCols.forEach(function(p){ var v = r[p.c]; if(v!=null && v!=='') pres.push({f:p.f, v:v}); });
+    out[k] = { placa:placa, carga:Number(carga), doca:doca, transp: h.map.TRANSP==null ? '' : tx(r[h.map.TRANSP]), pres:pres };
+  }
+  return out;
+}
+function parseColetas(rows){
+  var h = findHeader(rows,['NFDV','ORM']);
+  var g = function(r,k){ return h.map[k]==null ? null : r[h.map[k]]; };
+  var out = [];
+  for(var i=h.row+1;i<rows.length;i++){
+    var r = rows[i]||[]; var orm = g(r,'ORM');
+    if(orm==null || orm==='') continue;
+    out.push({ orm:tx(orm), desc:tx(g(r,'DESCRICAODOPRODUTO')), qtd:g(r,'QTD')==null?'':g(r,'QTD'), tipo:tx(g(r,'TIPODECOLETA')) });
+  }
+  return out;
+}
+function parseTipo(rows){
+  var h = findHeader(rows,['PLACA','CLIENTE','FILIAL','NF']);
+  var out = {};
+  for(var i=h.row+1;i<rows.length;i++){
+    var r = rows[i]||[]; var c = tx(r[h.map.CLIENTE]), p = tx(r[h.map.PLACA]).toUpperCase();
+    if(p && /^\d+$/.test(c)) out[c] = p;   /* a ORM vem na coluna Cliente */
+  }
+  return out;
+}
+function lerArquivo(file){
+  return new Promise(function(res,rej){
+    var fr = new FileReader();
+    fr.onerror = function(){ rej(new Error('Não consegui ler '+file.name)); };
+    fr.onload = function(){
+      try{ res(XLSX.read(new Uint8Array(fr.result), {type:'array'})); }catch(e){ rej(e); }
+    };
+    fr.readAsArrayBuffer(file);
+  });
+}
+window.kcFiles = async function(fileList){
+  if(typeof XLSX==='undefined'){ say('Biblioteca de planilhas (XLSX) não carregou. Confira a internet e recarregue a página.','err'); return; }
+  var files = Array.from(fileList||[]), ok = 0;
+  for(var i=0;i<files.length;i++){
+    var f = files[i], achou = false;
+    try{
+      var wb = await lerArquivo(f);
+      for(var s=0;s<wb.SheetNames.length && !achou;s++){
+        var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[s]], {header:1, defval:null, raw:true});
+        var tipo = detectar(rows); if(!tipo) continue;
+        var n;
+        if(tipo==='lista'){ S.lista = parseLista(rows); n = Object.keys(S.lista).length; }
+        else if(tipo==='tipo'){ S.tipo = parseTipo(rows); n = Object.keys(S.tipo).length; }
+        else{ S.coletas = parseColetas(rows); n = S.coletas.length; var d = dataDoNome(f.name); if(d) S.data = d; }
+        S.arqs = S.arqs.filter(function(a){ return a.tipo!==tipo; });
+        S.arqs.push({tipo:tipo, nome:f.name, n:n});
+        achou = true; ok++;
+      }
+      if(!achou) say('"'+f.name+'" não parece Coletas, Tipo de Residência nem Lista de carga (não achei as colunas esperadas).','err');
+    }catch(e){ console.error(e); say('Erro ao ler "'+f.name+'": '+(e.message||e),'err'); }
+  }
+  if(ok){ persist(); window.kcRender(); say(ok+' arquivo(s) reconhecido(s).','ok'); }
+};
+window.kcDrop = function(ev){ ev.preventDefault(); ev.currentTarget.classList.remove('drag'); window.kcFiles(ev.dataTransfer.files); };
+window.kcLimpar = function(){
+  if(!confirm('Remover Coletas, Tipo de Residência e Lista de carga carregados nesta aba?')) return;
+  S.coletas=[]; S.tipo={}; S.lista={}; S.arqs=[]; persist(); window.kcRender();
+};
+window.kcOpt = function(){ S.data = $('kcData').value; persist(); window.kcRender(); };
+
+/* ---------- cálculo ---------- */
+function ondaDe(doca){ var m=/\((\d+)\s*[ªaº°]/i.exec(doca||''); return m ? Number(m[1]) : 9999; }
+function docaNum(doca){ var m=/^\s*(\d+)/.exec(doca||''); return m ? Number(m[1]) : 99999; }
+function escolherPre(L){
+  if(!L || !L.pres.length) return '';
+  for(var i=0;i<L.pres.length;i++) if(String(L.pres[i].f)==='33') return L.pres[i].v;   /* PRÉ da filial principal (CAJ-33) */
+  return L.pres[0].v;
+}
+function temArq(t){ return S.arqs.some(function(a){ return a.tipo===t; }); }
+function calcular(){
+  var rows = S.coletas.map(function(c){
+    var placa = S.tipo[c.orm] || '';
+    var L = placa ? S.lista[nm(placa)] : null;
+    var motivo = '';
+    if(!placa) motivo = temArq('tipo') ? 'ORM não encontrada no Tipo de Residência' : 'Tipo de Residência não carregado';
+    else if(!L) motivo = temArq('lista') ? 'Placa não está na Lista de carga' : 'Lista de carga não carregada';
+    return { orm:c.orm, desc:c.desc, qtd:c.qtd, tipo:c.tipo, placa:placa, carga:L?L.carga:'', pre:L?escolherPre(L):'', onda:L?L.doca:'', transp:L?L.transp:'', motivo:motivo, ok:!!L };
+  });
+  rows.sort(function(a,b){
+    if(a.ok!==b.ok) return a.ok ? -1 : 1;
+    return (docaNum(a.onda)-docaNum(b.onda)) || (ondaDe(a.onda)-ondaDe(b.onda)) || (Number(a.orm)-Number(b.orm)) || String(a.orm).localeCompare(String(b.orm));
+  });
+  return rows;
+}
+
+/* ---------- saídas ---------- */
+var COLS = ['ORM','KIT/Nº','Descrição do Produto','PLACA','CARGA','PRÉ','ONDA','TRANSP.','Qtd','Tipo de Coleta'];
+function numOuTxt(v){ return (v!=='' && v!=null && !isNaN(Number(v))) ? Number(v) : v; }
+function linhaArr(r){ return [numOuTxt(r.orm), '', r.desc, r.placa, r.carga, numOuTxt(r.pre), r.onda, r.transp, numOuTxt(r.qtd), r.tipo]; }
+function dataForm(){ return dataBR(S.data) || dataBR(hojeISO()); }
+window.kcBaixar = function(){
+  if(!ROWS.length){ say('Nada para baixar.','err'); return; }
+  if(typeof XLSX==='undefined'){ say('Biblioteca de Excel não carregou. Verifique a conexão.','err'); return; }
+  var aoa = [['','',dataForm(),'','','','','','','']].concat([COLS]).concat(ROWS.map(linhaArr));
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [10,9,36,10,8,9,16,14,6,14].map(function(w){ return {wch:w}; });
+  var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Kit_Coleta');
+  XLSX.writeFile(wb, 'Kit_Coletas_'+dataForm().replace(/\//g,'-')+'.xlsx');
+  say('Excel gerado: '+ROWS.length+' coleta(s).','ok');
+};
+window.kcImprimir = function(){
+  if(!ROWS.length){ say('Nada para imprimir.','err'); return; }
+  var w = [8,8,24,9,6,7,12,11,4,11];
+  var html = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Kit coletas</title><style>'+
+    '@page{size:A4 portrait;margin:10mm}html,body{margin:0;padding:0;background:#fff;color:#000;font-family:Calibri,Arial,sans-serif}'+
+    'table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:10.5px}th,td{border:1px solid #999;padding:6px 4px;text-align:center;overflow:hidden}'+
+    'th{font-weight:600;color:#444}td.l{text-align:left}tr{page-break-inside:avoid}thead{display:table-header-group}</style></head><body><table><colgroup>'+
+    w.map(function(x){ return '<col style="width:'+x+'%">'; }).join('')+'</colgroup><thead><tr><th></th><th></th><th>'+esc(dataForm())+'</th><th></th><th></th><th></th><th></th><th></th><th></th><th></th></tr><tr>'+
+    COLS.map(function(c){ return '<th>'+esc(c)+'</th>'; }).join('')+'</tr></thead><tbody>'+
+    ROWS.map(function(r){ var a = linhaArr(r); return '<tr>'+a.map(function(v,i){ return '<td'+(i===2?' class="l"':'')+'>'+esc(v)+'</td>'; }).join('')+'</tr>'; }).join('')+
+    '</tbody></table></body></html>';
+  var win = null; try{ win = window.open('','_blank'); }catch(e){}
+  if(win){ win.document.open(); win.document.write(html); win.document.close(); win.focus(); setTimeout(function(){ win.print(); }, 500); }
+  else{
+    var fr = document.createElement('iframe'); fr.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    document.body.appendChild(fr);
+    var d = fr.contentWindow.document; d.open(); d.write(html); d.close();
+    setTimeout(function(){ fr.contentWindow.focus(); fr.contentWindow.print(); setTimeout(function(){ fr.remove(); }, 60000); }, 500);
+  }
+};
+
+/* ---------- tela ---------- */
+window.kcRender = function(){
+  if(!$('view-kitcoletas')) return;
+  if(!S.data) S.data = hojeISO();
+  $('kcData').value = S.data;
+  var nomes = {coletas:'Coletas', tipo:'Tipo de Residência', lista:'Lista de carga'}, un = {coletas:'coleta(s)', tipo:'ORM(s) com placa', lista:'placa(s)'};
+  $('kcArqs').innerHTML = S.arqs.map(function(a){
+    return '<div class="fitem"><span>'+esc(nomes[a.tipo])+' — '+esc(a.nome)+'</span><span class="badge ok">'+a.n+' '+un[a.tipo]+'</span></div>';
+  }).join('');
+  ROWS = calcular();
+  var falta = ['coletas','tipo','lista'].filter(function(t){ return !temArq(t); }).map(function(t){ return nomes[t]; });
+  var sem = ROWS.filter(function(r){ return !r.ok; });
+  $('kcKpis').innerHTML =
+    '<div class="cs-kpi"><b>'+ROWS.length+'</b><span>Coletas no dia</span></div>'+
+    '<div class="cs-kpi"><b>'+(ROWS.length-sem.length)+'</b><span>Com placa e carga</span></div>'+
+    '<div class="cs-kpi'+(sem.length?' warn':'')+'"><b>'+sem.length+'</b><span>Sem placa ou sem carga</span></div>'+
+    '<div class="cs-kpi"><b>'+ROWS.filter(function(r){ return /troca/i.test(r.tipo); }).length+'</b><span>Troca coleta</span></div>';
+  var tb = $('kcTab').querySelector('tbody');
+  tb.innerHTML = ROWS.map(function(r){
+    var a = linhaArr(r), st = r.ok ? '' : ' style="background:var(--red-dim);"';
+    return '<tr'+st+'>'+a.map(function(v,i){ return '<td'+(i===2?' style="text-align:left;"':'')+'>'+esc(v)+'</td>'; }).join('')+'</tr>';
+  }).join('');
+  $('kcVazio').style.display = ROWS.length ? 'none' : 'block';
+  $('kcVazio').innerHTML = falta.length ? 'Falta carregar: <b>'+esc(falta.join(', '))+'</b>.' : 'Nenhuma coleta encontrada no arquivo.';
+  $('kcTabWrap').style.display = ROWS.length ? 'block' : 'none';
+  var sp = $('kcSemPanel');
+  if(sem.length){
+    sp.style.display = 'block';
+    $('kcSem').querySelector('tbody').innerHTML = sem.map(function(r){
+      return '<tr><td>'+esc(r.orm)+'</td><td>'+esc(r.desc)+'</td><td>'+esc(r.placa||'—')+'</td><td>'+esc(r.motivo)+'</td></tr>';
+    }).join('');
+  } else sp.style.display = 'none';
+};
+
+/* ---------- encaixe na navegação existente (sem alterar a função original) ---------- */
+var _sw = window.switchTab;
+window.switchTab = function(tab){ _sw.apply(this, arguments); if(tab==='kitcoletas') window.kcRender(); };
+restore();
 })();
 </script>
 
