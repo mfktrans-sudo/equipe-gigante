@@ -996,7 +996,7 @@
     <div class="panel-head">
       <div>
         <h2>Coleta</h2>
-        <div class="desc">Carregue a <b>planilha de Coletas</b> do dia, o <b>Tipo de Residência</b> (.xlsm) e a <b>Lista de carga</b> finalizada (o Excel “lista por onda” ou “cargas acumuladas por filial” gerado pela ferramenta). A ferramenta reconhece cada arquivo pelas colunas, acha a <b>placa</b> de cada coleta pela ORM no Tipo de Residência e traz <b>CARGA, PRÉ, ONDA e TRANSP.</b> da Lista de carga. A coluna KIT/Nº fica em branco para preenchimento à mão.</div>
+        <div class="desc">Carregue a <b>planilha de Coletas</b> do dia, o <b>Tipo de Residência</b> (.xlsm) e a <b>Lista de carga</b> finalizada (o Excel “lista por onda” ou “cargas acumuladas por filial” gerado pela ferramenta). A ferramenta reconhece cada arquivo pelas colunas, acha a <b>placa</b> de cada coleta pela ORM no Tipo de Residência e traz <b>CARGA, PRÉ, ONDA e TRANSP.</b> da Lista de carga. Se a lista já foi gerada na aba <b>1 · Lista de Carga</b>, ela é usada automaticamente (não precisa carregar o Excel). A coluna KIT/Nº fica em branco para preenchimento à mão.</div>
       </div>
       <button class="danger small" onclick="kcLimpar()">Limpar arquivos</button>
     </div>
@@ -6107,13 +6107,31 @@ function escolherPre(L){
   return L.pres[0].v;
 }
 function temArq(t){ return S.arqs.some(function(a){ return a.tipo===t; }); }
+/* Lista de carga gerada na aba 1 (STATE.alocacao): mesmo formato do parseLista, sem precisar carregar o Excel */
+function listaViva(){
+  var mapa = {}, n = 0;
+  try{
+    if(typeof STATE==='undefined' || typeof pCargasNumeradas!=='function' || !(STATE.alocacao && STATE.alocacao.length)) return {mapa:mapa, n:0};
+    pCargasNumeradas().forEach(function(it){
+      if(it.pend) return;
+      var a = it.a, k = nm(a.placa); if(!k || mapa[k]) return;
+      var porF = {}, pres = [];
+      (a.pres||[]).forEach(function(p){ (porF[p.filial] = porF[p.filial] || []).push(p); });
+      Object.keys(porF).forEach(function(f){ pres.push({f:String(f), v:pPreVal(porF[f])}); });
+      mapa[k] = { placa:String(a.placa||'').toUpperCase(), carga:it.n, doca:pDoca(a)+' ('+a.onda+'ªONDA)', transp:a.transportadora||'', pres:pres };
+      n++;
+    });
+  }catch(e){ console.warn('Kit coletas: não consegui ler a Lista de carga da aba 1', e); return {mapa:{}, n:0}; }
+  return {mapa:mapa, n:n};
+}
 function calcular(){
+  var viva = listaViva();
   var rows = S.coletas.map(function(c){
     var placa = S.tipo[c.orm] || '';
-    var L = placa ? S.lista[nm(placa)] : null;
+    var L = placa ? (viva.mapa[nm(placa)] || S.lista[nm(placa)]) : null;
     var motivo = '';
     if(!placa) motivo = temArq('tipo') ? 'ORM não encontrada no Tipo de Residência' : 'Tipo de Residência não carregado';
-    else if(!L) motivo = temArq('lista') ? 'Placa não está na Lista de carga' : 'Lista de carga não carregada';
+    else if(!L) motivo = (temArq('lista') || viva.n) ? 'Placa não está na Lista de carga' : 'Lista de carga não carregada';
     return { orm:c.orm, desc:c.desc, qtd:c.qtd, tipo:c.tipo, placa:placa, carga:L?L.carga:'', pre:L?escolherPre(L):'', onda:L?L.doca:'', transp:L?L.transp:'', motivo:motivo, ok:!!L };
   });
   rows.sort(function(a,b){
@@ -6167,9 +6185,9 @@ window.kcRender = function(){
   var nomes = {coletas:'Coletas', tipo:'Tipo de Residência', lista:'Lista de carga'}, un = {coletas:'coleta(s)', tipo:'ORM(s) com placa', lista:'placa(s)'};
   $('kcArqs').innerHTML = S.arqs.map(function(a){
     return '<div class="fitem"><span>'+esc(nomes[a.tipo])+' — '+esc(a.nome)+'</span><span class="badge ok">'+a.n+' '+un[a.tipo]+'</span></div>';
-  }).join('');
+  }).join('') + (listaViva().n ? '<div class="fitem"><span>Lista de carga — gerada na aba 1 · Lista de Carga (atualiza sozinha)</span><span class="badge ok">'+listaViva().n+' placa(s)</span></div>' : '');
   ROWS = calcular();
-  var falta = ['coletas','tipo','lista'].filter(function(t){ return !temArq(t); }).map(function(t){ return nomes[t]; });
+  var falta = ['coletas','tipo','lista'].filter(function(t){ return !temArq(t) && !(t==='lista' && listaViva().n); }).map(function(t){ return nomes[t]; });
   var sem = ROWS.filter(function(r){ return !r.ok; });
   $('kcKpis').innerHTML =
     '<div class="cs-kpi"><b>'+ROWS.length+'</b><span>Coletas no dia</span></div>'+
