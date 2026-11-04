@@ -88,6 +88,11 @@
   }
   .tab-btn:hover{color:var(--text-0);background:var(--bg-1);}
   .tab-btn.active{color:var(--amber);border-bottom-color:var(--amber);background:var(--bg-1);}
+  .subtabs{display:none;gap:8px;padding:12px 28px 0;background:var(--bg-0);flex-wrap:wrap;}
+  .subtabs.show{display:flex;}
+  .subtab-btn{background:var(--bg-1);border:1px solid var(--line);color:var(--text-2);padding:8px 16px;font-size:13px;font-weight:600;border-radius:999px;white-space:nowrap;cursor:pointer;}
+  .subtab-btn:hover{color:var(--text-0);}
+  .subtab-btn.active{color:var(--amber);border-color:var(--amber);}
 
   .view{display:none;padding:24px 28px 60px;max-width:none;margin:0 auto;}
   .view.active{display:block;}
@@ -487,16 +492,19 @@
 </div>
 
 <div class="tabs">
-  <button class="tab-btn active" data-tab="parametros" onclick="switchTab('parametros')">1 · Parâmetros</button>
-  <button class="tab-btn" data-tab="cadastro" onclick="switchTab('cadastro')">2 · Cadastro de Placas</button>
-  <button class="tab-btn" data-tab="upload" onclick="switchTab('upload')">3 · Upload &amp; Consolidação</button>
-  <button class="tab-btn" data-tab="painel" onclick="switchTab('painel')">4 · Painel por Doca &amp; Ondas</button>
-  <button class="tab-btn" data-tab="iscas" onclick="switchTab('iscas')">5 · Iscas</button>
-  <button class="tab-btn" data-tab="dashboard" onclick="switchTab('dashboard')">6 · Indicadores</button>
-  <button class="tab-btn" data-tab="backup" onclick="switchTab('backup')">7 · Backup &amp; Upload</button>
-  <button class="tab-btn" data-tab="folhas" onclick="switchTab('folhas')">8 · Folhas de Fluxo</button>
-  <button class="tab-btn" data-tab="saida" onclick="switchTab('saida')">9 · Controle de Saída</button>
-  <button class="tab-btn" data-tab="kitcoletas" onclick="switchTab('kitcoletas')">10 · Kit Coletas</button>
+  <button class="tab-btn active" data-tab="config" onclick="switchTab('config')">1 · Configurações</button>
+  <button class="tab-btn" data-tab="upload" onclick="switchTab('upload')">2 · Upload &amp; Consolidação</button>
+  <button class="tab-btn" data-tab="painel" onclick="switchTab('painel')">3 · Painel por Doca &amp; Ondas</button>
+  <button class="tab-btn" data-tab="iscas" onclick="switchTab('iscas')">4 · Iscas</button>
+  <button class="tab-btn" data-tab="dashboard" onclick="switchTab('dashboard')">5 · Indicadores</button>
+  <button class="tab-btn" data-tab="folhas" onclick="switchTab('folhas')">6 · Folhas de Fluxo</button>
+  <button class="tab-btn" data-tab="saida" onclick="switchTab('saida')">7 · Controle de Saída</button>
+  <button class="tab-btn" data-tab="kitcoletas" onclick="switchTab('kitcoletas')">8 · Kit Coletas</button>
+</div>
+<div class="subtabs show" id="subtabsConfig">
+  <button class="subtab-btn active" data-sub="parametros" onclick="switchTab('parametros')">Parâmetros</button>
+  <button class="subtab-btn" data-sub="cadastro" onclick="switchTab('cadastro')">Cadastro de Placas</button>
+  <button class="subtab-btn" data-sub="backup" onclick="switchTab('backup')">Backup &amp; Upload</button>
 </div>
 
 <!-- ================= TAB 1: PARAMETROS ================= -->
@@ -532,7 +540,7 @@
     </div>
   </div>
 
-  <div class="footer-note">Parâmetros salvos automaticamente no navegador. Use a aba 7 · Backup &amp; Upload para guardar uma cópia externa.</div>
+  <div class="footer-note">Parâmetros salvos automaticamente no navegador. Use a aba Configurações › Backup &amp; Upload para guardar uma cópia externa.</div>
 </div>
 
 <!-- ================= TAB 2: CADASTRO PLACAS ================= -->
@@ -739,6 +747,8 @@
         <select id="pOnda" onchange="renderPainel()"></select>
         <button class="primary" onclick="rodarAlocacao()">Rodar alocação ▶</button>
         <button class="primary" onclick="exportarListaOndasExcel()">⬇ Gerar Excel da lista</button>
+        <select id="etqPorFolha" title="Quantas etiquetas por folha A4"><option value="2" selected>2 etiquetas por folha</option><option value="1">1 etiqueta por folha</option></select>
+        <button class="primary" onclick="etqBaixarWord()" title="Word A4 com PRÉ, ONDA (doca-onda) e PLACA das cargas da 3ª onda em diante, ordenado por doca">🖨 Etiquetas Word (3ª onda+)</button>
       </div>
     </div>
     <div class="grid cols-4" id="pStats"></div>
@@ -771,7 +781,7 @@
 <div class="view" id="view-folhas">
   <div class="panel">
     <div class="panel-head"><div><h2>Folhas de Fluxo — Entrada e Saída (P1)</h2>
-      <div class="desc">Suba a <b>PROGRAMAÇÃO</b> do dia. A ferramenta cria <b>uma folha por placa</b>, em ordem alfabética, já com transportador, motorista, RG, CPF, placa e data. A <b>doca</b> (1° e 2°) é preenchida com a alocação desta ferramenta quando a placa já tem doca. Mesma placa em mais de um bloco (ex.: TV CENTRO) gera uma folha só.</div></div>
+      <div class="desc">Suba a <b>PROGRAMAÇÃO</b> do dia. A ferramenta cria <b>uma folha por placa</b>, em ordem alfabética, já com transportador, motorista, RG, CPF, placa e data. O <b>nº da carga</b> (o mesmo da lista de carga) e a <b>doca</b> (campo 1°) são preenchidos com a alocação desta ferramenta quando a placa já tem doca. Mesma placa em mais de um bloco (ex.: TV CENTRO) gera uma folha só.</div></div>
       <div id="ffBotoes" style="display:none;gap:8px;flex-wrap:wrap;">
         <button class="primary" onclick="ffBaixar()">⬇ Baixar folhas (.xlsx)</button>
         <button class="primary" id="ffBtnZip" style="display:none" onclick="ffBaixarTodos()">⬇ Baixar todos (.zip)</button>
@@ -785,13 +795,21 @@
       <div class="desc">Aceita XLSX, XLSM, XLS, XLSB, ODS e CSV. Ao carregar, as folhas são geradas e o download começa automaticamente (com vários arquivos, baixa um único .zip com uma planilha por arquivo). A data de cada folha vem do nome do seu arquivo (ex.: PROGRAMAÇÃO_30_10_2026).</div>
       <input type="file" id="ffFile" multiple style="display:none" onchange="ffArquivos(this.files);this.value=''">
     </div>
+    <div id="ffAssin" style="margin-top:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+      <b style="font-size:13px;">Assinatura da folha:</b>
+      <span id="ffAssinPrev" style="display:inline-flex;align-items:center;justify-content:center;min-width:140px;height:42px;padding:2px 8px;background:#fff;border:1px solid var(--line);border-radius:6px;font-size:12px;color:#666;">padrão</span>
+      <button class="small" onclick="document.getElementById('ffAssinFile').click()">✍ Trocar assinatura</button>
+      <button class="small" id="ffAssinReset" style="display:none" onclick="ffAssinRestaurar()">↩ Voltar à padrão</button>
+      <input type="file" id="ffAssinFile" accept="image/*" style="display:none" onchange="ffAssinTrocar(this.files[0]);this.value=''">
+      <span class="desc" style="margin:0;">Imagem (PNG/JPG) que sai no campo de assinatura de todas as folhas geradas. Fica salva neste navegador.</span>
+    </div>
     <div id="ffLog" class="desc" style="margin-top:6px;"></div>
     <div id="ffArqs" style="display:none;margin-top:10px;"></div>
   </div>
   <div class="panel" id="ffPanelLista" style="display:none">
     <div class="panel-head"><div><h2>Folhas geradas</h2><div class="desc" id="ffSub"></div></div></div>
     <div id="ffResumo" class="grid cols-4" style="margin-bottom:14px;"></div>
-    <div class="table-wrap" style="max-height:560px;overflow-y:auto;"><table><thead><tr><th>#</th><th>Placa (aba)</th><th>Transportador</th><th>Motorista</th><th>RG</th><th>CPF</th><th>Doca 1°</th><th>Doca 2°</th><th>Conferir</th></tr></thead><tbody id="ffTbody"></tbody></table></div>
+    <div class="table-wrap" style="max-height:560px;overflow-y:auto;"><table><thead><tr><th>#</th><th>Placa (aba)</th><th>Transportador</th><th>Motorista</th><th>RG</th><th>CPF</th><th>Nº Carga</th><th>Doca 1°</th><th>Conferir</th></tr></thead><tbody id="ffTbody"></tbody></table></div>
   </div>
 </div>
 
@@ -799,11 +817,11 @@
 <div class="view" id="view-iscas">
   <div class="panel">
     <div class="panel-head"><div><h2>Iscas com rastreador</h2>
-      <div class="desc">Informe cada isca pela <b>placa</b> em que ela vai sair ou pela <b>doca</b>. A ferramenta procura no arquivo já carregado (cargas e alocação) e vincula a isca à carga, à doca e à onda. Toda isca precisa sair em uma placa que esteja no arquivo — placas ou docas que não existem nele são recusadas. Se a carga mudar de doca no Painel, a isca acompanha a placa.</div></div></div>
+      <div class="desc">Informe cada isca pela <b>placa</b> em que ela vai sair ou pela <b>doca</b>. A ferramenta procura no arquivo já carregado (cargas e alocação) e vincula a isca à carga, à doca e à onda. Toda isca precisa sair em uma placa que esteja no arquivo — placas ou docas que não existem nele são recusadas. Se a carga mudar de doca no Painel, a isca acompanha a placa.<br><b>⭐ Prioridade na roteirização:</b> toda placa ou doca digitada aqui é tratada como <b>prioridade</b> — fica reservada para a isca informada e a distribuição automática do arquivo (por região/território) nunca a usa para outra isca.</div></div></div>
     <div class="grid cols-2" style="align-items:start;">
       <div>
-        <label>Uma por linha — placa ou doca</label>
-        <textarea id="iscaTexto" rows="6" style="width:100%" placeholder="TBA4J30&#10;EWJ6E19&#10;doca 129&#10;150 2   (= doca 150, 2ª onda)"></textarea>
+        <label>Uma por linha — placa ou doca (as informadas aqui têm prioridade na roteirização)</label>
+        <textarea id="iscaTexto" rows="6" style="width:100%" placeholder="PRIORIDADE NA ROTEIRIZAÇÃO — o que for digitado aqui tem preferência sobre a distribuição automática do arquivo.&#10;&#10;TBA4J30&#10;EWJ6E19&#10;doca 129&#10;150 2   (= doca 150, 2ª onda)"></textarea>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
           <button class="primary" onclick="adicionarIscas()">Vincular iscas</button>
           <button class="danger" onclick="limparIscas()">Limpar todas</button></div>
@@ -1016,7 +1034,7 @@
     </div>
     <input type="file" id="bkInput" multiple style="display:none" onchange="bkRestaurarArquivos(this.files); this.value=''">
     <div id="bkLog" class="filelist" style="margin-top:12px;"></div>
-    <div class="desc" style="margin-top:10px;max-width:none;">Os arquivos de operação (GAN, Log de NF e Região) continuam sendo carregados na aba 3 · Upload &amp; Consolidação.</div>
+    <div class="desc" style="margin-top:10px;max-width:none;">Os arquivos de operação (GAN, Log de NF e Região) continuam sendo carregados na aba 2 · Upload &amp; Consolidação.</div>
   </div>
 </div>
 
@@ -1201,7 +1219,7 @@ function avisarFalhaSalvar(e, ctx){
   } else {
     motivo = 'erro '+nome+'.';
   }
-  toast('Não foi possível salvar automaticamente: '+motivo+' Faça um backup manual na aba 7 · Backup & Upload.', 'err');
+  toast('Não foi possível salvar automaticamente: '+motivo+' Faça um backup manual na aba Configurações › Backup & Upload.', 'err');
 }
 function saveState(){
   let json;
@@ -1263,8 +1281,15 @@ function toast(msg, type){
 /* =========================================================
    NAVEGAÇÃO
    ========================================================= */
+const CFG_SUBS=['parametros','cadastro','backup'];
+let _cfgSubAtual='parametros';
 function switchTab(tab){
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  if(tab==='config') tab=_cfgSubAtual;
+  const emCfg=CFG_SUBS.includes(tab);
+  if(emCfg) _cfgSubAtual=tab;
+  document.getElementById('subtabsConfig').classList.toggle('show', emCfg);
+  document.querySelectorAll('.subtab-btn').forEach(b=>b.classList.toggle('active', b.dataset.sub===tab));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===(emCfg?'config':tab)));
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+tab).classList.add('active');
   if(tab==='parametros') renderParametros();
@@ -1481,8 +1506,16 @@ function renderCadastro(){
   const tbody = document.querySelector('#tblCadastro tbody');
   tbody.innerHTML = '';
   const filtro = (document.getElementById('cadastroFiltro').value || '').toUpperCase();
+  /* ordem de exibição: prioridade de onda crescente (individual da placa, senão a da transportadora);
+     quem não tem prioridade definida vai para o fim. Só muda a exibição — a ordem salva não é alterada. */
+  const _prioCad = c => {
+    if(c.prioridadeIndividual != null && c.prioridadeIndividual !== '') return Number(c.prioridadeIndividual);
+    const t = STATE.config.transportadoras.find(t=>String(t.nome||'').trim().toUpperCase()===String(c.transportadora||'').trim().toUpperCase());
+    return t && t.prioridade != null ? Number(t.prioridade) : 999999;
+  };
   STATE.config.cadastroPlacas
     .filter(c => !filtro || c.placa.toUpperCase().includes(filtro) || (c.transportadora||'').toUpperCase().includes(filtro))
+    .sort((a,b)=> _prioCad(a)-_prioCad(b) || String(a.transportadora||'').localeCompare(String(b.transportadora||'')) || String(a.placa||'').localeCompare(String(b.placa||'')))
     .forEach((c)=>{
       const realIdx = STATE.config.cadastroPlacas.indexOf(c);
       const tr = document.createElement('tr');
@@ -1509,7 +1542,7 @@ function addCadastroRow(){
   if(idxVazio>=0){
     document.getElementById('cadastroFiltro').value='';
     renderCadastro();
-    const inp = document.querySelectorAll('#tblCadastro tbody tr')[idxVazio];
+    const inp = Array.from(document.querySelectorAll('#tblCadastro tbody tr')).find(tr=>{ const i=tr.querySelector('input'); return i && !placaKey(i.value); });
     if(inp){ const i = inp.querySelector('input'); if(i) i.focus(); }
     toast('Já existe uma linha em branco — preencha a placa nela.', 'err');
     return;
@@ -1536,6 +1569,7 @@ function updateCadastro(idx, field, val){
     revincularTransportadoras();
     saveState();
   }
+  if(field==='transportadora' || field==='prioridadeIndividual') renderCadastro();   // reordena pela prioridade
 }
 function removeCadastro(idx){ STATE.config.cadastroPlacas.splice(idx,1); saveState(); renderCadastro(); }
 function processCadastroPaste(){
@@ -1704,7 +1738,7 @@ function cadastroProcessarPlanilha(buf, nomeArq, opts){
   if(invalidas.length) h += '<div>• '+invalidas.length+' linha(s) ignorada(s) por placa inválida: '+cadEsc(invalidas.slice(0,6).join(', '))+(invalidas.length>6?' …':'')+'</div>';
   if(semTransp.length) h += '<div>• '+semTransp.length+' placa(s) sem transportadora na planilha (ignoradas): '+cadEsc(semTransp.slice(0,6).join(', '))+(semTransp.length>6?' …':'')+'</div>';
   if(recalc) h += '<div>• '+recalc+' carga(s) já consolidada(s) tiveram a transportadora atualizada</div>';
-  if(semParam.length) h += '<div style="margin-top:6px;color:var(--amber,#b9770e);">⚠ Transportadora(s) novas, já criadas em 1 · Parâmetros com faixa de docas vazia: <b>'+cadEsc(semParam.join(', '))+'</b>. Preencha a doca inicial/final de cada uma e rode a alocação.</div>';
+  if(semParam.length) h += '<div style="margin-top:6px;color:var(--amber,#b9770e);">⚠ Transportadora(s) novas, já criadas em Configurações › Parâmetros com faixa de docas vazia: <b>'+cadEsc(semParam.join(', '))+'</b>. Preencha a doca inicial/final de cada uma e rode a alocação.</div>';
   if(!salvou) h += '<div style="margin-top:6px;color:var(--red,#c0392b);">⚠ O armazenamento <b>deste navegador</b> está cheio, então a cópia local não foi gravada. O cadastro é salvo no <b>Firebase</b>: confirme que a linha “☁ Cadastro salvo no Firebase” no topo da aba está sem erro. Para liberar espaço aqui, use “Ver o que ocupa o espaço”.</div>';
   cadMostrar(h, !!opts.anexar);
   if(!opts.quieto) toast(novas.length+' placa(s) importada(s) da planilha.'+(salvou?'':' ATENÇÃO: não foi possível salvar no navegador.'), salvou?'ok':'err');
@@ -2544,7 +2578,7 @@ function menorPreRomaneio(carga){
 }
 
 /* Transportadoras que têm placa no cadastro/cargas mas não existem em Parâmetros: cria a linha (faixa 0–0,
-   a preencher) para ela aparecer em 1 · Parâmetros. A ferramenta NÃO inventa doca. Retorna os nomes criados. */
+   a preencher) para ela aparecer em Configurações › Parâmetros. A ferramenta NÃO inventa doca. Retorna os nomes criados. */
 function garantirTranspParametros(nomes){
   const criadas = [], un = STATE.config.unidades[0];
   const ja = new Set(STATE.config.transportadoras.map(t=>String(t.nome||'').trim().toUpperCase()));
@@ -2602,7 +2636,7 @@ function rodarAlocacao(silencioso){
     for(let d=cfg.docaIn; d<=cfg.docaFim; d++){ if(!docasUnidade || docasUnidade.has(d)) docasFaixa.push(d); }
     if(docasFaixa.length===0){
       const semFaixa = !(cfg.docaIn>0 && cfg.docaFim>0);
-      cargas.forEach(c=> resultado.push(baseAlocRow(c, nomeTransp, 'ALTERAR', null, semFaixa ? 'Transportadora sem faixa de doca — preencha a faixa em 1 · Parâmetros e rode a alocação' : 'Nenhuma doca disponível na faixa parametrizada para essa transportadora')));
+      cargas.forEach(c=> resultado.push(baseAlocRow(c, nomeTransp, 'ALTERAR', null, semFaixa ? 'Transportadora sem faixa de doca — preencha a faixa em Configurações › Parâmetros e rode a alocação' : 'Nenhuma doca disponível na faixa parametrizada para essa transportadora')));
       return;
     }
     cargas.forEach(c=> fila.push({c, nomeTransp, docasFaixa, un: cfg.unidade}));
@@ -2629,7 +2663,7 @@ function rodarAlocacao(silencioso){
     semFaixa.forEach(it=>{
       const unidade = STATE.config.unidades.find(u=>u.id===it.un) || STATE.config.unidades[0];
       if(!usar || !unidade){
-        resultado.push(baseAlocRow(it.c, it.nomeTransp, 'ALTERAR', null, 'Transportadora sem faixa de doca — preencha a faixa em 1 · Parâmetros e rode a alocação')); return;
+        resultado.push(baseAlocRow(it.c, it.nomeTransp, 'ALTERAR', null, 'Transportadora sem faixa de doca — preencha a faixa em Configurações › Parâmetros e rode a alocação')); return;
       }
       const emFaixa = new Set();
       STATE.config.transportadoras.forEach(t=>{ if(t.unidade===unidade.id && t.docaIn>0 && t.docaFim>0) for(let d=t.docaIn; d<=t.docaFim; d++) emFaixa.add(d); });
@@ -2651,7 +2685,7 @@ function rodarAlocacao(silencioso){
   saveState();
   atualizarTodasAsAbas();
   const msgAloc = 'Alocação recalculada: '+resultado.length+' carga(s) processada(s)'+(tsPlano.n?' — '+tsPlano.n+' com doca/onda fixada pela base TS':'')+'.'
-    + (nDocaLivre ? ' '+nDocaLivre+' carga(s) de transportadora sem faixa foram alocadas em docas livres (confira; o ideal é preencher a faixa em 1 · Parâmetros).' : '')
+    + (nDocaLivre ? ' '+nDocaLivre+' carga(s) de transportadora sem faixa foram alocadas em docas livres (confira; o ideal é preencher a faixa em Configurações › Parâmetros).' : '')
     + (transpCriadas.length ? ' Transportadora(s) sem faixa de docas: '+transpCriadas.join(', ')+'.' : '');
   if(!silencioso) toast(msgAloc, 'ok');
   return msgAloc;
@@ -2957,7 +2991,7 @@ async function bkLerBuffer(nome, buf){
     catch(e){ return ign('JSON inválido'); }
   }
   const c=bkClassificar(bkParseCSV(txt),nome);
-  return c?[c]:ign('não é um backup (arquivos GAN, Log de NF e Região entram na aba 3 · Upload & Consolidação)');
+  return c?[c]:ign('não é um backup (arquivos GAN, Log de NF e Região entram na aba 2 · Upload & Consolidação)');
 }
 function bkRenderTudo(){ renderParametros(); renderCadastro(); renderConsolidado(); renderOrfaos(); renderTS(); renderAlocacao(); renderDashboard(); renderIscas(); renderBackup(); }
 async function bkRestaurarArquivos(fileList){
@@ -4253,7 +4287,7 @@ function renderIscas(){
         <td class="mono">${v.doca!=null?v.doca:(v.st==='escolher'?x.isca.docaInformada:'—')}</td>
         <td class="mono">${v.onda!=null?v.onda+'ª':(v.st==='escolher'&&x.isca.ondaInformada?x.isca.ondaInformada+'ª':'—')}</td>
         <td>${pEsc(r.transportadora||car.transportadora||'—')}</td><td>${pEsc(r.regiao||car.regiao||'—')}</td>
-        <td style="color:var(--text-2)">${pEsc(x.isca.lote ? (x.isca.entrada||'') : [x.isca.entrada, iscaClienteDe(x.isca)].filter(Boolean).join(' · '))}</td><td>${badge(v)}</td>
+        <td style="color:var(--text-2)">${x.isca.lote?'':'<span class="badge ok" title="Informada na digitação: tem prioridade na roteirização">⭐ prioridade</span> '}${pEsc(x.isca.lote ? (x.isca.entrada||'') : [x.isca.entrada, iscaClienteDe(x.isca)].filter(Boolean).join(' · '))}</td><td>${badge(v)}</td>
         <td>${x.isca.lote?'<span style="color:var(--text-2);font-size:11px;">ajuste na lista do arquivo</span>':`<button class="small ghost" onclick="removerIsca('${x.isca.id}')">remover</button>`}</td></tr>`;
     }).join('')}</tbody></table></div>`;
   iscaRenderPreview(et);
@@ -4544,7 +4578,7 @@ function pSelecionarFilialLista(cod){ pFilialSel=cod; renderCargasFilial(); }
 /* Placa sem transportadora cadastrada: escolhe uma das transportadoras já parametrizadas; grava no cadastro de placas (e no Firebase). Depois é só rodar a alocação. */
 function pSeletorTransp(placa){
   const nomes = Array.from(new Set(STATE.config.transportadoras.map(t=>t.nome).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
-  return `<select title="Placa sem transportadora cadastrada. Escolha uma já parametrizada; se for transportadora nova, cadastre primeiro em 1 · Parâmetros." onchange="pVincularTranspPlaca('${pEsc(placa)}', this.value)" style="max-width:170px;border-color:var(--amber);"><option value="">Escolher transportadora…</option>${nomes.map(n=>`<option value="${pEsc(n)}">${pEsc(n)}</option>`).join('')}</select>`;
+  return `<select title="Placa sem transportadora cadastrada. Escolha uma já parametrizada; se for transportadora nova, cadastre primeiro em Configurações › Parâmetros." onchange="pVincularTranspPlaca('${pEsc(placa)}', this.value)" style="max-width:170px;border-color:var(--amber);"><option value="">Escolher transportadora…</option>${nomes.map(n=>`<option value="${pEsc(n)}">${pEsc(n)}</option>`).join('')}</select>`;
 }
 function pVincularTranspPlaca(placa, nome){
   if(!nome) return;
@@ -4563,7 +4597,7 @@ function renderCargasFilial(){
   const elT=document.getElementById('pFilialTabs'), elB=document.getElementById('pFilialTabela');
   if(!elT||!elB) return;
   if(!STATE.alocacao.length){
-    elT.innerHTML=''; elB.innerHTML='<div class="empty">Rode a alocação (botão “Rodar alocação” na aba 3 · Upload &amp; Consolidação) para ver as cargas por filial.</div>'; return;
+    elT.innerHTML=''; elB.innerHTML='<div class="empty">Rode a alocação (botão “Rodar alocação” na aba 2 · Upload &amp; Consolidação) para ver as cargas por filial.</div>'; return;
   }
   const items=pItensFiltrados();
   const abas=[{cod:'ACUM', nome:'Acumulado', n:items.length}].concat(
@@ -4616,6 +4650,76 @@ function exportarCargasFilialExcel(){
   const ts=new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
   XLSX.writeFile(wb,`cargas_acumuladas_por_filial_${ts}.xlsx`);
   toast('Excel gerado: '+r.acum+' carga(s) no acumulado + '+STATE.config.filiais.length+' aba(s) de filial.','ok');
+}
+
+/* =========================================================
+   ETIQUETAS A4 (WORD) — cargas da 3ª onda em diante
+   Layout igual ao modelo: PRÉ | ONDA (doca-onda) | PLACA.
+   Ordenado por doca e, dentro da doca, por onda (129-3, 129-4, 130-3...).
+   ========================================================= */
+function etqCargas(){
+  return (STATE.alocacao||[])
+    .filter(a=> a.status!=='ALTERAR' && pDoca(a)!=null && Number(a.onda)>=3)
+    .sort((a,b)=>(pDoca(a)-pDoca(b)) || (Number(a.onda)-Number(b.onda)) || String(a.placa).localeCompare(String(b.placa)));
+}
+function etqPreTxt(a){
+  const s = new Set();
+  (a.pres||[]).forEach(p=>{ const v = String(p.preRomaneio==null?'':p.preRomaneio).trim(); if(v) s.add(v); });
+  return Array.from(s).sort((x,y)=>(parseInt(x)||0)-(parseInt(y)||0)).join(' / ');
+}
+async function etqGerarDocx(lista, porFolha){
+  const W = porFolha===1 ? 190 : 180, H = W*436/652;        // mm; proporção do modelo (652 x 436)
+  const tw = mm => Math.round(mm/25.4*1440);
+  const pxTw = H/436/25.4*1440;                              // twips por "pixel" do modelo
+  const pxPt = px => px*(H/436)*72/25.4;
+  const WT = tw(W), col = px => Math.round(WT*px/652);
+  const G = [310, 82, 146, 114].map(col);                    // grade comum às linhas (soma = largura)
+  G[3] = WT - G[0]-G[1]-G[2];
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const run = (txt,px)=>{ const sz=Math.max(8,Math.round(pxPt(px)*2));
+    return `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/></w:rPr><w:t xml:space="preserve">${esc(txt)}</w:t></w:r>`; };
+  const par = (txt,px)=> txt===''
+    ? '<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/></w:pPr></w:p>'
+    : `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="${Math.round(pxPt(px)*1.2*20)}" w:lineRule="exact"/><w:jc w:val="center"/></w:pPr>${run(txt,px)}</w:p>`;
+  const tc = (w,span,va,conteudo)=>`<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/>${span>1?`<w:gridSpan w:val="${span}"/>`:''}<w:vAlign w:val="${va}"/></w:tcPr>${conteudo}</w:tc>`;
+  const tr = (px,cells)=>`<w:tr><w:trPr><w:cantSplit/><w:trHeight w:val="${Math.round(px*pxTw)}" w:hRule="exact"/></w:trPr>${cells}</w:tr>`;
+  const bd = k=>`<w:${k} w:val="single" w:sz="8" w:space="0" w:color="000000"/>`;
+  const etiqueta = a=>{
+    const pre = etqPreTxt(a), onda = pDoca(a)+'-'+a.onda, placa = String(a.placa||'').toUpperCase();
+    const pxPre = Math.max(18, Math.min(45, 290/(Math.max(pre.length,1)*0.58)));
+    return `<w:tbl><w:tblPr><w:tblW w:w="${WT}" w:type="dxa"/><w:jc w:val="center"/><w:tblBorders>${bd('top')}${bd('left')}${bd('bottom')}${bd('right')}</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr>`+
+      `<w:tblGrid>${G.map(g=>`<w:gridCol w:w="${g}"/>`).join('')}</w:tblGrid>`+
+      tr(48, tc(G[0],1,'center',par('PRÉ',26)) + tc(G[1],1,'center',par('',0)) + tc(G[2]+G[3],2,'center',par('ONDA',26))) +
+      tr(72, tc(G[0],1,'center',par(pre,pxPre)) + tc(G[1]+G[2],2,'center',par(onda,45)) + tc(G[3],1,'center',par('',0))) +
+      tr(95, tc(WT,4,'bottom',par('PLACA',26))) +
+      tr(155,tc(WT,4,'center',par(placa,118))) +
+      tr(66, tc(WT,4,'top',par('',0))) +
+      `</w:tbl>`;
+  };
+  const spacer = (quebra)=> quebra
+    ? '<w:p><w:pPr><w:pageBreakBefore/><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/></w:pPr></w:p>'
+    : `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="${tw(6)}" w:lineRule="exact"/></w:pPr></w:p>`;
+  let corpo = '';
+  lista.forEach((a,i)=>{ if(i>0) corpo += spacer(i%porFolha===0); corpo += etiqueta(a); });
+  corpo += '<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/></w:pPr></w:p>';
+  const M = tw(10);
+  const SECT = `<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="${M}" w:right="${M}" w:bottom="${M}" w:left="${M}" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr>`;
+  const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${corpo}${SECT}</w:body></w:document>`;
+  const zip = new JSZip();
+  zip.file('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+  zip.file('_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+  zip.file('word/document.xml', doc);
+  return zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+}
+async function etqBaixarWord(){
+  if(!STATE.alocacao || !STATE.alocacao.length){ toast('Rode a alocação antes de gerar as etiquetas.','err'); return; }
+  const lista = etqCargas();
+  if(!lista.length){ toast('Nenhuma carga alocada da 3ª onda em diante.','err'); return; }
+  if(typeof JSZip==='undefined'){ toast('Biblioteca de ZIP não carregou (verifique a internet).','err'); return; }
+  const sel = document.getElementById('etqPorFolha'), porFolha = sel && sel.value==='1' ? 1 : 2;
+  const blob = await etqGerarDocx(lista, porFolha);
+  bkBaixar(blob, 'etiquetas_3a_onda_em_diante_'+new Date().toISOString().slice(0,10)+'.docx');
+  toast(lista.length+' etiqueta(s) geradas (3ª onda em diante), ordenadas por doca/onda — '+Math.ceil(lista.length/porFolha)+' folha(s) A4.','ok');
 }
 
 function exportarListaOndasExcel(){
@@ -5034,13 +5138,13 @@ function ffRenderArqs(){
 function renderFolhas(){
   const F = STATE.folhas, pnl = document.getElementById('ffPanelLista'), bt = document.getElementById('ffBotoes');
   if(!pnl) return;
-  ffRenderArqs();
+  ffRenderArqs(); ffAssinRender();
   if(!F || !F.rows || !F.rows.length){ pnl.style.display='none'; if(bt) bt.style.display='none'; return; }
   pnl.style.display=''; if(bt) bt.style.display='flex';
   let comDoca = 0, conferir = 0;
   const trs = F.rows.map((r,i)=>{
     const d = ffDocas(r.placa); if(d.length) comDoca++; if(r.obs) conferir++;
-    return `<tr><td>${i+1}</td><td><b>${pEsc(r.placa)}</b></td><td>${pEsc(r.transp)}</td><td>${pEsc(r.mot)}</td><td>${pEsc(r.rg)}</td><td>${pEsc(r.cpf)}</td><td>${pEsc(d[0]||'')}</td><td>${pEsc(d[1]||'')}</td><td style="color:${r.obs?'var(--amber)':'inherit'}">${pEsc(r.obs)}</td></tr>`;
+    return `<tr><td>${i+1}</td><td><b>${pEsc(r.placa)}</b></td><td>${pEsc(r.transp)}</td><td>${pEsc(r.mot)}</td><td>${pEsc(r.rg)}</td><td>${pEsc(r.cpf)}</td><td>${pEsc(ffNumCarga(r.placa))}</td><td>${pEsc(d[0]||'')}</td><td style="color:${r.obs?'var(--amber)':'inherit'}">${pEsc(r.obs)}</td></tr>`;
   }).join('');
   document.getElementById('ffTbody').innerHTML = trs;
   document.getElementById('ffSub').textContent = F.nome+' · data da folha '+isoParaBR(F.dataISO)+' · abas em ordem alfabética de placa';
@@ -5048,6 +5152,41 @@ function renderFolhas(){
 }
 
 /* ---------- gera o .xlsx: clona a folha-modelo uma vez por placa ---------- */
+/* nº da carga = o mesmo número da "Cargas do dia / Acumulado" (numeração por onda > doca) */
+function ffNumCarga(placa){
+  const k = ffNorm(placa), L = [];
+  try{ pCargasNumeradas().forEach(it=>{ if(ffNorm(it.a.placa)===k) L.push(it.n); }); }catch(e){}
+  return L.join(' / ');
+}
+/* assinatura personalizada (PNG em dataURL) — guardada só neste navegador */
+const FF_ASSIN_KEY = 'gdn_ff_assinatura_v1';
+function ffAssinGet(){ try{ return localStorage.getItem(FF_ASSIN_KEY) || ''; }catch(e){ return ''; } }
+function ffAssinRender(){
+  const el = document.getElementById('ffAssinPrev'), rs = document.getElementById('ffAssinReset'); if(!el) return;
+  const d = ffAssinGet();
+  el.innerHTML = d ? '<img src="'+d+'" style="max-height:38px;max-width:200px;">' : 'padrão';
+  if(rs) rs.style.display = d ? '' : 'none';
+}
+function ffAssinTrocar(file){
+  if(!file) return;
+  const fr = new FileReader();
+  fr.onload = ()=>{
+    const img = new Image();
+    img.onload = ()=>{
+      try{
+        const sc = Math.min(1, 800/img.width), c = document.createElement('canvas');
+        c.width = Math.max(1,Math.round(img.width*sc)); c.height = Math.max(1,Math.round(img.height*sc));
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+        localStorage.setItem(FF_ASSIN_KEY, c.toDataURL('image/png'));
+        ffAssinRender(); toast('Assinatura atualizada. As próximas folhas geradas já saem com ela.','ok');
+      }catch(e){ toast('Não consegui salvar a assinatura: '+(e&&e.message||e),'err'); }
+    };
+    img.onerror = ()=>toast('Arquivo de imagem inválido.','err');
+    img.src = fr.result;
+  };
+  fr.readAsDataURL(file);
+}
+function ffAssinRestaurar(){ try{ localStorage.removeItem(FF_ASSIN_KEY); }catch(e){} ffAssinRender(); toast('Assinatura padrão restaurada.','ok'); }
 function ffXmlEsc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function ffSetCell(xml, ref, text){
   const re = new RegExp('<c r="'+ref+'"( s="\\d+")?[^>]*?(?:/>|>[\\s\\S]*?</c>)');
@@ -5068,8 +5207,20 @@ async function ffGerarXlsx(F){
     rd('xl/worksheets/sheet1.xml'), rd('xl/worksheets/_rels/sheet1.xml.rels'), rd('xl/drawings/drawing1.xml'),
     rd('xl/drawings/_rels/drawing1.xml.rels'), rd('[Content_Types].xml'), rd('xl/workbook.xml'), rd('xl/_rels/workbook.xml.rels')]);
   const out = new JSZip();
+  const assin = ffAssinGet();
+  let sigBytes = null, drwUse = drw;
+  if(assin){
+    sigBytes = Uint8Array.from(atob(assin.split(',')[1]), ch=>ch.charCodeAt(0));
+    const dim = await new Promise(res=>{ const im=new Image(); im.onload=()=>res([im.width,im.height]); im.onerror=()=>res(null); im.src=assin; });
+    if(dim){   // mantém a proporção dentro da área original da assinatura (1306000 x 339000 EMU)
+      const k = Math.min(1306000/dim[0], 339000/dim[1]), cx = Math.round(dim[0]*k), cy = Math.round(dim[1]*k);
+      drwUse = drw.replace(/(name="Assinatura"[\s\S]*?)<a:ext cx="\d+" cy="\d+"\/>/, '$1<a:ext cx="'+cx+'" cy="'+cy+'"/>')
+                  .replace(/<xdr:ext cx="1306000" cy="339000"\/>/, '<xdr:ext cx="'+cx+'" cy="'+cy+'"/>');
+    }
+  }
   for(const name of Object.keys(tz.files)){
     if(tz.files[name].dir) continue;
+    if(sigBytes && name==='xl/media/sig.png'){ out.file(name, sigBytes); continue; }
     if(/^xl\/(worksheets|drawings)\//.test(name) || name==='[Content_Types].xml' || name==='xl/workbook.xml' || name==='xl/_rels/workbook.xml.rels') continue;
     out.file(name, await tz.file(name).async('uint8array'));
   }
@@ -5084,11 +5235,12 @@ async function ffGerarXlsx(F){
     x = ffSetCell(x,'B8', r.rg);      x = ffSetCell(x,'G8', r.cpf);
     x = ffSetCell(x,'B12', r.placa);  x = ffSetNum(x,'D12', serial);
     x = ffSetCell(x,'A19', dataBR);
-    x = ffSetCell(x,'E19', docas[0]||''); x = ffSetCell(x,'F19', docas[1]||'');
+    x = ffSetCell(x,'E19', docas[0]||''); x = ffSetCell(x,'F19', '');   // doca só no campo 1° (sem duplicar no 2°)
+    x = ffSetCell(x,'J3', ffNumCarga(r.placa));   // nº da carga no quadro amarelo (canto superior direito)
     x = x.replace('tabSelected="true"', n===1 ? 'tabSelected="true"' : 'tabSelected="false"');
     out.file('xl/worksheets/sheet'+n+'.xml', x);
     out.file('xl/worksheets/_rels/sheet'+n+'.xml.rels', srels.replace('drawing1.xml','drawing'+n+'.xml'));
-    out.file('xl/drawings/drawing'+n+'.xml', drw);
+    out.file('xl/drawings/drawing'+n+'.xml', drwUse);
     out.file('xl/drawings/_rels/drawing'+n+'.xml.rels', drels);
     ctO += '<Override PartName="/xl/worksheets/sheet'+n+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
         + '<Override PartName="/xl/worksheets/_rels/sheet'+n+'.xml.rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
