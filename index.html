@@ -508,11 +508,11 @@
 
 <div class="tabs">
   <button class="tab-btn" data-tab="painel" onclick="switchTab('painel')">1 · Lista de Carga</button>
-  <button class="tab-btn" data-tab="protocolo" onclick="switchTab('protocolo')">2 · Protocolo de Bancada<span class="tab-mnt">em manutenção</span></button>
+  <button class="tab-btn" data-tab="protocolo" onclick="switchTab('protocolo')">2 · Protocolo de Bancada</button>
   <button class="tab-btn" data-tab="kitcoletas" onclick="switchTab('kitcoletas')">3 · Coleta</button>
   <button class="tab-btn" data-tab="folhas" onclick="switchTab('folhas')">4 · Entrada de Veículos CD</button>
   <button class="tab-btn" data-tab="saida" onclick="switchTab('saida')">5 · Saída de Veículos CD</button>
-  <button class="tab-btn" data-tab="ondasfora" onclick="switchTab('ondasfora')">6 · Ondas Fora da doca<span class="tab-mnt">em manutenção</span></button>
+  <button class="tab-btn" data-tab="ondasfora" onclick="switchTab('ondasfora')">6 · Ondas Fora da doca</button>
   <button class="tab-btn" data-tab="produtividade" onclick="switchTab('produtividade')">7 · Produtividade<span class="tab-mnt">em manutenção</span></button>
   <button class="tab-btn" data-tab="terceiros" onclick="switchTab('terceiros')">8 · Relação de Terceiros<span class="tab-mnt">em manutenção</span></button>
   <span class="tab-sep" aria-hidden="true"></span>
@@ -1034,20 +1034,33 @@
 </div>
 
 <div class="view" id="view-protocolo">
-  <div class="panel mnt-box">
-    <div class="mnt-ico">📋</div>
-    <h2>Protocolo de Bancada</h2>
-    <span class="mnt-tag">🛠 Em manutenção</span>
-    <p>Esta aba ainda será criada. Assim que estiver pronta ela passa a funcionar aqui, na mesma posição da sequência da operação.</p>
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>Protocolo de Bancada</h2>
+        <div class="desc"><b>Histórico de Bancada LV</b> — usado na bancada para marcar onde cada carga foi embalada (linha vermelha). A ferramenta preenche <b>DOCA CAJ-1</b>, <b>PRÉ- CAJ-33</b>, <b>PRÉ- CAJ-05</b> e <b>PRÉ- CAJ-D0</b> com as mesmas cargas da <b>Lista de Carga</b> (ordem: onda &gt; doca). As colunas 33 / 05 / D0 e o bloco da direita saem em branco, para marcação à mão.</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <button class="primary" onclick="protoBaixarHistorico()">📥 Gerar Histórico de Bancada (Excel)</button>
+      </div>
+    </div>
+    <div id="protoConteudo"></div>
   </div>
 </div>
 
 <div class="view" id="view-ondasfora">
-  <div class="panel mnt-box">
-    <div class="mnt-ico">🚪</div>
-    <h2>Ondas Fora da doca</h2>
-    <span class="mnt-tag">🛠 Em manutenção</span>
-    <p>Esta aba ainda será criada. Assim que estiver pronta ela passa a funcionar aqui, na mesma posição da sequência da operação.</p>
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>Ondas Fora da doca</h2>
+        <div class="desc">Lê a mesma alocação da Lista de Carga (mesmo nº de carga, doca e onda) e monta as etiquetas A4 com <b>PRÉ</b>, <b>ONDA</b> (doca-onda) e <b>PLACA</b> das cargas que ficaram fora da doca, na mesma ordem da lista.</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <select id="ofdModo" onchange="renderOndasFora()" title="Quais ondas entram nas etiquetas"><option value="3+" selected>3ª onda em diante</option><option value="3">Somente a 3ª onda</option></select>
+        <select id="ofdPorFolha" title="Quantas etiquetas por folha A4"><option value="2" selected>2 etiquetas por folha</option><option value="1">1 etiqueta por folha</option></select>
+        <button class="primary" onclick="ofdBaixarWord()" title="Baixa o Word A4 pronto para impressão">🖨 Baixar Word (A4)</button>
+      </div>
+    </div>
+    <div class="grid cols-4" id="ofdStats"></div>
+  </div>
+  <div class="panel">
+    <div class="table-wrap" id="ofdTabela" style="max-height:560px;overflow-y:auto;"></div>
   </div>
 </div>
 
@@ -1371,6 +1384,8 @@ function switchTab(tab){
   if(tab==='iscas') renderIscas();
   if(tab==='folhas') renderFolhas();
   if(tab==='abas') renderAbasVisiveis();
+  if(tab==='protocolo') renderProtocolo();
+  if(tab==='ondasfora') renderOndasFora();
 }
 
 /* =========================================================
@@ -1380,11 +1395,11 @@ function switchTab(tab){
    ========================================================= */
 const ABAS_DEF = [
   {id:'painel',        nome:'Lista de Carga',          n:'1'},
-  {id:'protocolo',     nome:'Protocolo de Bancada',    n:'2', mnt:true},
+  {id:'protocolo',     nome:'Protocolo de Bancada',    n:'2'},
   {id:'kitcoletas',    nome:'Coleta',                  n:'3'},
   {id:'folhas',        nome:'Entrada de Veículos CD',  n:'4'},
   {id:'saida',         nome:'Saída de Veículos CD',    n:'5'},
-  {id:'ondasfora',     nome:'Ondas Fora da doca',      n:'6', mnt:true},
+  {id:'ondasfora',     nome:'Ondas Fora da doca',      n:'6'},
   {id:'produtividade', nome:'Produtividade',           n:'7', mnt:true},
   {id:'terceiros',     nome:'Relação de Terceiros',    n:'8', mnt:true},
   {id:'iscas',         nome:'Iscas',                   n:'',  apoio:true}
@@ -2820,7 +2835,7 @@ function rodarAlocacao(silencioso){
    Painel por doca/onda, Cargas por filial e Backup ficam prontos, como se o processo já tivesse sido concluído. */
 function atualizarTodasAsAbas(){
   const f = (fn)=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(e){ console.error(fn, e); } };
-  ['renderCadastro','renderConsolidado','renderOrfaos','renderTS','renderDashboard','renderPainel','renderCargasFilial','renderMatrizDocas','renderIscas','renderBackup','renderFolhas','atualizarPreviaUpload'].forEach(f);
+  ['renderCadastro','renderConsolidado','renderOrfaos','renderTS','renderDashboard','renderPainel','renderProtocolo','renderCargasFilial','renderMatrizDocas','renderIscas','renderBackup','renderFolhas','atualizarPreviaUpload'].forEach(f);
 }
 function baseAlocRow(carga, transportadora, status, doca, motivo, onda){
   return {
@@ -4846,6 +4861,148 @@ async function etqBaixarWord(){
   const blob = await etqGerarDocx(lista, porFolha);
   bkBaixar(blob, 'etiquetas_3a_onda_em_diante_'+new Date().toISOString().slice(0,10)+'.docx');
   toast(lista.length+' etiqueta(s) geradas (3ª onda em diante), ordenadas por doca/onda — '+Math.ceil(lista.length/porFolha)+' folha(s) A4.','ok');
+}
+
+/* =========================================================
+   ABA 6 · ONDAS FORA DA DOCA
+   Usa a MESMA numeração/ordem da Lista de Carga (pCargasNumeradas: onda > doca) e o mesmo
+   gerador de Word A4 das etiquetas (etqGerarDocx). Só entram cargas com doca.
+   ========================================================= */
+function ofdLista(){
+  const el = document.getElementById('ofdModo'), modo = el ? el.value : '3+';
+  return pCargasNumeradas().filter(it=> !it.pend && (modo==='3' ? Number(it.a.onda)===3 : Number(it.a.onda)>=3));
+}
+function renderOndasFora(){
+  const st = document.getElementById('ofdStats'), box = document.getElementById('ofdTabela');
+  if(!st || !box) return;
+  if(!(STATE.alocacao||[]).length){
+    st.innerHTML = '';
+    box.innerHTML = '<div style="padding:28px;text-align:center;color:var(--text-2);">Nenhuma alocação carregada. Carregue a lista de carga e clique em “Rodar alocação” na aba 1 · Lista de Carga.</div>';
+    return;
+  }
+  const its = ofdLista(), sel = document.getElementById('ofdPorFolha'), pf = sel && sel.value==='1' ? 1 : 2;
+  const stat = (n,l,cor)=>`<div class="stat"><div class="num"${cor?` style="color:var(--${cor})"`:''}>${n}</div><div class="lbl">${l}</div></div>`;
+  st.innerHTML = [
+    stat(its.length,'etiquetas'),
+    stat(new Set(its.map(it=>pDoca(it.a))).size,'docas','amber'),
+    stat(new Set(its.map(it=>it.a.onda)).size,'ondas','teal'),
+    stat(Math.ceil(its.length/pf),'folhas A4')
+  ].join('');
+  if(!its.length){
+    box.innerHTML = '<div style="padding:28px;text-align:center;color:var(--text-2);">Nenhuma carga alocada nessa seleção de onda.</div>';
+    return;
+  }
+  box.innerHTML = '<table><thead><tr><th>Carga</th><th>PRÉ</th><th>ONDA</th><th>PLACA</th><th>Transportadora</th><th>Região</th></tr></thead><tbody>'
+    + its.map(it=>{ const a=it.a;
+        return `<tr><td>${it.n}</td><td class="mono">${pEsc(etqPreTxt(a))}</td><td class="mono"><b>${pEsc(pDoca(a)+'-'+a.onda)}</b></td><td class="mono"><b>${pEsc(String(a.placa||'').toUpperCase())}</b></td><td>${pEsc(a.transportadora||'')}</td><td>${pEsc(a.regiao||'')}</td></tr>`;
+      }).join('')
+    + '</tbody></table>';
+}
+async function ofdBaixarWord(){
+  if(!STATE.alocacao || !STATE.alocacao.length){ toast('Rode a alocação antes de gerar as etiquetas.','err'); return; }
+  const its = ofdLista();
+  if(!its.length){ toast('Nenhuma carga alocada nessa seleção de onda.','err'); return; }
+  if(typeof JSZip==='undefined'){ toast('Biblioteca de ZIP não carregou (verifique a internet).','err'); return; }
+  const sel = document.getElementById('ofdPorFolha'), pf = sel && sel.value==='1' ? 1 : 2;
+  const modo = (document.getElementById('ofdModo')||{}).value || '3+';
+  const blob = await etqGerarDocx(its.map(it=>it.a), pf);
+  bkBaixar(blob, 'etiquetas_'+(modo==='3'?'3a_onda':'3a_onda_em_diante')+'_'+new Date().toISOString().slice(0,10)+'.docx');
+  toast(its.length+' etiqueta(s) geradas — '+Math.ceil(its.length/pf)+' folha(s) A4.','ok');
+}
+
+/* =========================================================
+   PROTOCOLO DE BANCADA — HISTÓRICO DE BANCADA LV (Excel)
+   Preenche DOCA CAJ-1 / PRÉ-CAJ-33 / PRÉ-CAJ-05 / PRÉ-CAJ-D0 com as MESMAS cargas e
+   valores da Lista de Carga (ordem: onda > doca). As colunas 33 / 05 / D0 e o bloco da
+   direita ficam em branco, para marcação à mão na bancada.
+   ========================================================= */
+function protoLinhas(){
+  return pCargasNumeradas().filter(it=>!it.pend).map(it=>{
+    const a=it.a, d=pDoca(a), pre=c=>pPreVal(a.pres.filter(p=>String(p.filial)===c));
+    return {doca: d+' ('+a.onda+'ªONDA)', onda:a.onda, p33:pre('33'), p05:pre('05'), pD0:pre('D0')};
+  });
+}
+function protoDataOperacao(){
+  const ex=datasDasCargas(), ds=Object.keys(ex).sort((a,b)=>ex[b]-ex[a]);
+  if(ds.length) return isoParaBR(ds[0]);
+  const h=new Date(); return String(h.getDate()).padStart(2,'0')+'/'+String(h.getMonth()+1).padStart(2,'0')+'/'+h.getFullYear();
+}
+function renderProtocolo(){
+  const el=document.getElementById('protoConteudo'); if(!el) return;
+  if(!STATE.alocacao || !STATE.alocacao.length){
+    el.innerHTML='<div class="empty">Ainda não há cargas alocadas. Carregue os arquivos em Configurações › Upload &amp; Consolidação e rode a alocação — a Lista de Carga alimenta esta aba.</div>'; return;
+  }
+  const L=protoLinhas(), pend=STATE.alocacao.length-L.length;
+  const ondas={}; L.forEach(r=>{ ondas[r.onda]=(ondas[r.onda]||0)+1; });
+  const card=(n,t)=>`<div style="background:var(--bg-2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;"><div style="font-size:22px;font-weight:700;color:var(--amber);">${n}</div><div style="font-size:12px;color:var(--text-2);margin-top:2px;">${t}</div></div>`;
+  let h='<div class="grid cols-4" style="margin-bottom:14px;">'+card(pEsc(protoDataOperacao()),'Data da operação')+card(L.length,'Total de cargas no arquivo')+
+    card(Object.keys(ondas).sort((a,b)=>a-b).map(o=>o+'ª: '+ondas[o]).join(' · ')||'—','Cargas por onda')+
+    card(pend,'Sem doca (ficam de fora)')+'</div>';
+  h+='<div style="overflow:auto;max-height:520px;border:1px solid var(--line);border-radius:8px;"><table><thead><tr><th>DOCA CAJ-1</th><th>PRÉ- CAJ-33</th><th>PRÉ- CAJ-05</th><th>PRÉ- CAJ-D0</th></tr></thead><tbody>'+
+    L.map(r=>`<tr><td>${pEsc(r.doca)}</td><td>${pEsc(r.p33)}</td><td>${pEsc(r.p05)}</td><td>${pEsc(r.pD0)}</td></tr>`).join('')+'</tbody></table></div>';
+  el.innerHTML=h;
+}
+async function protoXlsxBytes(L, dataBR){
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const col=n=>String.fromCharCode(65+n);                       // 0..14 -> A..O
+  const NB=Math.max(60, L.length+8), R0=3, ULT=R0+NB-1;         // linhas de dados: 3..ULT
+  // estilos: 0 padrão | 1 dado | 2 cabeçalho | 3 título | 4/5/6 info (esq/meio/dir)
+  const S={DADO:1,HDR:2,TIT:3,IL:4,IM:5,IR:6};
+  const cel=(c,r,v,st)=>{
+    const ref=col(c)+r, s=st?` s="${st}"`:'';
+    if(v===''||v==null) return `<c r="${ref}"${s}/>`;
+    if(typeof v==='number') return `<c r="${ref}"${s}><v>${v}</v></c>`;
+    return `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`;
+  };
+  const row=(r,cells)=>`<row r="${r}" ht="18.75" customHeight="1">${cells.join('')}</row>`;
+  const rows=[];
+  // linha 1: DATA | título | total
+  rows.push(row(1,[ cel(0,1,'DATA:',S.IL), cel(1,1,dataBR,S.IM), cel(2,1,'',S.IM), cel(3,1,'',S.IR),
+    cel(4,1,'HISTÓRICO DE BANCADA LV',S.TIT), ...[5,6,7,8,9].map(c=>cel(c,1,'',S.TIT)),
+    cel(10,1,'TOTAL CARGAS',S.IL), cel(11,1,'',S.IM), cel(12,1,'',S.IM), cel(13,1,'',S.IM), cel(14,1,L.length,S.IR) ]));
+  // linha 2: cabeçalhos (dois blocos, coluna H = separador)
+  const H=['DOCA CAJ-1','PRÉ- CAJ-33','PRÉ- CAJ-05','PRÉ- CAJ-D0','33','05','D0'], c2=[];
+  H.forEach((t,i)=>c2.push(cel(i,2,t,S.HDR))); H.forEach((t,i)=>c2.push(cel(8+i,2,t,S.HDR)));
+  rows.push(row(2,c2));
+  for(let i=0;i<NB;i++){
+    const r=R0+i, d=L[i], c=[];
+    c.push(cel(0,r,d?d.doca:'',S.DADO), cel(1,r,d?d.p33:'',S.DADO), cel(2,r,d?d.p05:'',S.DADO), cel(3,r,d?d.pD0:'',S.DADO));
+    [4,5,6].forEach(k=>c.push(cel(k,r,'',S.DADO)));
+    for(let k=8;k<=14;k++) c.push(cel(k,r,'',S.DADO));
+    rows.push(row(r,c));
+  }
+  const W=[13.5,11.5,11.5,12,7.5,7.5,7.5,3,13.5,11.5,11.5,12,7.5,7.5,7.5];
+  const sheet='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:O'+ULT+'"/><sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'+
+    '<sheetFormatPr defaultRowHeight="15"/><cols>'+W.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('')+'</cols>'+
+    '<sheetData>'+rows.join('')+'</sheetData><mergeCells count="2"><mergeCell ref="E1:J1"/><mergeCell ref="K1:N1"/></mergeCells>'+
+    '<printOptions horizontalCentered="1"/><pageMargins left="0.3" right="0.3" top="0.4" bottom="0.4" header="0.2" footer="0.2"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="1"/></worksheet>';
+  const bd=(t,l,b,r)=>`<border><left${l?' style="thin"><color auto="1"/></left':'/'}><right${r?' style="thin"><color auto="1"/></right':'/'}><top${t?' style="thin"><color auto="1"/></top':'/'}><bottom${b?' style="thin"><color auto="1"/></bottom':'/'}><diagonal/></border>`;
+  const xf=(f,fi,b,wrap)=>`<xf numFmtId="0" fontId="${f}" fillId="${fi}" borderId="${b}" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"${wrap?' wrapText="1"':''}/></xf>`;
+  const styles='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    '<fonts count="3"><font><sz val="10"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="10"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts>'+
+    '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9D9D9"/><bgColor indexed="64"/></patternFill></fill></fills>'+
+    '<borders count="5">'+bd(0,0,0,0)+bd(1,1,1,1)+bd(1,1,1,0)+bd(1,0,1,0)+bd(1,0,1,1)+'</borders>'+
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
+    '<cellXfs count="7"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+xf(0,0,1)+xf(1,2,1,true)+xf(2,2,1)+xf(1,0,2)+xf(1,0,3)+xf(1,0,4)+'</cellXfs>'+
+    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  const zip=new JSZip();
+  zip.file('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>');
+  zip.file('_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+  zip.file('xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Histórico de Bancada" sheetId="1" r:id="rId1"/></sheets></workbook>');
+  zip.file('xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+  zip.file('xl/styles.xml',styles);
+  zip.file('xl/worksheets/sheet1.xml',sheet);
+  return zip.generateAsync({type:'uint8array'});
+}
+async function protoBaixarHistorico(){
+  if(!STATE.alocacao || !STATE.alocacao.length){ toast('Rode a alocação antes de gerar o Histórico de Bancada.','err'); return; }
+  if(typeof JSZip==='undefined'){ toast('Biblioteca de ZIP não carregou (verifique a internet).','err'); return; }
+  const L=protoLinhas(); if(!L.length){ toast('Nenhuma carga alocada em doca para gerar o arquivo.','err'); return; }
+  const dataBR=protoDataOperacao();
+  const bytes=await protoXlsxBytes(L, dataBR);
+  bkBaixar(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}), 'HISTORICO DE BANCADA LV '+dataBR.replace(/\//g,'-')+'.xlsx');
+  toast('Histórico de Bancada gerado: '+L.length+' carga(s) · data '+dataBR+'.','ok');
 }
 
 function exportarListaOndasExcel(){
