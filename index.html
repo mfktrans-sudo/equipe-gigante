@@ -516,14 +516,13 @@
   <button class="tab-btn" data-tab="produtividade" onclick="switchTab('produtividade')">7 · Produtividade<span class="tab-mnt">em manutenção</span></button>
   <button class="tab-btn" data-tab="terceiros" onclick="switchTab('terceiros')">8 · Relação de Terceiros<span class="tab-mnt">em manutenção</span></button>
   <span class="tab-sep" aria-hidden="true"></span>
-  <button class="tab-btn" data-tab="upload" onclick="switchTab('upload')">Upload &amp; Consolidação</button>
   <button class="tab-btn" data-tab="iscas" onclick="switchTab('iscas')">Iscas</button>
-  <button class="tab-btn" data-tab="dashboard" onclick="switchTab('dashboard')">Indicadores</button>
   <button class="tab-btn active" data-tab="config" onclick="switchTab('config')">Configurações</button>
 </div>
 <div class="subtabs show" id="subtabsConfig">
   <button class="subtab-btn active" data-sub="parametros" onclick="switchTab('parametros')">Parâmetros</button>
   <button class="subtab-btn" data-sub="cadastro" onclick="switchTab('cadastro')">Cadastro de Placas</button>
+  <button class="subtab-btn" data-sub="upload" onclick="switchTab('upload')">Upload &amp; Consolidação</button>
   <button class="subtab-btn" data-sub="backup" onclick="switchTab('backup')">Backup &amp; Upload</button>
   <button class="subtab-btn" data-sub="abas" onclick="switchTab('abas')">Abas Visíveis</button>
 </div>
@@ -1105,7 +1104,7 @@
     </div>
     <input type="file" id="bkInput" multiple style="display:none" onchange="bkRestaurarArquivos(this.files); this.value=''">
     <div id="bkLog" class="filelist" style="margin-top:12px;"></div>
-    <div class="desc" style="margin-top:10px;max-width:none;">Os arquivos de operação (GAN, Log de NF e Região) continuam sendo carregados na aba Upload &amp; Consolidação.</div>
+    <div class="desc" style="margin-top:10px;max-width:none;">Os arquivos de operação (GAN, Log de NF e Região) continuam sendo carregados na aba Configurações › Upload &amp; Consolidação.</div>
   </div>
 </div>
 
@@ -1352,7 +1351,7 @@ function toast(msg, type){
 /* =========================================================
    NAVEGAÇÃO
    ========================================================= */
-const CFG_SUBS=['parametros','cadastro','backup','abas'];
+const CFG_SUBS=['parametros','cadastro','upload','backup','abas'];
 let _cfgSubAtual='parametros';
 function switchTab(tab){
   if(tab==='config') tab=_cfgSubAtual;
@@ -1388,9 +1387,7 @@ const ABAS_DEF = [
   {id:'ondasfora',     nome:'Ondas Fora da doca',      n:'6', mnt:true},
   {id:'produtividade', nome:'Produtividade',           n:'7', mnt:true},
   {id:'terceiros',     nome:'Relação de Terceiros',    n:'8', mnt:true},
-  {id:'upload',        nome:'Upload & Consolidação',   n:'',  apoio:true},
-  {id:'iscas',         nome:'Iscas',                   n:'',  apoio:true},
-  {id:'dashboard',     nome:'Indicadores',             n:'',  apoio:true}
+  {id:'iscas',         nome:'Iscas',                   n:'',  apoio:true}
 ];
 function abaVisivel(id){
   const m = (STATE && STATE.config && STATE.config.abasVisiveis) || {};
@@ -3120,7 +3117,7 @@ async function bkLerBuffer(nome, buf){
     catch(e){ return ign('JSON inválido'); }
   }
   const c=bkClassificar(bkParseCSV(txt),nome);
-  return c?[c]:ign('não é um backup (arquivos GAN, Log de NF e Região entram na aba Upload & Consolidação)');
+  return c?[c]:ign('não é um backup (arquivos GAN, Log de NF e Região entram na aba Configurações › Upload & Consolidação)');
 }
 function bkRenderTudo(){ try{ aplicarAbasVisiveis(); }catch(e){} renderParametros(); renderCadastro(); renderConsolidado(); renderOrfaos(); renderTS(); renderAlocacao(); renderDashboard(); renderIscas(); renderBackup(); }
 async function bkRestaurarArquivos(fileList){
@@ -4078,7 +4075,7 @@ function ilMotivo(key){
   const r = ilCodsDaArea(key), nome = String(key).split('|')[0];
   if(!r.cods.length) return 'Cidade/bairro não consta na lista de territórios — escolha a região manualmente.';
   const cont = ilTerrCont(r.cods), ks = Object.keys(cont).sort((a,b)=>cont[b]-cont[a]);
-  if(!ks.length) return 'Nenhuma placa dos arquivos de Região carregados está no território '+r.cods.join('/')+' — carregue a Região desse território na aba Upload & Consolidação e clique em “Redistribuir placas”.';
+  if(!ks.length) return 'Nenhuma placa dos arquivos de Região carregados está no território '+r.cods.join('/')+' — carregue a Região desse território na aba Configurações › Upload & Consolidação e clique em “Redistribuir placas”.';
   if(ks.length>1 && cont[ks[0]]===cont[ks[1]]) return 'Empate entre as regiões '+ks.join(' e ')+' — escolha uma.';
   return '';
 }
@@ -4333,7 +4330,7 @@ function ilRender(){
   const semDoca = L.rows.filter(r=>r.placa && ilInfoPlaca(r.placa).doca==null).length;
   const stat = (n,l,cor)=>`<div class="stat"><div class="num"${cor?` style="color:var(--${cor})"`:''}>${n}</div><div class="lbl">${l}</div></div>`;
   let h = `<div class="desc" style="margin-bottom:10px;max-width:none;">Arquivo: <b>${pEsc(L.nome)}</b> · aba ${pEsc(L.folha)} · a placa será gravada na coluna <b>${pEsc(L.colPlaca)}</b>.${L.filtro?(L.filtro.modo==='bloco'?` Li de baixo para cima até a primeira linha com placa preenchida (linha <b>${L.filtro.xlParada}</b> da planilha): <b>${L.rows.length}</b> iscas do dia; ${L.filtro.ignoradas} linhas de cargas anteriores ignoradas (${L.filtro.total} no total).`:` O arquivo acumula <b>${L.filtro.dias}</b> dias (${L.filtro.total} linhas); usei só as <b>${L.rows.length}</b> iscas de <b>${pEsc(isoParaBR(L.filtro.iso))}</b> (data escolhida pelo ${pEsc(L.filtro.de)}).`):''}</div>`;
-  if(!temCargas) h += '<div class="badge alert" style="display:block;margin-bottom:10px;padding:8px;">Ainda não há cargas carregadas. Carregue GAN, Log de NF e Região (aba Upload & Consolidação) e rode a alocação; depois clique em “Redistribuir placas”.</div>';
+  if(!temCargas) h += '<div class="badge alert" style="display:block;margin-bottom:10px;padding:8px;">Ainda não há cargas carregadas. Carregue GAN, Log de NF e Região (aba Configurações › Upload & Consolidação) e rode a alocação; depois clique em “Redistribuir placas”.</div>';
   h += `<div class="grid cols-4" style="margin-bottom:14px;">${stat(L.rows.length,'iscas no arquivo')}${stat(comPlaca,'com placa','teal')}${stat(L.rows.length-comPlaca,'sem placa','red')}${stat(rep,'placa repetida','amber')}</div>`;
   /* mapa área -> região */
   const areas = {}; L.rows.forEach(r=>{ const a = areas[r.key] = areas[r.key]||{rot:r.rot, n:0}; a.n++; });
@@ -4344,7 +4341,7 @@ function ilRender(){
     const usados = new Set(); Object.keys(areas).forEach(k=>ilCodsDaArea(k).cods.forEach(c=>usados.add(c)));
     const falt = Array.from(usados).filter(c=>!cob.has(c)).sort((x,y)=>x-y);
     h += `<div class="badge ${falt.length||!regs.length?'alert':''}" style="display:block;margin-bottom:10px;padding:8px;">Regiões com carga carregadas: <b>${regs.length?regs.map(pEsc).join(', '):'nenhuma'}</b>.`+
-      (falt.length?` Territórios das iscas de hoje <b>sem nenhuma placa</b> nos arquivos de Região: <b>${falt.join(', ')}</b> — carregue as Regiões que cobrem esses territórios (aba Upload & Consolidação) antes de distribuir.`:` Todos os territórios das iscas de hoje têm placas carregadas.`)+`</div>`; }
+      (falt.length?` Territórios das iscas de hoje <b>sem nenhuma placa</b> nos arquivos de Região: <b>${falt.join(', ')}</b> — carregue as Regiões que cobrem esses territórios (aba Configurações › Upload & Consolidação) antes de distribuir.`:` Todos os territórios das iscas de hoje têm placas carregadas.`)+`</div>`; }
   h += `<h3 style="font-size:13.5px;margin:6px 0;">Região de cada área de entrega</h3>
     <div class="desc" style="max-width:none;margin-bottom:8px;">A ferramenta sugere a região quando o nome bate; nas demais, escolha uma vez e ela fica lembrada para os próximos dias.</div>
     <div class="table-wrap"><table><thead><tr><th>Área de entrega</th><th>Iscas</th><th>Território</th><th>Região com carga</th><th>Placas disponíveis</th></tr></thead><tbody>
@@ -4726,7 +4723,7 @@ function renderCargasFilial(){
   const elT=document.getElementById('pFilialTabs'), elB=document.getElementById('pFilialTabela');
   if(!elT||!elB) return;
   if(!STATE.alocacao.length){
-    elT.innerHTML=''; elB.innerHTML='<div class="empty">Rode a alocação (botão “Rodar alocação” na aba Upload &amp; Consolidação) para ver as cargas por filial.</div>'; return;
+    elT.innerHTML=''; elB.innerHTML='<div class="empty">Rode a alocação (botão “Rodar alocação” na aba Configurações › Upload &amp; Consolidação) para ver as cargas por filial.</div>'; return;
   }
   const items=pItensFiltrados();
   const abas=[{cod:'ACUM', nome:'Acumulado', n:items.length}].concat(
