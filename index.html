@@ -93,6 +93,21 @@
   .subtab-btn{background:var(--bg-1);border:1px solid var(--line);color:var(--text-2);padding:8px 16px;font-size:13px;font-weight:600;border-radius:999px;white-space:nowrap;cursor:pointer;}
   .subtab-btn:hover{color:var(--text-0);}
   .subtab-btn.active{color:var(--amber);border-color:var(--amber);}
+  .tab-btn{padding:13px 13px;}
+  .tab-sep{align-self:stretch;width:1px;background:var(--line);margin:8px 10px;flex:none;}
+  .tab-mnt{display:inline-block;margin-left:7px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.2px;color:var(--amber);border:1px solid var(--amber-dim);background:rgba(245,166,35,.10);vertical-align:middle;}
+  .mnt-box{text-align:center;padding:70px 20px;}
+  .mnt-box .mnt-ico{font-size:46px;line-height:1;margin-bottom:14px;}
+  .mnt-box h2{font-size:20px;margin:0 0 6px;}
+  .mnt-box .mnt-tag{display:inline-block;margin:6px 0 12px;padding:3px 12px;border-radius:999px;font-size:12px;font-weight:700;color:var(--amber);border:1px solid var(--amber);background:rgba(245,166,35,.10);}
+  .mnt-box p{color:var(--text-2);font-size:13px;margin:0 auto;max-width:520px;line-height:1.6;}
+  .aba-opt{display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--line);border-radius:8px;background:var(--bg-2);cursor:pointer;margin-bottom:8px;}
+  .aba-opt:hover{border-color:var(--text-2);}
+  .aba-opt input{width:17px;height:17px;accent-color:var(--amber);cursor:pointer;margin:0;}
+  .aba-opt .n{color:var(--text-2);font-family:var(--mono);font-size:12.5px;min-width:18px;}
+  .aba-opt .t{font-weight:600;font-size:13.5px;}
+  .aba-opt.lock{opacity:.65;cursor:default;}
+  .aba-sec{font-size:11.5px;color:var(--text-2);text-transform:uppercase;letter-spacing:.6px;margin:16px 0 8px;}
 
   .view{display:none;padding:24px 28px 60px;max-width:none;margin:0 auto;}
   .view.active{display:block;}
@@ -492,19 +507,25 @@
 </div>
 
 <div class="tabs">
-  <button class="tab-btn active" data-tab="config" onclick="switchTab('config')">1 · Configurações</button>
-  <button class="tab-btn" data-tab="upload" onclick="switchTab('upload')">2 · Upload &amp; Consolidação</button>
-  <button class="tab-btn" data-tab="painel" onclick="switchTab('painel')">3 · Painel por Doca &amp; Ondas</button>
-  <button class="tab-btn" data-tab="iscas" onclick="switchTab('iscas')">4 · Iscas</button>
-  <button class="tab-btn" data-tab="dashboard" onclick="switchTab('dashboard')">5 · Indicadores</button>
-  <button class="tab-btn" data-tab="folhas" onclick="switchTab('folhas')">6 · Folhas de Fluxo</button>
-  <button class="tab-btn" data-tab="saida" onclick="switchTab('saida')">7 · Controle de Saída</button>
-  <button class="tab-btn" data-tab="kitcoletas" onclick="switchTab('kitcoletas')">8 · Kit Coletas</button>
+  <button class="tab-btn" data-tab="painel" onclick="switchTab('painel')">1 · Lista de Carga</button>
+  <button class="tab-btn" data-tab="protocolo" onclick="switchTab('protocolo')">2 · Protocolo de Bancada<span class="tab-mnt">em manutenção</span></button>
+  <button class="tab-btn" data-tab="kitcoletas" onclick="switchTab('kitcoletas')">3 · Coleta</button>
+  <button class="tab-btn" data-tab="folhas" onclick="switchTab('folhas')">4 · Entrada de Veículos CD</button>
+  <button class="tab-btn" data-tab="saida" onclick="switchTab('saida')">5 · Saída de Veículos CD</button>
+  <button class="tab-btn" data-tab="ondasfora" onclick="switchTab('ondasfora')">6 · Ondas Fora da doca<span class="tab-mnt">em manutenção</span></button>
+  <button class="tab-btn" data-tab="produtividade" onclick="switchTab('produtividade')">7 · Produtividade<span class="tab-mnt">em manutenção</span></button>
+  <button class="tab-btn" data-tab="terceiros" onclick="switchTab('terceiros')">8 · Relação de Terceiros<span class="tab-mnt">em manutenção</span></button>
+  <span class="tab-sep" aria-hidden="true"></span>
+  <button class="tab-btn" data-tab="upload" onclick="switchTab('upload')">Upload &amp; Consolidação</button>
+  <button class="tab-btn" data-tab="iscas" onclick="switchTab('iscas')">Iscas</button>
+  <button class="tab-btn" data-tab="dashboard" onclick="switchTab('dashboard')">Indicadores</button>
+  <button class="tab-btn active" data-tab="config" onclick="switchTab('config')">Configurações</button>
 </div>
 <div class="subtabs show" id="subtabsConfig">
   <button class="subtab-btn active" data-sub="parametros" onclick="switchTab('parametros')">Parâmetros</button>
   <button class="subtab-btn" data-sub="cadastro" onclick="switchTab('cadastro')">Cadastro de Placas</button>
   <button class="subtab-btn" data-sub="backup" onclick="switchTab('backup')">Backup &amp; Upload</button>
+  <button class="subtab-btn" data-sub="abas" onclick="switchTab('abas')">Abas Visíveis</button>
 </div>
 
 <!-- ================= TAB 1: PARAMETROS ================= -->
@@ -739,7 +760,7 @@
 <div class="view" id="view-painel">
   <div class="panel">
     <div class="panel-head">
-      <div><h2>Painel de cargas por doca</h2>
+      <div><h2>Lista de Carga</h2>
         <div class="desc">Filtros e totais da alocação já calculada (doca manual tem prioridade sobre a sugerida).</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <select id="pTransp" onchange="renderPainel()"></select>
@@ -780,7 +801,7 @@
 <!-- ================= TAB 8: FOLHAS DE FLUXO ================= -->
 <div class="view" id="view-folhas">
   <div class="panel">
-    <div class="panel-head"><div><h2>Folhas de Fluxo — Entrada e Saída (P1)</h2>
+    <div class="panel-head"><div><h2>Entrada de Veículos CD</h2>
       <div class="desc">Suba a <b>PROGRAMAÇÃO</b> do dia. A ferramenta cria <b>uma folha por placa</b>, em ordem alfabética, já com transportador, motorista, RG, CPF, placa e data. O <b>nº da carga</b> (o mesmo da lista de carga) e a <b>doca</b> (campo 1°) são preenchidos com a alocação desta ferramenta quando a placa já tem doca. Mesma placa em mais de um bloco (ex.: TV CENTRO) gera uma folha só.</div></div>
       <div id="ffBotoes" style="display:none;gap:8px;flex-wrap:wrap;">
         <button class="primary" onclick="ffBaixar()">⬇ Baixar folhas (.xlsx)</button>
@@ -898,7 +919,7 @@
   <div class="panel">
     <div class="panel-head">
       <div>
-        <h2>Controle de Saída — Rotina 4</h2>
+        <h2>Saída de Veículos CD</h2>
         <div class="desc">Libera o motorista após o carregamento. Carregue a <b>Lista de carga</b>, a <b>Programação</b> e as <b>Coletas</b> (quando houver veículo com coleta): a ferramenta reconhece cada arquivo pelas colunas e monta o formulário de cada veículo, no mesmo layout da folha impressa.</div>
       </div>
       <button class="danger small" onclick="csLimpar()">Limpar arquivos</button>
@@ -975,7 +996,7 @@
   <div class="panel">
     <div class="panel-head">
       <div>
-        <h2>Kit Coletas</h2>
+        <h2>Coleta</h2>
         <div class="desc">Carregue a <b>planilha de Coletas</b> do dia, o <b>Tipo de Residência</b> (.xlsm) e a <b>Lista de carga</b> finalizada (o Excel “lista por onda” ou “cargas acumuladas por filial” gerado pela ferramenta). A ferramenta reconhece cada arquivo pelas colunas, acha a <b>placa</b> de cada coleta pela ORM no Tipo de Residência e traz <b>CARGA, PRÉ, ONDA e TRANSP.</b> da Lista de carga. A coluna KIT/Nº fica em branco para preenchimento à mão.</div>
       </div>
       <button class="danger small" onclick="kcLimpar()">Limpar arquivos</button>
@@ -1013,6 +1034,56 @@
   </div>
 </div>
 
+<div class="view" id="view-protocolo">
+  <div class="panel mnt-box">
+    <div class="mnt-ico">📋</div>
+    <h2>Protocolo de Bancada</h2>
+    <span class="mnt-tag">🛠 Em manutenção</span>
+    <p>Esta aba ainda será criada. Assim que estiver pronta ela passa a funcionar aqui, na mesma posição da sequência da operação.</p>
+  </div>
+</div>
+
+<div class="view" id="view-ondasfora">
+  <div class="panel mnt-box">
+    <div class="mnt-ico">🚪</div>
+    <h2>Ondas Fora da doca</h2>
+    <span class="mnt-tag">🛠 Em manutenção</span>
+    <p>Esta aba ainda será criada. Assim que estiver pronta ela passa a funcionar aqui, na mesma posição da sequência da operação.</p>
+  </div>
+</div>
+
+<div class="view" id="view-produtividade">
+  <div class="panel mnt-box">
+    <div class="mnt-ico">📈</div>
+    <h2>Produtividade</h2>
+    <span class="mnt-tag">🛠 Em manutenção</span>
+    <p>Esta aba ainda será criada. Assim que estiver pronta ela passa a funcionar aqui, na mesma posição da sequência da operação.</p>
+  </div>
+</div>
+
+<div class="view" id="view-terceiros">
+  <div class="panel mnt-box">
+    <div class="mnt-ico">🤝</div>
+    <h2>Relação de Terceiros</h2>
+    <span class="mnt-tag">🛠 Em manutenção</span>
+    <p>Esta aba ainda será criada. Assim que estiver pronta ela passa a funcionar aqui, na mesma posição da sequência da operação.</p>
+  </div>
+</div>
+
+<div class="view" id="view-abas">
+  <div class="panel">
+    <div class="panel-head"><div><h2>Abas visíveis</h2>
+      <div class="desc">Marque as abas que devem aparecer na barra superior. Desmarcar apenas esconde a aba — nenhum dado é apagado. A escolha fica salva neste navegador. A aba Configurações está sempre visível.</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="small" onclick="abasMarcarTodas(true)">Marcar todas</button>
+        <button class="small" onclick="abasMarcarTodas(false)">Desmarcar todas</button>
+        <button class="small ghost" onclick="abasRestaurarPadrao()">Restaurar padrão</button>
+      </div>
+    </div>
+    <div id="abasVisiveisLista"></div>
+  </div>
+</div>
+
 <div class="view" id="view-backup">
   <div class="panel">
     <div class="panel-head"><div><h2>Backup</h2><div class="desc">Baixe uma cópia dos dados da ferramenta. Eles já ficam salvos automaticamente no navegador, mas o backup é a cópia de segurança fora dele.</div></div></div>
@@ -1034,7 +1105,7 @@
     </div>
     <input type="file" id="bkInput" multiple style="display:none" onchange="bkRestaurarArquivos(this.files); this.value=''">
     <div id="bkLog" class="filelist" style="margin-top:12px;"></div>
-    <div class="desc" style="margin-top:10px;max-width:none;">Os arquivos de operação (GAN, Log de NF e Região) continuam sendo carregados na aba 2 · Upload &amp; Consolidação.</div>
+    <div class="desc" style="margin-top:10px;max-width:none;">Os arquivos de operação (GAN, Log de NF e Região) continuam sendo carregados na aba Upload &amp; Consolidação.</div>
   </div>
 </div>
 
@@ -1281,10 +1352,11 @@ function toast(msg, type){
 /* =========================================================
    NAVEGAÇÃO
    ========================================================= */
-const CFG_SUBS=['parametros','cadastro','backup'];
+const CFG_SUBS=['parametros','cadastro','backup','abas'];
 let _cfgSubAtual='parametros';
 function switchTab(tab){
   if(tab==='config') tab=_cfgSubAtual;
+  if(!CFG_SUBS.includes(tab) && !abaVisivel(tab)) return;   // aba escondida em Configurações › Abas Visíveis
   const emCfg=CFG_SUBS.includes(tab);
   if(emCfg) _cfgSubAtual=tab;
   document.getElementById('subtabsConfig').classList.toggle('show', emCfg);
@@ -1299,7 +1371,64 @@ function switchTab(tab){
   if(tab==='backup') renderBackup();
   if(tab==='iscas') renderIscas();
   if(tab==='folhas') renderFolhas();
+  if(tab==='abas') renderAbasVisiveis();
 }
+
+/* =========================================================
+   ABAS VISÍVEIS (Configurações › Abas Visíveis)
+   STATE.config.abasVisiveis = { idDaAba: false }  — ausente/true = visível.
+   Configurações nunca é escondida.
+   ========================================================= */
+const ABAS_DEF = [
+  {id:'painel',        nome:'Lista de Carga',          n:'1'},
+  {id:'protocolo',     nome:'Protocolo de Bancada',    n:'2', mnt:true},
+  {id:'kitcoletas',    nome:'Coleta',                  n:'3'},
+  {id:'folhas',        nome:'Entrada de Veículos CD',  n:'4'},
+  {id:'saida',         nome:'Saída de Veículos CD',    n:'5'},
+  {id:'ondasfora',     nome:'Ondas Fora da doca',      n:'6', mnt:true},
+  {id:'produtividade', nome:'Produtividade',           n:'7', mnt:true},
+  {id:'terceiros',     nome:'Relação de Terceiros',    n:'8', mnt:true},
+  {id:'upload',        nome:'Upload & Consolidação',   n:'',  apoio:true},
+  {id:'iscas',         nome:'Iscas',                   n:'',  apoio:true},
+  {id:'dashboard',     nome:'Indicadores',             n:'',  apoio:true}
+];
+function abaVisivel(id){
+  const m = (STATE && STATE.config && STATE.config.abasVisiveis) || {};
+  return m[id] !== false;
+}
+function aplicarAbasVisiveis(){
+  document.querySelectorAll('.tab-btn').forEach(b=>{
+    if(b.dataset.tab==='config') return;
+    b.style.display = abaVisivel(b.dataset.tab) ? '' : 'none';
+  });
+  const at = document.querySelector('.tab-btn.active');
+  if(at && at.style.display==='none') switchTab('config');
+}
+function setAbaVisivel(id, v){
+  STATE.config.abasVisiveis = STATE.config.abasVisiveis || {};
+  STATE.config.abasVisiveis[id] = !!v;
+  saveState(); aplicarAbasVisiveis(); renderAbasVisiveis();
+}
+function abasMarcarTodas(v){
+  STATE.config.abasVisiveis = {};
+  ABAS_DEF.forEach(a=>{ STATE.config.abasVisiveis[a.id] = !!v; });
+  saveState(); aplicarAbasVisiveis(); renderAbasVisiveis();
+}
+function abasRestaurarPadrao(){
+  STATE.config.abasVisiveis = {};
+  saveState(); aplicarAbasVisiveis(); renderAbasVisiveis();
+  toast('Todas as abas voltaram a ficar visíveis.','ok');
+}
+function renderAbasVisiveis(){
+  const el = document.getElementById('abasVisiveisLista'); if(!el) return;
+  const linha = a => `<label class="aba-opt"><input type="checkbox" ${abaVisivel(a.id)?'checked':''} onchange="setAbaVisivel('${a.id}', this.checked)">`+
+    `<span class="n">${a.n}</span><span class="t">${a.nome}</span>${a.mnt?'<span class="tab-mnt">em manutenção</span>':''}</label>`;
+  el.innerHTML =
+    '<div class="aba-sec" style="margin-top:0">Sequência da operação</div>' + ABAS_DEF.filter(a=>!a.apoio).map(linha).join('') +
+    '<div class="aba-sec">Apoio</div>' + ABAS_DEF.filter(a=>a.apoio).map(linha).join('') +
+    '<label class="aba-opt lock"><input type="checkbox" checked disabled><span class="n"></span><span class="t">Configurações</span><span style="color:var(--text-2);font-size:12px;">sempre visível</span></label>';
+}
+document.addEventListener('DOMContentLoaded', ()=>{ try{ aplicarAbasVisiveis(); }catch(e){ console.error(e); } });
 
 /* =========================================================
    FILIAIS
@@ -2991,9 +3120,9 @@ async function bkLerBuffer(nome, buf){
     catch(e){ return ign('JSON inválido'); }
   }
   const c=bkClassificar(bkParseCSV(txt),nome);
-  return c?[c]:ign('não é um backup (arquivos GAN, Log de NF e Região entram na aba 2 · Upload & Consolidação)');
+  return c?[c]:ign('não é um backup (arquivos GAN, Log de NF e Região entram na aba Upload & Consolidação)');
 }
-function bkRenderTudo(){ renderParametros(); renderCadastro(); renderConsolidado(); renderOrfaos(); renderTS(); renderAlocacao(); renderDashboard(); renderIscas(); renderBackup(); }
+function bkRenderTudo(){ try{ aplicarAbasVisiveis(); }catch(e){} renderParametros(); renderCadastro(); renderConsolidado(); renderOrfaos(); renderTS(); renderAlocacao(); renderDashboard(); renderIscas(); renderBackup(); }
 async function bkRestaurarArquivos(fileList){
   const files=Array.from(fileList||[]); if(!files.length) return;
   const log=document.getElementById('bkLog'); log.innerHTML='';
@@ -3949,7 +4078,7 @@ function ilMotivo(key){
   const r = ilCodsDaArea(key), nome = String(key).split('|')[0];
   if(!r.cods.length) return 'Cidade/bairro não consta na lista de territórios — escolha a região manualmente.';
   const cont = ilTerrCont(r.cods), ks = Object.keys(cont).sort((a,b)=>cont[b]-cont[a]);
-  if(!ks.length) return 'Nenhuma placa dos arquivos de Região carregados está no território '+r.cods.join('/')+' — carregue a Região desse território na aba 3 e clique em “Redistribuir placas”.';
+  if(!ks.length) return 'Nenhuma placa dos arquivos de Região carregados está no território '+r.cods.join('/')+' — carregue a Região desse território na aba Upload & Consolidação e clique em “Redistribuir placas”.';
   if(ks.length>1 && cont[ks[0]]===cont[ks[1]]) return 'Empate entre as regiões '+ks.join(' e ')+' — escolha uma.';
   return '';
 }
@@ -4204,7 +4333,7 @@ function ilRender(){
   const semDoca = L.rows.filter(r=>r.placa && ilInfoPlaca(r.placa).doca==null).length;
   const stat = (n,l,cor)=>`<div class="stat"><div class="num"${cor?` style="color:var(--${cor})"`:''}>${n}</div><div class="lbl">${l}</div></div>`;
   let h = `<div class="desc" style="margin-bottom:10px;max-width:none;">Arquivo: <b>${pEsc(L.nome)}</b> · aba ${pEsc(L.folha)} · a placa será gravada na coluna <b>${pEsc(L.colPlaca)}</b>.${L.filtro?(L.filtro.modo==='bloco'?` Li de baixo para cima até a primeira linha com placa preenchida (linha <b>${L.filtro.xlParada}</b> da planilha): <b>${L.rows.length}</b> iscas do dia; ${L.filtro.ignoradas} linhas de cargas anteriores ignoradas (${L.filtro.total} no total).`:` O arquivo acumula <b>${L.filtro.dias}</b> dias (${L.filtro.total} linhas); usei só as <b>${L.rows.length}</b> iscas de <b>${pEsc(isoParaBR(L.filtro.iso))}</b> (data escolhida pelo ${pEsc(L.filtro.de)}).`):''}</div>`;
-  if(!temCargas) h += '<div class="badge alert" style="display:block;margin-bottom:10px;padding:8px;">Ainda não há cargas carregadas. Carregue GAN, Log de NF e Região (aba 3) e rode a alocação; depois clique em “Redistribuir placas”.</div>';
+  if(!temCargas) h += '<div class="badge alert" style="display:block;margin-bottom:10px;padding:8px;">Ainda não há cargas carregadas. Carregue GAN, Log de NF e Região (aba Upload & Consolidação) e rode a alocação; depois clique em “Redistribuir placas”.</div>';
   h += `<div class="grid cols-4" style="margin-bottom:14px;">${stat(L.rows.length,'iscas no arquivo')}${stat(comPlaca,'com placa','teal')}${stat(L.rows.length-comPlaca,'sem placa','red')}${stat(rep,'placa repetida','amber')}</div>`;
   /* mapa área -> região */
   const areas = {}; L.rows.forEach(r=>{ const a = areas[r.key] = areas[r.key]||{rot:r.rot, n:0}; a.n++; });
@@ -4215,7 +4344,7 @@ function ilRender(){
     const usados = new Set(); Object.keys(areas).forEach(k=>ilCodsDaArea(k).cods.forEach(c=>usados.add(c)));
     const falt = Array.from(usados).filter(c=>!cob.has(c)).sort((x,y)=>x-y);
     h += `<div class="badge ${falt.length||!regs.length?'alert':''}" style="display:block;margin-bottom:10px;padding:8px;">Regiões com carga carregadas: <b>${regs.length?regs.map(pEsc).join(', '):'nenhuma'}</b>.`+
-      (falt.length?` Territórios das iscas de hoje <b>sem nenhuma placa</b> nos arquivos de Região: <b>${falt.join(', ')}</b> — carregue as Regiões que cobrem esses territórios (aba 3) antes de distribuir.`:` Todos os territórios das iscas de hoje têm placas carregadas.`)+`</div>`; }
+      (falt.length?` Territórios das iscas de hoje <b>sem nenhuma placa</b> nos arquivos de Região: <b>${falt.join(', ')}</b> — carregue as Regiões que cobrem esses territórios (aba Upload & Consolidação) antes de distribuir.`:` Todos os territórios das iscas de hoje têm placas carregadas.`)+`</div>`; }
   h += `<h3 style="font-size:13.5px;margin:6px 0;">Região de cada área de entrega</h3>
     <div class="desc" style="max-width:none;margin-bottom:8px;">A ferramenta sugere a região quando o nome bate; nas demais, escolha uma vez e ela fica lembrada para os próximos dias.</div>
     <div class="table-wrap"><table><thead><tr><th>Área de entrega</th><th>Iscas</th><th>Território</th><th>Região com carga</th><th>Placas disponíveis</th></tr></thead><tbody>
@@ -4597,7 +4726,7 @@ function renderCargasFilial(){
   const elT=document.getElementById('pFilialTabs'), elB=document.getElementById('pFilialTabela');
   if(!elT||!elB) return;
   if(!STATE.alocacao.length){
-    elT.innerHTML=''; elB.innerHTML='<div class="empty">Rode a alocação (botão “Rodar alocação” na aba 2 · Upload &amp; Consolidação) para ver as cargas por filial.</div>'; return;
+    elT.innerHTML=''; elB.innerHTML='<div class="empty">Rode a alocação (botão “Rodar alocação” na aba Upload &amp; Consolidação) para ver as cargas por filial.</div>'; return;
   }
   const items=pItensFiltrados();
   const abas=[{cod:'ACUM', nome:'Acumulado', n:items.length}].concat(
