@@ -510,13 +510,13 @@
   <button class="tab-btn" data-tab="painel" onclick="switchTab('painel')">1 · Lista de Carga</button>
   <button class="tab-btn" data-tab="protocolo" onclick="switchTab('protocolo')">2 · Protocolo de Bancada</button>
   <button class="tab-btn" data-tab="kitcoletas" onclick="switchTab('kitcoletas')">3 · Coleta</button>
-  <button class="tab-btn" data-tab="folhas" onclick="switchTab('folhas')">4 · Entrada de Veículos CD</button>
-  <button class="tab-btn" data-tab="saida" onclick="switchTab('saida')">5 · Saída de Veículos CD</button>
-  <button class="tab-btn" data-tab="ondasfora" onclick="switchTab('ondasfora')">6 · Ondas Fora da doca</button>
-  <button class="tab-btn" data-tab="produtividade" onclick="switchTab('produtividade')">7 · Produtividade<span class="tab-mnt">em manutenção</span></button>
-  <button class="tab-btn" data-tab="terceiros" onclick="switchTab('terceiros')">8 · Relação de Terceiros<span class="tab-mnt">em manutenção</span></button>
+  <button class="tab-btn" data-tab="iscas" onclick="switchTab('iscas')">4 · Iscas</button>
+  <button class="tab-btn" data-tab="folhas" onclick="switchTab('folhas')">5 · Entrada de Veículos CD</button>
+  <button class="tab-btn" data-tab="saida" onclick="switchTab('saida')">6 · Saída de Veículos CD</button>
+  <button class="tab-btn" data-tab="ondasfora" onclick="switchTab('ondasfora')">7 · Ondas Fora da doca</button>
+  <button class="tab-btn" data-tab="produtividade" onclick="switchTab('produtividade')">8 · Produtividade<span class="tab-mnt">em manutenção</span></button>
+  <button class="tab-btn" data-tab="terceiros" onclick="switchTab('terceiros')">9 · Relação de Terceiros<span class="tab-mnt">em manutenção</span></button>
   <span class="tab-sep" aria-hidden="true"></span>
-  <button class="tab-btn" data-tab="iscas" onclick="switchTab('iscas')">Iscas</button>
   <button class="tab-btn active" data-tab="config" onclick="switchTab('config')">Configurações</button>
 </div>
 <div class="subtabs show" id="subtabsConfig">
@@ -847,6 +847,7 @@
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
           <button class="primary" onclick="adicionarIscas()">Vincular iscas</button>
           <button class="danger" onclick="limparIscas()">Limpar todas</button></div>
+        <div id="iscaPrioBox" style="margin-top:12px;"></div>
         <label style="margin-top:14px;display:block;">Ou suba um arquivo com as placas / docas</label>
         <div class="dropzone" id="iscaDrop" onclick="document.getElementById('iscaFile').click()"
              ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')"
@@ -921,13 +922,13 @@
     <div class="panel-head">
       <div>
         <h2>Saída de Veículos CD</h2>
-        <div class="desc">Libera o motorista após o carregamento. Carregue a <b>Lista de carga</b>, a <b>Programação</b> e as <b>Coletas</b> (quando houver veículo com coleta): a ferramenta reconhece cada arquivo pelas colunas e monta o formulário de cada veículo, no mesmo layout da folha impressa.</div>
+        <div class="desc">Libera o motorista após o carregamento. A <b>Lista de carga</b> vem sozinha da aba 1 · Lista de Carga (atualiza a cada alteração de doca/onda); carregue aqui a <b>Programação</b> e as <b>Coletas</b> (quando houver veículo com coleta): a ferramenta reconhece cada arquivo pelas colunas e monta o formulário de cada veículo, no mesmo layout da folha impressa.</div>
       </div>
       <button class="danger small" onclick="csLimpar()">Limpar arquivos</button>
     </div>
     <div class="dropzone" onclick="document.getElementById('csInp').click()"
          ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="csDrop(event)">
-      <span class="k">Clique ou arraste os arquivos aqui</span>Lista de carga · Programação · Coletas — .xlsx / .xls / .csv (pode soltar os três juntos)
+      <span class="k">Clique ou arraste os arquivos aqui</span>Programação · Coletas — .xlsx / .xls / .csv (a Lista de carga vem sozinha da aba 1; pode soltar os dois juntos)
     </div>
     <input type="file" id="csInp" multiple accept=".xlsx,.xls,.xlsm,.ods,.csv" style="display:none" onchange="csFiles(this.files); this.value=''">
     <div id="csArqs" class="filelist"></div>
@@ -965,7 +966,7 @@
     </div>
 
     <div class="cs-kpis" id="csKpis"></div>
-    <div id="csVazio" class="empty">Carregue a <b>Lista de carga</b> e a <b>Programação</b> acima para gerar os formulários.</div>
+    <div id="csVazio" class="empty">Rode a alocação na aba 1 · Lista de Carga e carregue a <b>Programação</b> acima para gerar os formulários.</div>
     <div class="table-wrap" id="csTabWrap" style="max-height:420px;overflow-y:auto;display:none;">
       <table id="csTab">
         <thead><tr><th>Carga</th><th>Placa</th><th>Transportadora</th><th>Pré-romaneio</th><th>QTD NF</th><th>Motorista</th><th>Região</th><th>Coletas</th><th></th></tr></thead>
@@ -1072,6 +1073,7 @@
     <h2>Produtividade</h2>
     <span class="mnt-tag">🛠 Em manutenção</span>
     <p>Esta aba ainda será criada. Assim que estiver pronta ela passa a funcionar aqui, na mesma posição da sequência da operação.</p>
+    <p style="color:var(--text-2);">Previsto: <b>Separação</b> · <b>Carregamento</b>.</p>
   </div>
 </div>
 
@@ -1325,7 +1327,7 @@ function saveState(){
 }
 
 function novaOperacao(){
-  if(!confirm('Isso apaga TODOS os dados da operação: arquivos carregados, base TS, cargas, PRÉs pendentes, alocação, ondas, iscas e filtros. Só os Parâmetros e o Cadastro de placas são mantidos. Confirmar?')) return;
+  if(!confirm('Isso apaga TODOS os dados da operação: arquivos carregados, base TS, cargas, PRÉs pendentes, alocação, ondas, iscas (incluindo as placas/docas de prioridade) e filtros. Só os Parâmetros e o Cadastro de placas são mantidos. Confirmar?')) return;
   // dados da operação (STATE)
   STATE.cargas = [];
   STATE.presOrfaos = [];
@@ -1399,12 +1401,12 @@ const ABAS_DEF = [
   {id:'painel',        nome:'Lista de Carga',          n:'1'},
   {id:'protocolo',     nome:'Protocolo de Bancada',    n:'2'},
   {id:'kitcoletas',    nome:'Coleta',                  n:'3'},
-  {id:'folhas',        nome:'Entrada de Veículos CD',  n:'4'},
-  {id:'saida',         nome:'Saída de Veículos CD',    n:'5'},
-  {id:'ondasfora',     nome:'Ondas Fora da doca',      n:'6'},
-  {id:'produtividade', nome:'Produtividade',           n:'7', mnt:true},
-  {id:'terceiros',     nome:'Relação de Terceiros',    n:'8', mnt:true},
-  {id:'iscas',         nome:'Iscas',                   n:'',  apoio:true}
+  {id:'iscas',         nome:'Iscas',                   n:'4'},
+  {id:'folhas',        nome:'Entrada de Veículos CD',  n:'5'},
+  {id:'saida',         nome:'Saída de Veículos CD',    n:'6'},
+  {id:'ondasfora',     nome:'Ondas Fora da doca',      n:'7'},
+  {id:'produtividade', nome:'Produtividade',           n:'8', mnt:true},
+  {id:'terceiros',     nome:'Relação de Terceiros',    n:'9', mnt:true}
 ];
 function abaVisivel(id){
   const m = (STATE && STATE.config && STATE.config.abasVisiveis) || {};
@@ -1439,7 +1441,7 @@ function renderAbasVisiveis(){
     `<span class="n">${a.n}</span><span class="t">${a.nome}</span>${a.mnt?'<span class="tab-mnt">em manutenção</span>':''}</label>`;
   el.innerHTML =
     '<div class="aba-sec" style="margin-top:0">Sequência da operação</div>' + ABAS_DEF.filter(a=>!a.apoio).map(linha).join('') +
-    '<div class="aba-sec">Apoio</div>' + ABAS_DEF.filter(a=>a.apoio).map(linha).join('') +
+    (ABAS_DEF.some(a=>a.apoio) ? '<div class="aba-sec">Apoio</div>' + ABAS_DEF.filter(a=>a.apoio).map(linha).join('') : '') +
     '<label class="aba-opt lock"><input type="checkbox" checked disabled><span class="n"></span><span class="t">Configurações</span><span style="color:var(--text-2);font-size:12px;">sempre visível</span></label>';
 }
 document.addEventListener('DOMContentLoaded', ()=>{ try{ aplicarAbasVisiveis(); }catch(e){ console.error(e); } });
@@ -2274,6 +2276,8 @@ function resolverDataOperacao(ganRecords){
     }
     removidoAnterior = purgarOutrasDatas(op);
     removidoAnterior.datas = outras;
+    /* as prioridades de isca digitadas e o arquivo de iscas eram do dia anterior: saem junto */
+    STATE.iscas = []; STATE.iscaLote = null; IL_MEM.buf = null;
     // base TS que sobrou de outro dia (e não foi reenviada agora) também sai
     if(!PENDING.TS.length){
       const dts = (STATE.ts||[]).map(r=>dataParaISO(r.data)).filter(Boolean);
@@ -4396,6 +4400,29 @@ function ilRender(){
   box.innerHTML = h;
 }
 
+/* Prioridades digitadas (placa/doca): lista visível com botão de excluir. São apagadas junto com o dia
+   (Novo dia / limpar operação, Limpar cargas, troca de data na consolidação) ou uma a uma aqui. */
+function renderIscaPrioLista(ls){
+  const box = document.getElementById('iscaPrioBox'); if(!box) return;
+  const itens = (ls||[]).filter(x=>!x.isca.lote);
+  if(!itens.length){ box.innerHTML = ''; return; }
+  const rot = {ok:'vinculada', semdoca:'carga sem doca', semalocacao:'rode a alocação', naoachou:'não está no arquivo', docasemcarga:'doca sem carga', escolher:'escolha a carga'};
+  box.innerHTML = '<div class="desc" style="margin-bottom:6px;"><b>Prioridades cadastradas ('+itens.length+')</b> — valem só para o dia atual; clique em ✕ para excluir uma.</div>'+
+    '<div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto;">'+
+    itens.map(x=>{
+      const i = x.isca, v = x.v;
+      const nome = i.tipo==='doca' ? 'doca '+i.docaInformada+(i.ondaInformada?' · '+i.ondaInformada+'ª onda':'') : (i.placa||'');
+      const extra = (i.tipo==='doca' && i.placa) ? ' → <b class="mono">'+pEsc(i.placa)+'</b>' : '';
+      const sel = v.st==='escolher'
+        ? ' <select onchange="iscaEscolher(\''+i.id+'\',this.value)"><option value="">Escolha a carga…</option>'+v.cands.map(a=>'<option value="'+pEsc(a.placa)+'">'+pEsc(a.placa)+' — '+pEsc(a.transportadora||'—')+' · '+a.onda+'ª onda</option>').join('')+'</select>'
+        : '';
+      const cor = v.st==='ok' ? 'ok' : (v.st==='escolher' ? 'neutral' : 'alert');
+      return '<div style="display:flex;align-items:center;gap:8px;background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:6px 10px;">'+
+        '<span title="Prioridade na roteirização">⭐</span><b class="mono">'+pEsc(nome)+'</b>'+extra+sel+
+        '<span class="badge '+cor+'" style="margin-left:auto;">'+(rot[v.st]||v.st)+'</span>'+
+        '<button class="small ghost" title="Excluir esta prioridade" onclick="removerIsca(\''+i.id+'\')">✕</button></div>';
+    }).join('')+'</div>';
+}
 function renderIscas(){
   const tb = document.getElementById('iscaTabela'); if(!tb) return;
   try{ ilRender(); }catch(e){ console.error(e); }
@@ -4403,6 +4430,7 @@ function renderIscas(){
   document.getElementById('iscaLarg').value = c.larg; document.getElementById('iscaAlt').value = c.alt;
   document.getElementById('iscaDpi').value = c.dpi; document.getElementById('iscaMgEsq').value = c.mgEsq; document.getElementById('iscaAreaL').value = c.areaLarg;   document.getElementById('iscaInfo').checked = !!c.info;
   const ls = iscaOrdenadas(), et = iscaEtiquetas();
+  try{ renderIscaPrioLista(ls); }catch(e){ console.error(e); }
   const pend = ls.filter(x=>!['ok'].includes(x.v.st)).length;
   document.getElementById('iscaStats').innerHTML =
     `<div class="stat"><div class="num">${ls.length}</div><div class="lbl">iscas cadastradas</div></div>
@@ -5785,20 +5813,46 @@ function cadastroTransp(placa){
   }catch(e){}
   return '';
 }
+/* Lista de carga VIVA: vem da aba 1 · Lista de Carga (STATE.alocacao), com a MESMA numeração da coluna CARGA.
+   Não é gravada: é relida a cada renderização, então acompanha qualquer alteração de doca/onda feita na aba 1.
+   PRÉ e QTD NF's = os da filial principal (CAJ-33), igual à aba Coleta; se a carga não tiver PRÉ dela, usa todos.
+   Cargas sem doca (pendentes) ficam de fora. Motorista/RG vêm da Programação. */
+function listaViva(){
+  var out = [];
+  try{
+    if(typeof STATE==='undefined' || typeof pCargasNumeradas!=='function' || !(STATE.alocacao && STATE.alocacao.length)) return out;
+    var seen = {};
+    pCargasNumeradas().forEach(function(it){
+      if(it.pend) return;
+      var a = it.a, k = norm(a.placa); if(!k || seen[k]) return; seen[k] = 1;
+      var pres = a.pres || [];
+      var pp = pres.filter(function(p){ return typeof isFilialPrincipal==='function' && isFilialPrincipal(p.filial); });
+      if(!pp.length) pp = pres;
+      var nums = [], qtd = 0;
+      pp.forEach(function(p){ var v = String(p.preRomaneio); if(nums.indexOf(v)<0) nums.push(v); qtd += (parseInt(p.qtdEntrega)||0); });
+      out.push({seq:it.n, placa:String(a.placa||'').toUpperCase(), prerom:nums.join('/'), qtd:qtd, tipo:a.transportadora||'', motorista:'', rg:''});
+    });
+  }catch(e){ console.warn('Saída: não consegui ler a Lista de carga da aba 1', e); return []; }
+  return out;
+}
+/* a lista da aba 1 vale sempre que existir; o arquivo de Lista de carga enviado aqui só serve de reserva */
+var LISTA_ATUAL = [];
+function listaEfetiva(){ var v = listaViva(); return v.length ? v : S.lista; }
 function calcular(){
   var progMap = {}; S.prog.forEach(function(p){ var k=norm(p.placa); if(!progMap[k]) progMap[k]=p; });
   var regs = parseRegioes(S.regTxt);
+  LISTA_ATUAL = listaEfetiva();
   var base = [];
   if(S.opts.juntar){
     var idx = {};
-    S.lista.forEach(function(l){
+    LISTA_ATUAL.forEach(function(l){
       var k = norm(l.placa), g = idx[k];
       if(!g){ g = idx[k] = {seq:l.seq, placa:l.placa, pres:[], qtd:0, tipo:l.tipo, motorista:l.motorista, rg:l.rg, seqs:[]}; base.push(g); }
       g.seqs.push(l.seq); g.seq = Math.min(g.seq, l.seq); g.qtd += l.qtd;
       cleanPre(l.prerom).split('/').forEach(function(p){ if(p && g.pres.indexOf(p)<0) g.pres.push(p); });
     });
   }else{
-    S.lista.forEach(function(l){ base.push({seq:l.seq, placa:l.placa, pres:cleanPre(l.prerom).split('/').filter(Boolean), qtd:l.qtd, tipo:l.tipo, motorista:l.motorista, rg:l.rg, seqs:[l.seq]}); });
+    LISTA_ATUAL.forEach(function(l){ base.push({seq:l.seq, placa:l.placa, pres:cleanPre(l.prerom).split('/').filter(Boolean), qtd:l.qtd, tipo:l.tipo, motorista:l.motorista, rg:l.rg, seqs:[l.seq]}); });
   }
   var cargas = base.map(function(b){
     var p = progMap[norm(b.placa)] || null;
@@ -5948,9 +6002,14 @@ window.csRender = function(){
   $('csData').value = S.opts.data; $('csTerc').checked = S.opts.terceiros; $('csJuntar').checked = S.opts.juntar;
 
   var nomes = {lista:'Lista de carga', prog:'Programação', coletas:'Coletas'};
-  $('csArqs').innerHTML = S.arqs.map(function(a){
+  var viva = listaViva(), arqsHtml = '';
+  if(viva.length) arqsHtml += '<div class="fitem"><span>Lista de carga — gerada na aba 1 · Lista de Carga (atualiza sozinha)</span><span class="badge ok">'+viva.length+' linha(s)</span></div>';
+  else arqsHtml += '<div class="fitem"><span style="color:var(--amber)">Lista de carga — ainda não gerada na aba 1 (consolide e rode a alocação) ou envie o arquivo abaixo</span><span class="badge alert">0 linha(s)</span></div>';
+  arqsHtml += S.arqs.map(function(a){
+    if(a.tipo==='lista' && viva.length) return '<div class="fitem"><span style="color:var(--text-2)">Lista de carga — '+esc(a.nome)+' (não usada: vale a lista da aba 1)</span><span class="badge neutral">'+a.n+' linha(s)</span></div>';
     return '<div class="fitem"><span>'+esc(nomes[a.tipo])+' — '+esc(a.nome)+'</span><span class="badge ok">'+a.n+' linha(s)</span></div>';
   }).join('');
+  $('csArqs').innerHTML = arqsHtml;
 
   CALC = calcular();
   var regsN = CALC.regs.length;
