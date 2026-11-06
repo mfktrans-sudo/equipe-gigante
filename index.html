@@ -605,13 +605,22 @@
 <div class="view" id="view-upload">
 
   <div class="panel">
-    <div class="panel-head"><div><h2>Carregar arquivos</h2><div class="desc">Solte todos os arquivos de uma vez (.txt, .zip e a planilha .xlsx da base de TS São Paulo). A ferramenta identifica o tipo de cada um sozinha, pelo conteúdo. A base de TS pode vir primeiro: ela define a doca/onda das placas que vão junto.</div></div></div>
+    <div class="panel-head"><div><h2>Carregar arquivos</h2><div class="desc">Solte todos os arquivos do dia de uma vez: GAN, Log de NF, Região (.txt ou .zip), base de TS São Paulo, Coletas, Tipo de Residência, Programação e iscas (.xlsx / .xlsm). A ferramenta identifica o tipo de cada um sozinha, pelo conteúdo, faz todos os passos e deixa só os botões de baixar/imprimir logo abaixo. A base de TS pode vir primeiro: ela define a doca/onda das placas que vão junto.</div></div></div>
     <div class="dropzone" onclick="document.getElementById('inpAUTO').click()"
          ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDropAuto(event)">
       <span class="k">Clique ou arraste todos os arquivos aqui</span>múltiplos arquivos misturados · arquivos .zip são extraídos automaticamente
     </div>
     <input type="file" id="inpAUTO" multiple style="display:none" onchange="handleFilesAuto(Array.from(event.target.files)); this.value=''">
     <div id="autoResumo" style="margin-top:12px;"></div>
+  </div>
+
+  <div class="panel" id="panelFluxo">
+    <div class="panel-head">
+      <div><h2>Fluxo automático e saídas prontas</h2><div class="desc">Depois do envio, a ferramenta consolida, aloca, liga as coletas às placas e monta as saídas. Se houver ajuste manual de doca ou a data da operação for diferente, ela pergunta antes de alterar.</div></div>
+      <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12.5px;color:var(--text-1);cursor:pointer;"><input type="checkbox" id="fluxoAuto" checked onchange="fluxoAutoMudou()"> Consolidar e alocar sozinho após o envio</label>
+    </div>
+    <div id="fluxoStatus"></div>
+    <div id="fluxoSaidas" style="margin-top:8px;"></div>
   </div>
 
   <div class="panel" id="panelArquivosCarregados">
@@ -1448,7 +1457,7 @@ function switchTab(tab){
   document.getElementById('view-'+tab).classList.add('active');
   if(tab==='parametros') renderParametros();
   if(tab==='cadastro') renderCadastro();
-  if(tab==='upload') { renderConsolidado(); renderOrfaos(); }
+  if(tab==='upload') { renderConsolidado(); renderOrfaos(); try{ renderFluxo(); }catch(e){} }
   if(tab==='dashboard') renderDashboard();
   if(tab==='backup') renderBackup();
   if(tab==='iscas') renderIscas();
@@ -2130,9 +2139,9 @@ async function handleFilesAuto(fileList){
   if(!arquivos.length) return;
   if(UPLOAD_OCUPADO){ toast('Aguarde o término da leitura anterior.', 'err'); return; }
   UPLOAD_OCUPADO = true;
-  try{ await _handleFilesAutoInterno(arquivos); }
+  try{ const extras = await _handleFilesAutoInterno(arquivos); await fluxoAposEnvio(extras); }
   catch(err){ console.error(err); toast('Erro ao carregar os arquivos: '+(err&&err.message?err.message:err), 'err'); }
-  finally{ UPLOAD_OCUPADO = false; }
+  finally{ UPLOAD_OCUPADO = false; try{ renderFluxo(); }catch(e){} }
 }
 async function _handleFilesAutoInterno(arquivos){
   const itens = [];
@@ -2148,11 +2157,18 @@ async function _handleFilesAutoInterno(arquivos){
       catch(err){ toast('Falha ao ler '+file.name, 'err'); }
     }
   }
-  const res = {ok:{GAN:0, HEBLS:0, REGIAO:0, TS:0}, porNome:[], repetidos:[], naoReconhecidos:[], ts:[]};
+  const res = {ok:{GAN:0, HEBLS:0, REGIAO:0, TS:0}, porNome:[], repetidos:[], naoReconhecidos:[], ts:[], extras:[]};
+  const extras = [];   // planilhas de apoio (Coletas, Tipo de Residência, Programação, iscas...) — entregues às abas depois da consolidação
   itens.forEach(it=>{
-    if(it.buf){   // planilha Excel: só é aceita se tiver o layout da base de TS (PLACA + DOCA + LOJA/PRE-05)
+    if(it.buf){   // planilha Excel: base TS (PLACA + DOCA + LOJA/PRE-05) ou planilha de apoio reconhecida pelas colunas
       const linhas = parseTSPlanilha(it.buf);
-      if(!linhas.length){ res.naoReconhecidos.push(it.nome+' (planilha sem as colunas PLACA / DOCA / LOJA da base TS)'); return; }
+      if(!linhas.length){
+        const cls = classificarPlanilhaExtra(it.nome, it.buf);
+        if(!cls){ res.naoReconhecidos.push(it.nome+' (planilha não reconhecida: não achei as colunas da base TS, Coletas, Tipo de Residência, Programação nem iscas)'); return; }
+        res.extras.push({nome:it.nome, tipo:cls.tipo});
+        if(!cls.pronto) extras.push({nome:it.nome, buf:it.buf, tipo:cls.tipo});
+        return;
+      }
       if(arquivoJaCarregado(it.nome)){ res.repetidos.push(it.nome); return; }
       PENDING.TS.push({nome: it.nome, regiao: linhas.length+' linhas', texto:'', linhas});
       res.ok.TS++;
@@ -2172,6 +2188,130 @@ async function _handleFilesAutoInterno(arquivos){
   renderResumoAuto(res);
   const total = res.ok.GAN + res.ok.HEBLS + res.ok.REGIAO;
   if(res.naoReconhecidos.length) toast(res.naoReconhecidos.length+' arquivo(s) não reconhecido(s) — veja o aviso.', 'err');
+  return extras;
+}
+
+/* =========================================================
+   UPLOAD ÚNICO — fluxo automático
+   Tudo é enviado aqui. A ferramenta reconhece cada arquivo pelas colunas/conteúdo e entrega ao leitor que a aba
+   correspondente já usava (nada foi reescrito): consolida e aloca, liga Coletas ↔ Tipo de Residência ↔ placa,
+   monta a Saída de Veículos, as folhas de Entrada e as iscas. Sobram só os botões de baixar/imprimir.
+   Travas: não apaga nada sozinho; se houver ajuste manual de doca, a própria alocação pergunta antes de recalcular;
+   a data da operação continua sendo confirmada pela consolidação; os envios manuais das outras abas seguem funcionando.
+   ========================================================= */
+const ROTULO_EXTRA = {coletas:'Coletas (aba 3)', tipo:'Tipo de Residência (aba 3)', lista_kc:'Lista de carga (reserva · aba 3)', lista_cs:'Lista de carga (reserva · aba 6)',
+  kit:'Kit_Coletas (aba 6)', prog:'Programação (abas 5 e 6)', iscas:'Iscas — saída de inserção (aba 4)', territorios:'Lista de territórios (aba 4)'};
+
+function classificarPlanilhaExtra(nome, buf){
+  if(typeof XLSX==='undefined') return null;
+  let wb; try{ wb = XLSX.read(buf, {type:'array'}); }catch(e){ return null; }
+  const N = tsNormHdr;
+  for(const sn of wb.SheetNames){
+    const ws = wb.Sheets[sn]; if(!ws || !ws['!ref']) continue;
+    try{ const r = XLSX.utils.decode_range(ws['!ref']); if(r.e.r > 39){ r.e.r = 39; ws['!ref'] = XLSX.utils.encode_range(r); } }catch(e){}   /* só o topo basta para achar o cabeçalho */
+    const aoa = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true});
+    const tem = needs => aoa.some(r=>{ const ks=(r||[]).map(N); return needs.every(n=>ks.includes(n)); });
+    const temPrefixo = (needs, pref) => aoa.some(r=>{ const ks=(r||[]).map(N); return needs.every(n=>ks.includes(n)) && ks.some(k=>k.indexOf(pref)===0); });
+    if(typeof ilDetectar==='function' && ilDetectar(aoa)) return {tipo:'iscas'};
+    if(tem(['SEQ','PLACA','QTDNF'])) return {tipo:'lista_cs'};
+    if(temPrefixo(['CARGA','PLACAS'],'PREROMANEIO')) return {tipo:'lista_kc'};
+    if(tem(['ORM','PLACA','TIPODECOLETA'])) return {tipo:'kit'};
+    if(tem(['NFDV','ORM'])) return {tipo:'coletas'};
+    if(tem(['PLACA','CLIENTE','FILIAL','NF'])) return {tipo:'tipo'};
+    if(tem(['PLACA','MOTORISTA'])) return {tipo:'prog'};
+  }
+  /* último recurso: lista de territórios das iscas (só grava se tiver o formato esperado) */
+  try{ if(typeof ilCarregarTerritorios==='function' && ilCarregarTerritorios(nome, buf)) return {tipo:'territorios', pronto:true}; }catch(e){}
+  return null;
+}
+
+async function despacharExtras(extras){
+  if(!extras || !extras.length) return;
+  const arq = x => new File([x.buf], x.nome);
+  const por = {}; extras.forEach(x=>{ (por[x.tipo] = por[x.tipo] || []).push(x); });
+  const grupos = [
+    ['coletas','kcFiles'], ['tipo','kcFiles'], ['lista_kc','kcFiles'],
+    ['kit','csFiles'], ['lista_cs','csFiles'], ['prog','csFiles'], ['prog','ffArquivos'], ['iscas','iscaArquivos']
+  ];
+  for(const [tipo, fn] of grupos){
+    const l = por[tipo]; if(!l || !l.length) continue;
+    const files = l.map(arq);
+    try{
+      if(fn==='kcFiles' && typeof window.kcFiles==='function') await window.kcFiles(files);
+      else if(fn==='csFiles' && typeof window.csFiles==='function') await window.csFiles(files);
+      else if(fn==='ffArquivos') await ffArquivos(files, {semBaixar:true});
+      else if(fn==='iscaArquivos') await iscaArquivos(files);
+    }catch(e){ console.error(e); toast('Não consegui processar '+l.map(x=>x.nome).join(', ')+': '+(e&&e.message||e), 'err'); }
+  }
+}
+
+function fluxoAutoLigado(){ try{ return localStorage.getItem('fluxo_auto_v1') !== '0'; }catch(e){ return true; } }
+function fluxoAutoMudou(){ const c = document.getElementById('fluxoAuto'); try{ localStorage.setItem('fluxo_auto_v1', c && c.checked ? '1' : '0'); }catch(e){} }
+function fluxoTemPendentes(){ return PENDING.GAN.length + PENDING.HEBLS.length + PENDING.REGIAO.length + PENDING.TS.length > 0; }
+function abaAtualId(){ const b = document.querySelector('.tab-btn.active'); const t = b && b.dataset.tab; return t==='config' ? _cfgSubAtual : t; }
+
+/* consolida e aloca (mesma função do botão "Consolidar e alocar") e volta para o Upload em vez de abrir o Painel */
+function fluxoConsolidar(){
+  if(!fluxoTemPendentes()){ toast('Não há arquivos de GAN / Log de NF / Região / TS aguardando.', 'err'); return; }
+  const aba = abaAtualId() || 'upload';
+  try{ consolidarUploads(); }catch(e){ console.error(e); toast('Erro ao consolidar: '+(e&&e.message||e), 'err'); }
+  if(abaAtualId() !== aba){ try{ switchTab(aba); }catch(e){} }
+  renderFluxo();
+}
+async function fluxoAposEnvio(extras){
+  if(fluxoAutoLigado() && fluxoTemPendentes()) fluxoConsolidar();
+  await despacharExtras(extras);
+  renderFluxo();
+}
+
+function fluxoLinha(rot, val, cls){ return '<div class="fitem"><span>'+rot+'</span><span class="badge '+(cls||'ok')+'">'+val+'</span></div>'; }
+function renderFluxo(){
+  const st = document.getElementById('fluxoStatus'), sb = document.getElementById('fluxoSaidas'); if(!st || !sb) return;
+  const cb = document.getElementById('fluxoAuto'); if(cb) cb.checked = fluxoAutoLigado();
+  const nPend = PENDING.GAN.length + PENDING.HEBLS.length + PENDING.REGIAO.length + PENDING.TS.length;
+  const nCargas = (STATE.cargas||[]).length, nAloc = (STATE.alocacao||[]).length;
+  let kc = []; try{ kc = (typeof window.kcColetasDoDia==='function') ? (window.kcColetasDoDia()||[]) : []; }catch(e){}
+  const kcOk = kc.filter(r=>!r.motivo).length;
+  let cs = null; try{ cs = (typeof window.csResumo==='function') ? window.csResumo() : null; }catch(e){}
+  const F = STATE.folhas, L = STATE.iscaLote;
+  let h = '';
+  h += nPend ? '<div class="fitem"><span>Arquivos GAN / Log de NF / Região / TS aguardando consolidação</span><span><span class="badge alert">'+nPend+'</span> <button class="small primary" onclick="fluxoConsolidar()">Consolidar e alocar agora</button></span></div>'
+             : fluxoLinha('Arquivos GAN / Log de NF / Região / TS aguardando consolidação', 'nenhum', 'neutral');
+  h += fluxoLinha('Cargas consolidadas · alocadas (aba 1)', nCargas+' · '+nAloc, (nCargas && nAloc) ? 'ok' : (nCargas ? 'alert' : 'neutral'));
+  h += kc.length ? fluxoLinha('Coletas ligadas a placa e carga (aba 3)', kcOk+' / '+kc.length, kcOk===kc.length ? 'ok' : 'alert')
+                 : fluxoLinha('Coletas (aba 3)', 'envie Coletas + Tipo de Residência', 'neutral');
+  h += cs && cs.veiculos ? fluxoLinha('Saída de Veículos CD (aba 6)', cs.veiculos+' formulário(s) · '+cs.ligadas+'/'+cs.coletas+' coletas ligadas'+(cs.semNfdv ? ' · '+cs.semNfdv+' sem NFDV' : ''), (cs.sem||cs.semNfdv) ? 'alert' : 'ok')
+                         : fluxoLinha('Saída de Veículos CD (aba 6)', 'aguardando consolidação / Programação', 'neutral');
+  h += F && F.rows && F.rows.length ? fluxoLinha('Folhas de Entrada (aba 5)', F.rows.length+' placa(s)', 'ok') : fluxoLinha('Folhas de Entrada (aba 5)', 'envie a Programação', 'neutral');
+  h += L && L.rows ? fluxoLinha('Iscas (aba 4)', L.rows.length+' linha(s) · '+L.rows.filter(r=>r.placa).length+' com placa', L.rows.every(r=>r.placa) ? 'ok' : 'alert') : fluxoLinha('Iscas (aba 4)', 'não enviadas', 'neutral');
+  st.innerHTML = h;
+  const b = (rot, fn, ok, dica) => '<button class="small'+(ok?' primary':'')+'" '+(ok?'':'disabled ')+'onclick="fluxoRun(\''+fn+'\')" title="'+(dica||'')+'">'+rot+'</button>';
+  const temCs = !!(cs && cs.veiculos), temKc = kc.length>0, temF = !!(F && F.rows && F.rows.length), temL = !!(L && L.rows && L.rows.length), temAl = nAloc>0;
+  sb.innerHTML =
+    '<div style="margin:6px 0 4px;color:var(--text-2);font-size:12px;">Saídas prontas — baixar / imprimir</div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;">'+
+      b('🖨 Saída de Veículos CD (todos)','saida',temCs,'Um formulário por veículo, com NFDV e ORM')+
+      b('⬇ Kit Coletas (.xlsx)','kcx',temKc)+ b('🖨 Kit Coletas','kcp',temKc)+
+      b('⬇ Folhas de Entrada','folhas',temF,'.xlsx (ou .zip, se houver mais de uma programação)')+
+      b('⬇ Iscas — rastreio (.xlsx)','iscaR',temL)+ b('⬇ Iscas — etiquetas (.xlsx)','iscaE',temL)+
+      b('⬇ Lista de ondas (.xlsx)','ondas',temAl)+ b('⬇ Acumulado + filiais (.xlsx)','filiais',temAl)+
+      b('🖨 Etiquetas Word (3ª onda+)','etq',temAl)+ b('🖨 Ondas fora da doca (Word)','ofd',temAl)+ b('⬇ Histórico de bancada (.xlsx)','hist',temAl)+
+    '</div>';
+}
+function fluxoRun(n){
+  try{
+    if(n==='saida'){ window.csRender(); window.csImprimirTodos(); }
+    else if(n==='kcx'){ window.kcRender(); window.kcBaixar(); }
+    else if(n==='kcp'){ window.kcRender(); window.kcImprimir(); }
+    else if(n==='folhas'){ ffMigrar(); (STATE.folhasArqs && STATE.folhasArqs.length>1) ? ffBaixarTodos() : ffBaixar(); }
+    else if(n==='iscaR') ilBaixarRastreio();
+    else if(n==='iscaE') ilBaixarEtiquetas();
+    else if(n==='ondas') exportarListaOndasExcel();
+    else if(n==='filiais') exportarCargasFilialExcel();
+    else if(n==='etq') etqBaixarWord();
+    else if(n==='ofd') ofdBaixarWord();
+    else if(n==='hist') protoBaixarHistorico();
+  }catch(e){ console.error(e); toast('Não consegui gerar o arquivo: '+(e&&e.message||e), 'err'); }
 }
 
 function renderResumoAuto(res){
@@ -2182,6 +2322,7 @@ function renderResumoAuto(res){
   const total = res.ok.GAN + res.ok.HEBLS + res.ok.REGIAO;
   let h = '';
   if(res.ts && res.ts.length) h += res.ts.map(t=>box('--teal', `Base TS São Paulo reconhecida: <span class="mono">${escAuto(t.nome)}</span> — ${t.linhas} linha(s), ${t.placas} placa(s). Ao consolidar, a doca/onda de cada placa passa a valer para as cargas que vão junto.`)).join('');
+  if(res.extras && res.extras.length) h += res.extras.map(x=>box('--teal', `Reconhecido: <b>${escAuto(ROTULO_EXTRA[x.tipo]||x.tipo)}</b> — <span class="mono">${escAuto(x.nome)}</span>`)).join('');
   if(res.porNome.length) h += box('--amber', `Tipo definido só pelo nome (nenhuma linha reconhecida no conteúdo): ${lista(res.porNome)}`);
   if(res.repetidos.length) h += box('--amber', `Não carregado(s) — já existe(m) arquivo(s) com o mesmo nome: ${lista(res.repetidos)}. Remova o existente em “Arquivos carregados” antes de enviar de novo.`);
   if(res.naoReconhecidos.length) h += box('--red', `Não reconhecido(s): ${lista(res.naoReconhecidos)}. Se for de um desses tipos com formato diferente, use o envio manual abaixo.`);
@@ -5439,7 +5580,7 @@ function ffDataDoNome(nome){
 }
 
 /* sobe um ou VÁRIOS arquivos de uma vez: cada arquivo vira o seu próprio conjunto de folhas (a data vem do nome dele) */
-async function ffArquivos(fileList){
+async function ffArquivos(fileList, opts){
   const files = Array.from(fileList||[]); if(!files.length) return;
   const log = document.getElementById('ffLog');
   const novos = [], falhas = [];
@@ -5465,6 +5606,7 @@ async function ffArquivos(fileList){
     + (falhas.length ? '. Não lido(s): '+falhas.join('; ') : '')+'.';
   if(falhas.length) toast('Não consegui ler: '+falhas.join('; '), 'err');
   const msgFinal = log ? log.textContent : '';
+  if(opts && opts.semBaixar){ toast(totPl+' folha(s) de entrada prontas (baixe pela aba Upload).', 'ok'); return; }
   if(novos.length===1){ toast(novos[0].rows.length+' folhas geradas. Baixando o arquivo…', 'ok'); await ffBaixar(novos[0]); }
   else { toast(totPl+' folhas em '+novos.length+' arquivos. Baixando o .zip…', 'ok'); await ffBaixarTodos(novos); }
   if(log) log.textContent = msgFinal;
@@ -6167,6 +6309,12 @@ window.csRender = function(){
     }).join('');
   }else semP.style.display='none';
   csRenderPrev();
+};
+
+/* resumo para o painel da aba Upload (não altera nada) */
+window.csResumo = function(){
+  try{ var c = calcular(); return {veiculos:c.cargas.length, comColetas:c.cargas.filter(function(x){ return x.coletas.length; }).length, coletas:c.total, ligadas:c.total-c.sem.length, sem:c.sem.length, semNfdv:c.semNfdv, origem:c.origem}; }
+  catch(e){ return null; }
 };
 
 /* ---------- encaixe na navegação existente (sem alterar a função original) ---------- */
