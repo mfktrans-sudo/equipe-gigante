@@ -2259,8 +2259,11 @@ function fluxoConsolidar(){
   renderFluxo();
 }
 async function fluxoAposEnvio(extras){
-  if(fluxoAutoLigado() && fluxoTemPendentes()) fluxoConsolidar();
+  const consolidou = fluxoAutoLigado() && fluxoTemPendentes();
+  if(consolidou) fluxoConsolidar();
   await despacharExtras(extras);
+  // terminado o envio e a consolidação, segue para o 1º passo: aba 1 · Lista de Carga
+  if(consolidou && (STATE.alocacao||[]).length){ try{ switchTab('painel'); }catch(e){} }
   renderFluxo();
 }
 
