@@ -6506,6 +6506,9 @@ import { getFirestore, doc, getDoc, onSnapshot, setDoc, serverTimestamp }
   const POLL = (window.GDN_VER_POLL_MS|0) || 300000; /* 5 min */
   const VER  = (/^\s*(v[\d.]+)/i.exec(tag.textContent||'')||[,'v2.1'])[1];
   const BASE = location.href.split('#')[0].split('?')[0];
+  const VEIO_DE_ATUALIZACAO = /[?&]_v=\d+/.test(location.search);   /* aberta pelo botão/atualização automática: veio da rede, é a versão nova */
+  const SSK  = 'ver_auto_reload_v1';                  /* trava anti-loop: última atualização automática nesta aba */
+  if(VEIO_DE_ATUALIZACAO){ try{ history.replaceState(null, '', BASE + location.hash); }catch(e){} }   /* tira o ?_v= da barra de endereço */
 
   /* ---------- exibição ---------- */
   function fmt(ms){
@@ -6543,26 +6546,46 @@ import { getFirestore, doc, getDoc, onSnapshot, setDoc, serverTimestamp }
     return null;
   }
 
-  /* ---------- aviso de versão nova ---------- */
-  let avisado = false;
-  function avisoNova(){
+  /* ---------- atualização para a versão nova ---------- */
+  let avisado = false, timerAuto = null;
+  function atualizarAgora(auto){
+    if(timerAuto){ clearInterval(timerAuto); timerAuto = null; }
+    try{ if(typeof window.saveState==='function') window.saveState(); }catch(e){}
+    try{ if(auto) sessionStorage.setItem(SSK, String(Date.now())); }catch(e){}
+    /* o ?_v= (novo a cada clique) força buscar o arquivo novo na rede, sem usar a cópia guardada em cache */
+    location.replace(BASE + '?_v=' + Date.now());
+  }
+  /* segundos = contagem até atualizar sozinho; a trava impede repetir a atualização automática em menos de 1 min (evita loop) */
+  function avisoNova(segundos){
     if(avisado) return; avisado = true;
+    let permitirAuto = true;
+    try{ permitirAuto = (Date.now() - (+sessionStorage.getItem(SSK) || 0)) > 60000; }catch(e){}
     let b = document.getElementById('verBanner');
     if(!b){
       b = document.createElement('div'); b.id = 'verBanner';
       b.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);top:10px;z-index:100000;display:flex;gap:12px;align-items:center;flex-wrap:wrap;'
         + 'background:var(--bg-3,#1B2A47);border:1px solid var(--amber,#F5A623);color:var(--text-0,#EAF0FB);border-radius:10px;padding:10px 14px;'
         + 'box-shadow:0 6px 24px rgba(0,0,0,.55);font:13px var(--sans,Arial);max-width:92vw;';
-      b.innerHTML = '<span>🔄 <b>Nova atualização disponível.</b> Termine o que estiver fazendo e atualize (os dados da operação ficam salvos).</span>'
+      b.innerHTML = '<span>🔄 <b>Nova atualização disponível.</b> <span id="verMsg"></span></span>'
         + '<button class="primary small" id="verBtnAtualizar">Atualizar agora</button><button class="small ghost" id="verBtnDepois">Depois</button>';
       document.body.appendChild(b);
-      b.querySelector('#verBtnAtualizar').onclick = function(){
-        try{ if(typeof window.saveState==='function') window.saveState(); }catch(e){}
-        location.href = BASE+'?_v='+Date.now();   /* o ?_v= força buscar o arquivo novo, sem cache */
+      b.querySelector('#verBtnAtualizar').onclick = function(){ atualizarAgora(false); };
+      b.querySelector('#verBtnDepois').onclick = function(){
+        if(timerAuto){ clearInterval(timerAuto); timerAuto = null; }
+        b.style.display = 'none'; setTimeout(function(){ avisado = false; }, 10*60*1000);
       };
-      b.querySelector('#verBtnDepois').onclick = function(){ b.style.display='none'; setTimeout(function(){ avisado = false; }, 10*60*1000); };
     }
+    const msg = b.querySelector('#verMsg');
     b.style.display = 'flex';
+    if(permitirAuto && segundos > 0){
+      let resta = segundos;
+      const pinta = function(){ msg.innerHTML = 'Atualizando sozinho em <b>' + resta + 's</b> (os dados da operação ficam salvos).'; };
+      pinta();
+      if(timerAuto) clearInterval(timerAuto);
+      timerAuto = setInterval(function(){ resta--; if(resta <= 0) atualizarAgora(true); else pinta(); }, 1000);
+    }else{
+      msg.textContent = 'Clique em Atualizar agora (os dados da operação ficam salvos).';
+    }
   }
 
   /* ---------- fluxo principal (depois do login) ---------- */
@@ -6573,7 +6596,12 @@ import { getFirestore, doc, getDoc, onSnapshot, setDoc, serverTimestamp }
       hLive = await hashPublicado();
       const h2 = await hashPublicado();
       if(h2 !== hLive){ console.warn('versão: o servidor entrega conteúdo diferente a cada pedido; detecção automática desativada.'); return; }
-      hRun = await hashRodando();
+      if(VEIO_DE_ATUALIZACAO){
+        hRun = hLive;                                                  /* acabou de vir da rede: é a versão nova */
+        fetch(BASE, {cache:'reload'}).catch(function(){});             /* renova a cópia em cache da URL normal, para as próximas aberturas já virem atualizadas */
+      }else{
+        hRun = await hashRodando();
+      }
     }catch(e){ console.warn('versão: não consegui ler o arquivo publicado (abrindo direto do disco?)', e); return; }
     const hLoad = hRun || hLive;                 /* versão que este navegador está realmente executando */
     const desatualizado = hLoad !== hLive;       /* abriu uma cópia antiga guardada em cache */
@@ -6592,7 +6620,7 @@ import { getFirestore, doc, getDoc, onSnapshot, setDoc, serverTimestamp }
     }
 
     const ref = doc(db, 'gdn_docas', 'versaoFerramenta');
-    if(desatualizado) avisoNova();
+    if(desatualizado) avisoNova(3);
 
     onSnapshot(ref, async snap => {
       const d = snap.exists() ? snap.data() : null;
@@ -6602,15 +6630,15 @@ import { getFirestore, doc, getDoc, onSnapshot, setDoc, serverTimestamp }
         return;                                  /* (sem ts = gravação pendente; o próximo snapshot traz a hora) */
       }
       /* documento ausente ou de outra versão */
-      if(desatualizado){ avisoNova(); return; }  /* estou numa cópia antiga: nunca sobrescrevo */
+      if(desatualizado){ avisoNova(3); return; }  /* estou numa cópia antiga: nunca sobrescrevo */
       let aindaPublicada = true;
       try{ aindaPublicada = (await hashPublicado()) === hLoad; }catch(e){}
-      if(aindaPublicada) await registrar(); else avisoNova();
+      if(aindaPublicada) await registrar(); else avisoNova(15);
     }, err => { console.warn('versão: não consegui ler o Firestore; usando a hora deste navegador.', err); fallbackLocal(); });
 
     async function checar(){
       if(avisado || document.hidden) return;
-      try{ if((await hashPublicado()) !== hLoad) avisoNova(); }catch(e){}
+      try{ if((await hashPublicado()) !== hLoad) avisoNova(15); }catch(e){}
     }
     setInterval(checar, POLL);
     document.addEventListener('visibilitychange', function(){ if(!document.hidden) checar(); });
