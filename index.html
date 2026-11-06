@@ -922,13 +922,13 @@
     <div class="panel-head">
       <div>
         <h2>Saída de Veículos CD</h2>
-        <div class="desc">Libera o motorista após o carregamento. A <b>Lista de carga</b> vem sozinha da aba 1 · Lista de Carga (atualiza a cada alteração de doca/onda); carregue aqui a <b>Programação</b> e o <b>Kit_Coletas</b> gerado na aba 3 · Coleta, que já traz a placa de cada coleta (quando houver veículo com coleta): a ferramenta reconhece cada arquivo pelas colunas e monta o formulário de cada veículo, no mesmo layout da folha impressa.</div>
+        <div class="desc">Libera o motorista após o carregamento. A <b>Lista de carga</b> vem sozinha da aba 1 · Lista de Carga (atualiza a cada alteração de doca/onda); carregue aqui a <b>Programação</b>. As <b>coletas (ORM e NFDV)</b> também vêm sozinhas da aba 3 · Coleta (planilha de Coletas + Tipo de Residência + Lista de carga): a ORM liga a coleta à placa e o NFDV é lido da planilha de Coletas. Se preferir, ainda dá para enviar aqui o <b>Kit_Coletas</b> (e a planilha de Coletas, para completar o NFDV). A ferramenta reconhece cada arquivo pelas colunas e monta o formulário de cada veículo, no mesmo layout da folha impressa.</div>
       </div>
       <button class="danger small" onclick="csLimpar()">Limpar arquivos</button>
     </div>
     <div class="dropzone" onclick="document.getElementById('csInp').click()"
          ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="csDrop(event)">
-      <span class="k">Clique ou arraste os arquivos aqui</span>Programação · Kit_Coletas — .xlsx / .xls / .csv (a Lista de carga vem sozinha da aba 1; pode soltar os dois juntos)
+      <span class="k">Clique ou arraste os arquivos aqui</span>Programação (e, opcional, Kit_Coletas / Coletas) — .xlsx / .xls / .csv (Lista de carga e Coletas vêm sozinhas das abas 1 e 3)
     </div>
     <input type="file" id="csInp" multiple accept=".xlsx,.xls,.xlsm,.ods,.csv" style="display:none" onchange="csFiles(this.files); this.value=''">
     <div id="csArqs" class="filelist"></div>
@@ -5944,6 +5944,7 @@ function listaViva(){
 /* a lista da aba 1 vale sempre que existir; o arquivo de Lista de carga enviado aqui só serve de reserva */
 var LISTA_ATUAL = [];
 function listaEfetiva(){ var v = listaViva(); return v.length ? v : S.lista; }
+function kcVivas(){ try{ return (typeof window.kcColetasDoDia==='function') ? (window.kcColetasDoDia()||[]) : []; }catch(e){ return []; } }
 function calcular(){
   var progMap = {}; S.prog.forEach(function(p){ var k=norm(p.placa); if(!progMap[k]) progMap[k]=p; });
   var regs = parseRegioes(S.regTxt);
@@ -5971,17 +5972,25 @@ function calcular(){
   });
   var sem = [], porPlaca = {};
   cargas.forEach(function(c){ var k = norm(c.placa); if(!porPlaca[k]) porPlaca[k] = c; });
-  S.coletas.forEach(function(c0){
+  /* Fonte das coletas: o Kit_Coletas enviado nesta aba (se houver); senão, as coletas da aba 3 · Coleta (ORM já ligada à placa pelo Tipo de Residência).
+     NFDV, em ordem: coluna do Kit -> planilha de Coletas enviada aqui (por ORM) -> planilha de Coletas da aba 3 (por ORM). */
+  var vivas = kcVivas(), nfdvAba3 = {};
+  vivas.forEach(function(v){ if(v.nfdv) nfdvAba3[String(v.orm).trim()] = v.nfdv; });
+  var usaAba3 = !S.coletas.length && vivas.length;
+  var fonte = usaAba3 ? vivas.map(function(v){ return {orm:v.orm, placa:v.placa||'', carga:v.carga, pre:v.pre, onda:v.onda, transp:v.transp, desc:v.desc, qtd:v.qtd, tipo:v.tipo, kit:'', nfdv:v.nfdv, cep:'', cliente:'', _motivo:v.motivo}; }) : S.coletas;
+  var semNfdv = 0;
+  fonte.forEach(function(c0){
     var c = Object.assign({}, c0);
-    if(!c.nfdv) c.nfdv = S.nfdv[String(c.orm).trim()] || '';
+    if(!c.nfdv) c.nfdv = S.nfdv[String(c.orm).trim()] || nfdvAba3[String(c.orm).trim()] || '';
     if(c.placa===undefined){ sem.push({c:c, motivo:'arquivo de Coletas antigo (sem placa): carregue o Kit_Coletas gerado na aba 3'}); return; }
-    if(!c.placa){ sem.push({c:c, motivo:'coleta sem placa no Kit_Coletas'}); return; }
+    if(!c.placa){ sem.push({c:c, motivo:c._motivo || 'coleta sem placa no Kit_Coletas'}); return; }
     var alvo = porPlaca[norm(c.placa)];
     if(!alvo){ sem.push({c:c, motivo:'placa '+c.placa+' não está na Lista de carga'}); return; }
     if(alvo.coletas.length>=CAP){ sem.push({c:c, motivo:'carga '+alvo.seq+' já tem '+CAP+' coletas'}); return; }
+    if(!c.nfdv) semNfdv++;
     alvo.coletas.push(c);
   });
-  return {cargas:cargas, sem:sem, regs:regs};
+  return {cargas:cargas, sem:sem, regs:regs, total:fonte.length, semNfdv:semNfdv, origem:(usaAba3 ? 'aba3' : (S.coletas.length ? 'kit' : ''))};
 }
 
 /* ---------- formulário (layout da folha impressa, medidas tiradas da foto) ---------- */
@@ -6109,7 +6118,8 @@ window.csRender = function(){
   if(!S.opts.data) S.opts.data = hojeISO();
   $('csData').value = S.opts.data; $('csTerc').checked = S.opts.terceiros; $('csJuntar').checked = S.opts.juntar;
 
-  var nomes = {lista:'Lista de carga', prog:'Programação', kit:'Kit_Coletas (aba 3)', coletas:'Coletas (só completa o NFDV; não liga ao veículo)'};
+  var nomes = {lista:'Lista de carga', prog:'Programação', kit:'Kit_Coletas (aba 3)', coletas:'Coletas (completa o NFDV pela ORM; não liga ao veículo)'};
+  var _c0 = null; function CALC0(){ return _c0 || (_c0 = calcular()); }
   var viva = listaViva(), arqsHtml = '';
   if(viva.length) arqsHtml += '<div class="fitem"><span>Lista de carga — gerada na aba 1 · Lista de Carga (atualiza sozinha)</span><span class="badge ok">'+viva.length+' linha(s)</span></div>';
   else arqsHtml += '<div class="fitem"><span style="color:var(--amber)">Lista de carga — ainda não gerada na aba 1 (consolide e rode a alocação) ou envie o arquivo abaixo</span><span class="badge alert">0 linha(s)</span></div>';
@@ -6117,20 +6127,22 @@ window.csRender = function(){
     if(a.tipo==='lista' && viva.length) return '<div class="fitem"><span style="color:var(--text-2)">Lista de carga — '+esc(a.nome)+' (não usada: vale a lista da aba 1)</span><span class="badge neutral">'+a.n+' linha(s)</span></div>';
     return '<div class="fitem"><span>'+esc(nomes[a.tipo])+' — '+esc(a.nome)+'</span><span class="badge ok">'+a.n+' linha(s)</span></div>';
   }).join('');
+  if(CALC0().origem==='aba3') arqsHtml += '<div class="fitem"><span>Coletas (ORM, NFDV e placa) — vindas da aba 3 · Coleta (automático)</span><span class="badge ok">'+CALC0().total+' coleta(s)</span></div>';
   $('csArqs').innerHTML = arqsHtml;
 
-  CALC = calcular();
+  CALC = CALC0();
   var regsN = CALC.regs.length;
   $('csRegInfo').innerHTML = regsN ? regsN+' faixa(s) de CEP reconhecida(s).' : (S.coletas.length ? '<span style="color:var(--amber)">Nenhuma faixa de CEP cadastrada: as coletas não serão ligadas a nenhum veículo.</span>' : 'Nenhuma faixa cadastrada.');
 
   var filtro = norm($('csFiltro').value);
   var comColeta = CALC.cargas.filter(function(c){ return c.coletas.length; }).length;
-  var atrib = S.coletas.length - CALC.sem.length;
+  var atrib = CALC.total - CALC.sem.length;
   $('csKpis').innerHTML =
     '<div class="cs-kpi"><b>'+CALC.cargas.length+'</b><span>TT. VEÍCULOS (formulários)</span></div>'+
     '<div class="cs-kpi"><b>'+comColeta+'</b><span>TT. PLACAS C/ COLETAS</span></div>'+
-    '<div class="cs-kpi"><b>'+atrib+' / '+S.coletas.length+'</b><span>Coletas ligadas a um veículo</span></div>'+
-    '<div class="cs-kpi'+(CALC.sem.length?' warn':'')+'"><b>'+CALC.sem.length+'</b><span>Coletas sem veículo</span></div>';
+    '<div class="cs-kpi"><b>'+atrib+' / '+CALC.total+'</b><span>Coletas ligadas a um veículo</span></div>'+
+    '<div class="cs-kpi'+(CALC.sem.length?' warn':'')+'"><b>'+CALC.sem.length+'</b><span>Coletas sem veículo</span></div>'+
+    '<div class="cs-kpi'+(CALC.semNfdv?' warn':'')+'" title="Coletas ligadas a um veículo, mas sem NFDV encontrado na planilha de Coletas (aba 3 ou enviada aqui)"><b>'+CALC.semNfdv+'</b><span>Coletas sem NFDV</span></div>';
 
   var tb = $('csTab').querySelector('tbody'), rows = '';
   CALC.cargas.forEach(function(c,k){
@@ -6240,7 +6252,7 @@ function parseColetas(rows){
   for(var i=h.row+1;i<rows.length;i++){
     var r = rows[i]||[]; var orm = g(r,'ORM');
     if(orm==null || orm==='') continue;
-    out.push({ orm:tx(orm), desc:tx(g(r,'DESCRICAODOPRODUTO')), qtd:g(r,'QTD')==null?'':g(r,'QTD'), tipo:tx(g(r,'TIPODECOLETA')) });
+    out.push({ orm:tx(orm), nfdv:tx(g(r,'NFDV')), desc:tx(g(r,'DESCRICAODOPRODUTO')), qtd:g(r,'QTD')==null?'':g(r,'QTD'), tipo:tx(g(r,'TIPODECOLETA')) });
   }
   return out;
 }
@@ -6332,7 +6344,7 @@ function calcular(){
     var motivo = '';
     if(!placa) motivo = temArq('tipo') ? 'ORM não encontrada no Tipo de Residência' : 'Tipo de Residência não carregado';
     else if(!L) motivo = (temArq('lista') || viva.n) ? 'Placa não está na Lista de carga' : 'Lista de carga não carregada';
-    return { orm:c.orm, desc:c.desc, qtd:c.qtd, tipo:c.tipo, placa:placa, carga:L?L.carga:'', pre:L?escolherPre(L):'', onda:L?L.doca:'', transp:L?L.transp:'', motivo:motivo, ok:!!L };
+    return { orm:c.orm, nfdv:c.nfdv||'', desc:c.desc, qtd:c.qtd, tipo:c.tipo, placa:placa, carga:L?L.carga:'', pre:L?escolherPre(L):'', onda:L?L.doca:'', transp:L?L.transp:'', motivo:motivo, ok:!!L };
   });
   rows.sort(function(a,b){
     if(a.ok!==b.ok) return a.ok ? -1 : 1;
@@ -6471,6 +6483,12 @@ window.kcRender = function(){
 /* ---------- encaixe na navegação existente (sem alterar a função original) ---------- */
 var _sw = window.switchTab;
 window.switchTab = function(tab){ _sw.apply(this, arguments); if(tab==='kitcoletas') window.kcRender(); };
+/* Usado pela aba 6 · Saída de Veículos CD: coletas do dia já ligadas à placa (ORM -> Tipo de Residência) e com o NFDV da planilha de Coletas.
+   Recalcula na hora (não depende de a aba 3 estar aberta). */
+window.kcColetasDoDia = function(){
+  try{ return calcular().map(function(r){ return {orm:r.orm, nfdv:r.nfdv, placa:r.placa, tipo:r.tipo, desc:r.desc, qtd:r.qtd, carga:r.carga, pre:r.pre, onda:r.onda, transp:r.transp, motivo:r.motivo}; }); }
+  catch(e){ console.warn('Kit coletas: não consegui entregar as coletas à aba Saída', e); return []; }
+};
 restore();
 })();
 </script>
