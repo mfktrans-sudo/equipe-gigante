@@ -1324,22 +1324,6 @@ function defaultState(){
 }
 
 let STATE = loadState();
-/* se o localStorage estava cheio no último salvamento, o estado mais recente está na reserva (IndexedDB) */
-(async function(){
-  try{
-    const r = await GDN_IDB.get('state');
-    if(r && r.json){
-      const parsed = JSON.parse(r.json), base = defaultState();
-      const st = Object.assign(base, parsed, {config: Object.assign(base.config, parsed.config||{})});
-      st.config.migFilialCAJD0 = !!(parsed.config && parsed.config.migFilialCAJD0);
-      garantirFilialD0(st);
-      STATE = st;
-      const rr = ()=>{ try{ bkRenderTudo(); renderPainel(); renderFolhas(); }catch(e){ console.error(e); } };
-      if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', rr); else rr();
-    }
-  }catch(e){ console.error('Reserva do estado indisponível', e); }
-})();
-
 /* Filial D0 = CAJ-D0 (Golden Store). Uma única vez por estado salvo: junta qualquer cadastro parecido
    (D-0, D0, Golden...) numa só filial "CAJ-D0" e corrige os PREs que apontavam para o cadastro antigo. */
 function garantirFilialD0(st){
@@ -1415,6 +1399,29 @@ const GDN_IDB = {
   async set(k,v){ try{ const db = await this.open(); return await new Promise((res,rej)=>{ const t=db.transaction('kv','readwrite'); t.objectStore('kv').put(v,k); t.oncomplete=()=>res(true); t.onerror=()=>rej(t.error); }); }catch(e){ return false; } },
   async del(k){ try{ const db = await this.open(); return await new Promise((res)=>{ const t=db.transaction('kv','readwrite'); t.objectStore('kv').delete(k); t.oncomplete=()=>res(true); t.onerror=()=>res(false); }); }catch(e){ return false; } }
 };
+/* se o localStorage estava cheio no último salvamento, o estado mais recente está na reserva (IndexedDB).
+   (Esta função fica DEPOIS de GDN_IDB: antes ela rodava antes da declaração e dava "Cannot access 'GDN_IDB' before initialization".)
+   A reserva só vale quando o localStorage NÃO tem o estado; se tiver (ou se acabou de rodar o "Novo dia"), a reserva é descartada,
+   para nunca ressuscitar dados antigos. */
+async function gdnCarregarReserva(){
+  try{
+    let temLocal = false, acabouDeLimpar = false;
+    try{ temLocal = !!localStorage.getItem(STORAGE_KEY); }catch(e){}
+    try{ acabouDeLimpar = !!sessionStorage.getItem('gdn_novodia_ok'); }catch(e){}
+    if(temLocal || acabouDeLimpar){ await GDN_IDB.del('state'); return; }
+    const r = await GDN_IDB.get('state');
+    if(r && r.json){
+      const parsed = JSON.parse(r.json), base = defaultState();
+      const st = Object.assign(base, parsed, {config: Object.assign(base.config, parsed.config||{})});
+      st.config.migFilialCAJD0 = !!(parsed.config && parsed.config.migFilialCAJD0);
+      garantirFilialD0(st);
+      STATE = st;
+      const rr = ()=>{ try{ bkRenderTudo(); renderPainel(); renderFolhas(); }catch(e){ console.error(e); } };
+      if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', rr); else rr();
+    }
+  }catch(e){ console.error('Reserva do estado indisponível', e); }
+}
+gdnCarregarReserva();
 function saveState(force){
   /* durante o "Novo dia", nada que ainda estava em andamento (leitura de arquivo, auto-atualização) pode regravar dados antigos */
   if(window.__GDN_RESETANDO && force!==true) return false;
@@ -1442,19 +1449,26 @@ function novaOperacao(){
     '• Coleta e Saída de Veículos: arquivos carregados, buscas e datas\n'+
     '• Iscas: placas/docas de prioridade e arquivo de iscas\n'+
     '• Entrada de Veículos CD: programações carregadas\n'+
+    '• Relação de Entrega: relatórios e Lista de Carga carregados\n'+
+    '• Configurações › Parâmetros: unidades, faixas de doca e transportadoras VOLTAM AO PADRÃO de fábrica\n'+
+    '• Configurações › Abas Visíveis e opções salvas (formatação do Excel, fluxo automático)\n'+
     '• Filtros e campos de busca\n\n'+
-    'São mantidos: Parâmetros, Cadastro de Placas, Abas Visíveis e as tabelas de apoio (regiões por CEP, territórios das iscas, assinatura).\n\n'+
+    'São mantidos apenas os dados compartilhados na nuvem entre os computadores (Cadastro de Placas e tabelas das iscas: regiões/territórios) e a assinatura.\n\n'+
     'Ao final a página é recarregada para zerar também tudo que estiver só em memória. Confirmar?')) return;
 
   /* cada passo roda isolado: se um falhar, os demais continuam e a operação não fica "meio limpa" */
   /* bloqueia regravações vindas de leituras de arquivo que ainda estavam em andamento; só os passos abaixo podem gravar */
   window.__GDN_RESETANDO = true; window.__GDN_PERSIST_OK = true;
+  const CHAVES_DIA = ['kc_kit_v1','cs_saida_v1','fluxo_auto_v1','relXlsxOpts'];   // dados próprios de módulos + preferências salvas
   let salvou = false;
   const passo = (nome, fn)=>{ try{ fn(); }catch(e){ console.error('Novo dia · '+nome, e); } };
   const vazio = id=>{ const el=document.getElementById(id); if(el){ if('value' in el) el.value=''; } };
   const html0 = id=>{ const el=document.getElementById(id); if(el) el.innerHTML=''; };
 
-  /* 1) dados da operação (STATE) — tudo que não é configuração */
+  /* 0) libera espaço ANTES de tudo: apagar chave nunca falha, nem com o armazenamento cheio (sobrescrever poderia falhar) */
+  passo('liberar espaço', ()=>{ CHAVES_DIA.forEach(k=>{ try{ localStorage.removeItem(k); }catch(e){} }); });
+
+  /* 1) dados da operação (STATE) + Parâmetros */
   passo('estado', ()=>{
     STATE.cargas = [];
     STATE.presOrfaos = [];
@@ -1465,59 +1479,78 @@ function novaOperacao(){
     STATE.folhas = null; STATE.folhasArqs = [];
     STATE.ts = [];
     IL_MEM.buf = null; IL_MEM.nome = ''; IL_MEM.folha = '';
+    /* Parâmetros voltam ao padrão. Ficam só os dados que são compartilhados na nuvem (se zerados aqui, voltariam sozinhos
+       ou, pior, sobrescreveriam o cadastro dos outros computadores). */
+    const pad = defaultState().config, c = STATE.config || {}, manter = {};
+    ['cadastroPlacas','iscaTerritorios','iscaMapa','iscaTerrExtra'].forEach(k=>{ if(c[k]!==undefined) manter[k]=c[k]; });
+    STATE.config = Object.assign({}, pad, manter);
     salvou = (saveState(true) === true);
   });
 
   /* 2) módulos isolados, com dados próprios no navegador (Saída de Veículos e Coleta) */
   passo('saída (aba 6)', ()=>{ if(typeof window.csNovoDia==='function') window.csNovoDia(); });
   passo('coleta (aba 3)',  ()=>{ if(typeof window.kcNovoDia==='function') window.kcNovoDia(); });
-  passo('relação de entrega (aba 7)', ()=>{ REL.rows=[]; REL.lista=null; REL.arqs=[]; REL.sel=null; REL.off={}; });
+  passo('relação de entrega (aba 7)', ()=>{ REL.rows=[]; REL.lista=null; REL.arqs=[]; REL.sel=null; REL.off={}; if(typeof relXRestaurar==='function') relXRestaurar(false); });
   window.__GDN_PERSIST_OK = false;
+  /* os módulos regravaram "vazio"; apaga de novo as chaves para não sobrar nem o esqueleto (e nada antigo para restaurar) */
+  passo('apagar chaves dos módulos', ()=>{ CHAVES_DIA.forEach(k=>{ try{ localStorage.removeItem(k); }catch(e){} }); });
+  /* avisa outras abas/janelas desta ferramenta abertas no mesmo navegador: elas recarregam e não regravam dados antigos */
+  passo('avisar outras abas', ()=>{ try{ localStorage.setItem('gdn_reset_epoch', String(Date.now())); }catch(e){} });
 
   /* 3) arquivos carregados e ainda não consolidados (Upload & Consolidação) */
   passo('upload', ()=>{
     PENDING = { GAN: [], HEBLS: [], REGIAO: [], TS: [] };
     UPLOAD_OCUPADO = false;
-    ['inpAUTO','inpGAN','inpHEBLS','inpREGIAO','ffFile','ffAssinFile','bkInput','iscaFile','csInp','kcInp','csRegInp'].forEach(vazio);
+    ['inpAUTO','inpGAN','inpHEBLS','inpREGIAO','ffFile','ffAssinFile','bkInput','iscaFile','csInp','kcInp','csRegInp','relFile'].forEach(vazio);
   });
 
   /* 4) textos de resultado / logs e áreas geradas */
   ['autoResumo','iscaArqLog','bkLog','ffLog','ffArqs','iscaPrioBox','iscaStats','iscaTabela','ilBox'].forEach(id=>passo('limpar '+id, ()=>html0(id)));
 
   /* 5) campos digitados e filtros de todas as abas */
-  ['iscaTexto','filtroCargaPlaca','fDoca','fPlaca','csFiltro'].forEach(id=>passo('campo '+id, ()=>vazio(id)));
+  ['iscaTexto','filtroCargaPlaca','fDoca','fPlaca','csFiltro','cadastroFiltro','relDe','relAte'].forEach(id=>passo('campo '+id, ()=>vazio(id)));
   ['fTransp','fFilial','fOnda','pTransp','pFilial','pOnda'].forEach(id=>passo('filtro '+id, ()=>vazio(id)));
   pFilialSel = 'ACUM';
 
   /* 6) redesenha todas as telas já vazias */
   passo('abas', ()=>atualizarTodasAsAbas());
-  ['renderArquivosCarregados','atualizarPreviaUpload','renderAlocacao','renderOndasFora','renderIscas','renderFolhas','renderProtocolo','renderPainel','renderDashboard','renderConsolidado','renderOrfaos','renderTS']
+  ['renderArquivosCarregados','atualizarPreviaUpload','renderAlocacao','renderOndasFora','renderIscas','renderFolhas','renderProtocolo','renderPainel','renderDashboard','renderConsolidado','renderOrfaos','renderTS','renderParametros','renderAbasVisiveis','aplicarAbasVisiveis','renderRelEntrega']
     .forEach(fn=>passo(fn, ()=>{ if(typeof window[fn]==='function') window[fn](); }));
 
-  /* 7) confere que o estado ZERADO foi mesmo gravado e recarrega a página: isso descarta qualquer leitura de arquivo
-        ainda em andamento e todas as variáveis em memória (telas, filtros, janelas abertas, caches). */
+  /* 7) confere que NADA do dia ficou guardado (localStorage nem reserva IndexedDB), apaga a reserva e recarrega a página:
+        isso descarta qualquer leitura de arquivo ainda em andamento e todas as variáveis em memória. */
   (async ()=>{
-    let gravado = false, raw = null;
-    try{ raw = localStorage.getItem(STORAGE_KEY); }catch(e){}
-    if(raw){
-      try{
-        const p = JSON.parse(raw);
-        gravado = !((p.cargas||[]).length || (p.alocacao||[]).length || (p.iscas||[]).length || (p.ts||[]).length ||
-                    (p.presOrfaos||[]).length || p.iscaLote || p.folhas || (p.folhasArqs||[]).length);
-      }catch(e){}
-      if(gravado){ try{ await GDN_IDB.del('state'); }catch(e){} }   // não deixa cópia antiga na reserva do navegador
-    }else{
-      gravado = salvou;   // sem localStorage: o estado zerado foi para a reserva (IndexedDB)
-    }
-    if(!gravado){
+    const zerado = p => !((p.cargas||[]).length || (p.alocacao||[]).length || (p.iscas||[]).length || (p.ts||[]).length ||
+                          (p.presOrfaos||[]).length || p.iscaLote || p.folhas || (p.folhasArqs||[]).length);
+    let sujoLocal = false, sujoReserva = false, sobrouChave = false;
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(raw){ try{ sujoLocal = !zerado(JSON.parse(raw)); }catch(e){ sujoLocal = true; } }
+      sobrouChave = CHAVES_DIA.some(k=>{ try{ return localStorage.getItem(k)!==null && k!=='gdn_reset_epoch'; }catch(e){ return false; } });
+    }catch(e){}
+    try{
+      const r = await GDN_IDB.get('state');
+      if(r && r.json){ try{ sujoReserva = !zerado(JSON.parse(r.json)); }catch(e){ sujoReserva = true; } }
+      await GDN_IDB.del('state');                                    // não deixa cópia na reserva do navegador
+      const r2 = await GDN_IDB.get('state'); if(r2 && r2.json) sujoReserva = true;
+    }catch(e){}
+    if(sujoLocal || sujoReserva || sobrouChave){
       window.__GDN_RESETANDO = false; window.__GDN_PERSIST_OK = false;
-      toast('A tela foi limpa, mas o navegador não confirmou a gravação. Faça um backup, limpe o armazenamento do site e tente de novo.', 'err');
+      toast('A tela foi limpa, mas o navegador não apagou tudo ('+(sujoLocal?'estado ':'')+(sujoReserva?'reserva ':'')+(sobrouChave?'dados de módulo':'')+'). Faça um backup, limpe os dados do site (Configurações do navegador) e tente de novo.', 'err');
       return;
     }
     try{ sessionStorage.setItem('gdn_novodia_ok','1'); }catch(e){}
     location.reload();
   })();
 }
+/* outra aba/janela desta ferramenta (mesmo navegador) rodou o "Novo dia": esta recarrega sem regravar nada antigo */
+window.addEventListener('storage', ev=>{
+  if(ev.key==='gdn_reset_epoch' && ev.newValue){
+    window.__GDN_RESETANDO = true; window.__GDN_PERSIST_OK = false;
+    try{ sessionStorage.setItem('gdn_novodia_ok','1'); }catch(e){}
+    location.reload();
+  }
+});
 /* depois do recarregamento do "Novo dia": abre o Upload e avisa que está tudo zerado */
 document.addEventListener('DOMContentLoaded', ()=>{
   try{
