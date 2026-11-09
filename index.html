@@ -1063,25 +1063,39 @@
   <div class="panel">
     <div class="panel-head">
       <div><h2>Relação de Entrega</h2>
-        <div class="desc">Rotina gerada <b>depois da 00:00</b>, separada do fluxo automático das outras abas. Suba o relatório do <b>Performaxxi</b> (Relatório Analítico Rota Pedidos, .xls ou .xlsx). Para cada placa a ferramenta monta a folha com <b>Seq. entrega, NF, Nome do cliente, Endereço e CEP</b>, na ordem da <i>Sequência Entrega Planejado</i>. O <b>nº da carga</b> é o único dado que vem da aba 1 · Lista de Carga, ligado pela <b>placa</b>, e as folhas saem na ordem das cargas.</div></div>
-      <div id="relBotoes" style="display:none;gap:8px;flex-wrap:wrap;align-items:center;">
-        <button class="primary" onclick="relBaixarWord()">⬇ Baixar Word (.docx)</button>
-        <button class="primary" onclick="relImprimir()">🖨 Imprimir / salvar PDF</button>
-        <button class="danger" onclick="relLimpar()">Remover arquivo</button>
-      </div>
+        <div class="desc">Rotina gerada <b>depois da 00:00</b>, separada do fluxo automático das outras abas. Suba <b>dois arquivos</b>, juntos ou separados (a ferramenta reconhece cada um pelas colunas):<br>
+        <b>1)</b> o relatório do <b>Performaxxi</b> (Relatório Analítico Rota Pedidos, .xls / .xlsx): traz Seq. entrega, NF, Nome, Endereço e CEP de cada placa;<br>
+        <b>2)</b> a <b>Lista de Carga</b> em Excel (“cargas acumuladas por filial”): só dela vem o <b>nº da carga</b>, ligado pela <b>placa</b>. Se não subir, a ferramenta usa a Lista de Carga já alocada na aba 1.<br>
+        As folhas saem em <b>ordem de carga</b>, uma carga por folha.</div></div>
     </div>
     <div class="dropzone" id="relDrop" onclick="document.getElementById('relFile').click()"
          ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')"
          ondrop="event.preventDefault();this.classList.remove('drag');relArquivos(event.dataTransfer.files)">
-      <span class="k">Clique ou arraste o relatório do Performaxxi aqui</span>
-      Relatório Analítico Rota Pedidos — .xls / .xlsx. Pode enviar mais de um; um arquivo com o mesmo nome substitui o anterior.
+      <span class="k">Clique ou arraste aqui o relatório do Performaxxi e a Lista de Carga</span>
+      .xls / .xlsx. Um arquivo com o mesmo nome substitui o anterior.
       <input type="file" id="relFile" multiple accept=".xls,.xlsx,.xlsm,.ods,.csv" style="display:none" onchange="relArquivos(this.files);this.value=''">
     </div>
     <div id="relLog" class="desc" style="margin-top:8px;"></div>
-    <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;margin:10px 0 0;font-size:12.5px;" title="Por padrão só saem as placas que estão na Lista de Carga (as de outros depósitos ficam de fora)"><input type="checkbox" id="relIncSem" onchange="renderRelEntrega()"> Incluir também as placas do arquivo que não estão na Lista de Carga (saem no fim, sem nº de carga)</label>
+    <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;margin:10px 0 0;font-size:12.5px;" title="Por padrão só saem as placas que têm carga na Lista de Carga (as de outros depósitos ficam de fora)"><input type="checkbox" id="relIncSem" onchange="renderRelEntrega()"> Incluir também as placas do relatório que não estão na Lista de Carga (saem no fim, sem nº de carga)</label>
   </div>
   <div class="panel">
-    <div id="relBox"><div class="empty">Nenhum arquivo carregado. Suba o relatório do Performaxxi acima.</div></div>
+    <div id="relBox"><div class="empty">Nenhum arquivo carregado. Suba o relatório do Performaxxi (e a Lista de Carga) acima.</div></div>
+  </div>
+  <div class="panel" id="relPrint" style="display:none;">
+    <div class="panel-head"><div><h2>Impressão</h2><div class="desc" id="relSelInfo"></div></div></div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
+      <div><label>Cargas a imprimir (marque na tabela)</label>
+        <div style="display:flex;gap:6px;"><button class="small" onclick="relMarcar(true)">Marcar todas</button><button class="small" onclick="relMarcar(false)">Desmarcar todas</button></div></div>
+      <div><label>Ou um intervalo de cargas (de / até)</label>
+        <div style="display:flex;gap:6px;align-items:center;"><input id="relDe" type="number" min="1" placeholder="de" style="width:80px"><input id="relAte" type="number" min="1" placeholder="até" style="width:80px"><button class="small" onclick="relIntervalo()">Aplicar intervalo</button></div></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="primary" onclick="relImprimir()">🖨 Imprimir / salvar PDF</button>
+      <button class="primary" onclick="relBaixarWord()">⬇ Baixar Word (.docx)</button>
+      <button class="primary" onclick="relBaixarExcel()">⬇ Baixar Excel (.xlsx)</button>
+      <button class="danger" onclick="relLimpar()">Remover arquivos</button>
+    </div>
+    <div class="desc" style="margin-top:8px;">Uma carga por folha A4, na ordem das cargas. Em “Imprimir / salvar PDF” escolha a impressora, ou “Salvar como PDF”, na janela que abrir. O Word e o Excel saem prontos para imprimir ou ajustar.</div>
   </div>
 </div>
 
@@ -1437,7 +1451,7 @@ function novaOperacao(){
   /* 2) módulos isolados, com dados próprios no navegador (Saída de Veículos e Coleta) */
   passo('saída (aba 6)', ()=>{ if(typeof window.csNovoDia==='function') window.csNovoDia(); });
   passo('coleta (aba 3)',  ()=>{ if(typeof window.kcNovoDia==='function') window.kcNovoDia(); });
-  passo('relação de entrega (aba 7)', ()=>{ REL.rows=[]; REL.arqs=[]; REL.sel=null; });
+  passo('relação de entrega (aba 7)', ()=>{ REL.rows=[]; REL.lista=null; REL.arqs=[]; REL.sel=null; REL.off={}; });
   window.__GDN_PERSIST_OK = false;
 
   /* 3) arquivos carregados e ainda não consolidados (Upload & Consolidação) */
@@ -5182,12 +5196,14 @@ async function etqBaixarWord(){
 
 /* =========================================================
    ABA 7 · RELAÇÃO DE ENTREGA  (gerada depois da 00:00 — fora do fluxo automático)
-   Fonte das entregas: relatório do Performaxxi (Relatório Analítico Rota Pedidos).
-   Da Lista de Carga vem só o nº da carga, ligado pela PLACA (mesma numeração de pCargasNumeradas).
-   Uma folha por placa, na ordem das cargas: DATA · CARGA · PLACA + Seq. entrega / NF / Nome / Endereço / CEP.
+   Entregas: relatório do Performaxxi (Relatório Analítico Rota Pedidos).
+   Nº da carga (único dado da lista), ligado pela PLACA: Lista de Carga em Excel enviada aqui OU, se não houver,
+   a alocação da aba 1 (mesma numeração de pCargasNumeradas = coluna CARGA do Excel da Lista de Carga).
+   Uma folha por placa, em ordem de carga: DATA · CARGA · PLACA + Seq. entrega / NF / Nome / Endereço / CEP.
    NF = miolo do "ID Pedido" (33507495UA -> 507495; D0009521U1 -> 009521).
+   Saídas: impressão direta / PDF, Word (.docx) e Excel (.xlsx); o usuário escolhe quais cargas imprimir.
    ========================================================= */
-const REL = { rows:[], arqs:[], sel:null };
+const REL = { rows:[], lista:null, arqs:[], sel:null, off:{} };
 const REL_CSS = '.rel-sheet{background:#fff;color:#000;font-family:Calibri,Carlito,Arial,sans-serif;padding:14px 16px;box-sizing:border-box;}'
   + '.rel-sheet .rel-cab{display:flex;justify-content:space-between;align-items:baseline;font-size:15px;font-weight:700;margin:0 0 5px;color:#000;}'
   + '.rel-sheet .rel-cab span b{margin-right:18px;}'
@@ -5209,7 +5225,7 @@ function relData(v){
   const t=String(v).trim(), m=t.match(/(\d{2})\/(\d{2})\/(\d{4})/); if(m) return m[0];
   const i=t.match(/^(\d{4})-(\d{2})-(\d{2})/); return i ? i[3]+'/'+i[2]+'/'+i[1] : t;
 }
-/* lê o relatório (qualquer aba): devolve as linhas ou null se não tiver as colunas Placa / Sequência Entrega Planejado / ID Pedido */
+/* relatório do Performaxxi: devolve as linhas ou null se não tiver as colunas Placa / Sequência Entrega Planejado / ID Pedido */
 function relParse(m2){
   let h=-1, c=null;
   for(let i=0;i<Math.min(m2.length,15);i++){
@@ -5228,6 +5244,22 @@ function relParse(m2){
   }
   return out;
 }
+/* Lista de Carga em Excel (cargas acumuladas): colunas CARGA e PLACAS; usa a primeira aba que tiver essas colunas (Carga Acumulada) */
+function relParseLista(m2){
+  let h=-1, c=null;
+  for(let i=0;i<Math.min(m2.length,40);i++){
+    const m={}; (m2[i]||[]).forEach((v,j)=>{ const k=relNorm(v).replace(/[^A-Z0-9]/g,''); if(k && m[k]===undefined) m[k]=j; });
+    if(m['CARGA']!==undefined && m['PLACAS']!==undefined){ h=i; c=m; break; }
+  }
+  if(h<0) return null;
+  const kd=Object.keys(c).find(k=>k.indexOf('DOCA')===0), out=[];
+  for(let i=h+1;i<m2.length;i++){
+    const r=m2[i]||[], placa=relTxt(r[c['PLACAS']]).toUpperCase(), cg=r[c['CARGA']], n=Number(cg);
+    if(!placaKey(placa) || cg==null || cg==='' || isNaN(n)) continue;
+    out.push({ pk:placaKey(placa), placa, n, transp: c['TRANSP']===undefined?'':relTxt(r[c['TRANSP']]), doca: kd?relTxt(r[c[kd]]):'' });
+  }
+  return out;
+}
 function relLer(file){
   return new Promise((res,rej)=>{
     const fr=new FileReader();
@@ -5238,85 +5270,103 @@ function relLer(file){
 }
 async function relArquivos(fileList){
   if(typeof XLSX==='undefined'){ toast('Biblioteca de planilhas (XLSX) não carregou. Confira a internet e recarregue a página.','err'); return; }
-  const falhas=[]; let ok=0;
+  const falhas=[], okm=[];
   for(const f of Array.from(fileList||[])){
     try{
-      const sheets=await relLer(f); let dados=null;
-      for(const sh of sheets){ dados=relParse(sh); if(dados) break; }
-      if(!dados){ falhas.push(f.name+': não é o relatório do Performaxxi (faltam as colunas Placa, Sequência Entrega Planejado e ID Pedido).'); continue; }
-      if(!dados.length){ falhas.push(f.name+': o relatório não tem nenhuma linha com placa.'); continue; }
-      dados.forEach(r=>{ r.arq=f.name; });
-      REL.rows=REL.rows.filter(r=>r.arq!==f.name).concat(dados);
-      REL.arqs=REL.arqs.filter(a=>a.nome!==f.name).concat([{nome:f.name, linhas:dados.length}]);
-      ok++;
+      const sheets=await relLer(f); let rows=null, lista=null;
+      for(const sh of sheets){ rows=relParse(sh); if(rows) break; }
+      if(!rows) for(const sh of sheets){ lista=relParseLista(sh); if(lista) break; }
+      if(rows){
+        if(!rows.length){ falhas.push(f.name+': o relatório não tem nenhuma linha com placa.'); continue; }
+        rows.forEach(r=>{ r.arq=f.name; });
+        REL.rows=REL.rows.filter(r=>r.arq!==f.name).concat(rows);
+        REL.arqs=REL.arqs.filter(a=>a.nome!==f.name).concat([{nome:f.name, tipo:'Performaxxi', linhas:rows.length}]);
+        okm.push('Performaxxi');
+      } else if(lista){
+        if(!lista.length){ falhas.push(f.name+': a Lista de Carga não tem nenhuma carga numerada.'); continue; }
+        REL.lista={nome:f.name, itens:lista};
+        REL.arqs=REL.arqs.filter(a=>a.tipo!=='Lista de Carga').concat([{nome:f.name, tipo:'Lista de Carga', linhas:lista.length}]);
+        okm.push('Lista de Carga');
+      } else falhas.push(f.name+': não reconheci. Esperava o relatório do Performaxxi (Placa, Sequência Entrega Planejado, ID Pedido) ou a Lista de Carga (CARGA, PLACAS).');
     }catch(e){ falhas.push(f.name+': '+(e&&e.message||e)); }
   }
-  REL.sel=null;
+  REL.sel=null; REL.off={};
   renderRelEntrega();
-  if(ok) toast(ok+' arquivo(s) carregado(s) na Relação de Entrega.','ok');
+  if(okm.length) toast('Carregado: '+okm.join(' + ')+'.','ok');
   falhas.forEach(m=>toast(m,'err'));
 }
-function relLimpar(){ REL.rows=[]; REL.arqs=[]; REL.sel=null; renderRelEntrega(); }
+function relLimpar(){ REL.rows=[]; REL.lista=null; REL.arqs=[]; REL.sel=null; REL.off={}; renderRelEntrega(); }
+function relUsarListaAba1(){ REL.lista=null; REL.arqs=REL.arqs.filter(a=>a.tipo!=='Lista de Carga'); renderRelEntrega(); }
 
 /* junta o relatório com a Lista de Carga (nº da carga pela placa) */
 function relModelo(incluirSem){
-  const num={};
-  if((STATE.alocacao||[]).length) pCargasNumeradas().forEach(it=>{ const k=placaKey(it.a.placa); if(k && num[k]===undefined) num[k]=it; });
+  const num={}; let fonte='';
+  if(REL.lista){ fonte='arquivo'; REL.lista.itens.forEach(x=>{ if(num[x.pk]===undefined) num[x.pk]={n:x.n, placa:x.placa, transp:x.transp, dn:x.doca||'—', pend:false}; }); }
+  else if((STATE.alocacao||[]).length){ fonte='aba1'; pCargasNumeradas().forEach(it=>{ const k=placaKey(it.a.placa); if(k && num[k]===undefined) num[k]={n:it.n, placa:String(it.a.placa||'').toUpperCase(), transp:it.a.transportadora||'', dn: it.pend ? 'sem doca' : pDoca(it.a)+' · '+it.a.onda+'ª', pend:it.pend}; }); }
   const por={}, ordem=[];
   REL.rows.forEach(r=>{ if(!por[r.pk]){ por[r.pk]=[]; ordem.push(r.pk); } por[r.pk].push(r); });
   const com=[], sem=[];
   ordem.forEach(k=>{
     const rs=por[k].map((r,i)=>({r,i})).sort((a,b)=>(a.r.seq-b.r.seq)||(a.i-b.i)).map(x=>x.r);
-    const it=num[k], f={ pk:k, placa:rs[0].placa, n:it?it.n:null, a:it?it.a:null, pend:it?it.pend:false, transp:it?(it.a.transportadora||''):(rs[0].transp||''), data:(rs.find(x=>x.data)||{}).data||'', rows:rs };
+    const it=num[k], f={ pk:k, placa:rs[0].placa, n:it?it.n:null, dn:it?it.dn:'—', pend:it?it.pend:false, transp:it?it.transp:(rs[0].transp||''), data:(rs.find(x=>x.data)||{}).data||'', rows:rs };
     (it?com:sem).push(f);
   });
   com.sort((a,b)=>a.n-b.n);
   sem.sort((a,b)=>a.placa.localeCompare(b.placa));
   const faltam=Object.keys(num).filter(k=>!por[k]).map(k=>num[k]).sort((a,b)=>a.n-b.n);
-  return { folhas: incluirSem ? com.concat(sem) : com, sem, faltam };
+  return { folhas: incluirSem ? com.concat(sem) : com, sem, faltam, fonte };
 }
 function relFolhaHtml(f, dataPadrao){
   const e=pEsc, data=f.data||dataPadrao||'';
-  const linhas=f.rows.map((r,i)=>`<tr><td>${r.seq===99999?'':r.seq}</td><td>${e(r.nf)}</td><td>${e(r.nome)}</td><td>${e(r.end)}</td><td>${e(r.cep)}</td></tr>`).join('');
+  const linhas=f.rows.map(r=>`<tr><td>${r.seq===99999?'':r.seq}</td><td>${e(r.nf)}</td><td>${e(r.nome)}</td><td>${e(r.end)}</td><td>${e(r.cep)}</td></tr>`).join('');
   return `<div class="rel-sheet"><div class="rel-cab"><span><b>${e(data)}</b><b>CARGA: ${f.n==null?'—':f.n}</b></span><b>PLACA: ${e(f.placa)}</b></div>`
     + `<table class="rel-tb"><colgroup><col style="width:13%"><col style="width:9%"><col style="width:35%"><col style="width:32%"><col style="width:11%"></colgroup>`
     + `<thead><tr><th>SEQ. ENTREGA</th><th>NF</th><th>NOME CLIENTE</th><th>ENDEREÇO</th><th>CEP</th></tr></thead><tbody>${linhas}</tbody></table></div>`;
 }
 function renderRelEntrega(){
   const box=document.getElementById('relBox'); if(!box) return;
-  const bt=document.getElementById('relBotoes'), lg=document.getElementById('relLog');
-  if(lg) lg.innerHTML = REL.arqs.length ? 'Arquivo(s): '+REL.arqs.map(a=>pEsc(a.nome)+' <span style="color:var(--text-2)">('+a.linhas+' linhas)</span>').join(' · ') : '';
-  if(!REL.rows.length){ if(bt) bt.style.display='none'; box.innerHTML='<div class="empty">Nenhum arquivo carregado. Suba o relatório do Performaxxi acima.</div>'; return; }
-  const inc=!!(document.getElementById('relIncSem')||{}).checked, m=relModelo(inc), semAloc=!(STATE.alocacao||[]).length;
-  if(bt) bt.style.display = m.folhas.length ? 'flex' : 'none';
+  const pr=document.getElementById('relPrint'), lg=document.getElementById('relLog'), inf=document.getElementById('relSelInfo');
+  if(lg) lg.innerHTML = REL.arqs.length ? REL.arqs.map(a=>'<b>'+pEsc(a.tipo)+':</b> '+pEsc(a.nome)+' <span style="color:var(--text-2)">('+a.linhas+(a.tipo==='Lista de Carga'?' cargas':' linhas')+')</span>').join(' &nbsp;·&nbsp; ') : '';
+  if(!REL.rows.length){ if(pr) pr.style.display='none'; box.innerHTML='<div class="empty">Nenhum arquivo carregado. Suba o relatório do Performaxxi (e a Lista de Carga) acima.</div>'; return; }
+  const inc=!!(document.getElementById('relIncSem')||{}).checked, m=relModelo(inc);
   const stat=(n,l,cor)=>`<div class="stat"><div class="num"${cor?` style="color:var(--${cor})"`:''}>${n}</div><div class="lbl">${l}</div></div>`;
   const nEnt=m.folhas.reduce((s,f)=>s+f.rows.length,0), semFora=inc?0:m.sem.length;
   let h='';
-  if(semAloc) h+='<div class="badge alert" style="display:block;margin-bottom:12px;padding:9px 12px;">Ainda não há Lista de Carga alocada, então nenhuma placa tem nº de carga. Rode a alocação na aba 1 · Lista de Carga (ou marque “Incluir também as placas…” para imprimir sem número).</div>';
+  if(!m.fonte) h+='<div class="badge alert" style="display:block;margin-bottom:12px;padding:9px 12px;">Sem Lista de Carga: nenhuma placa tem nº de carga. Suba a Lista de Carga em Excel acima, ou rode a alocação na aba 1 · Lista de Carga (ou marque “Incluir também as placas…” para imprimir sem número).</div>';
+  else h+='<div class="desc" style="margin-bottom:10px;">Nº da carga vindo de: <b>'+(m.fonte==='arquivo' ? 'arquivo '+pEsc(REL.lista.nome)+'</b> <button class="small" onclick="relUsarListaAba1()" title="Ignora o arquivo e usa a Lista de Carga alocada na aba 1">usar a lista da aba 1</button>' : 'Lista de Carga da aba 1 (alocação atual)</b>')+'</div>';
   h+='<div class="grid cols-4" style="margin-bottom:14px;">'
-    + stat(m.folhas.length,'folhas a imprimir (uma por placa)') + stat(nEnt,'entregas nessas folhas','teal')
-    + stat(semFora,'placas do arquivo sem carga (não impressas)','amber') + stat(m.faltam.length,'cargas da lista sem entregas no arquivo') + '</div>';
+    + stat(m.folhas.length,'folhas (uma por placa)') + stat(nEnt,'entregas nessas folhas','teal')
+    + stat(semFora,'placas do relatório sem carga (não entram)','amber') + stat(m.faltam.length,'cargas da lista sem entregas no relatório') + '</div>';
   if(semFora) h+=`<div class="desc" style="margin-bottom:8px;"><b>Fora da impressão (placa não está na Lista de Carga):</b> ${m.sem.map(f=>pEsc(f.placa)).join(' · ')}</div>`;
-  if(m.faltam.length) h+=`<div class="desc" style="margin-bottom:8px;"><b>Cargas da Lista sem linhas no arquivo:</b> ${m.faltam.map(it=>'carga '+it.n+' · '+pEsc(String(it.a.placa||'').toUpperCase())).join(' · ')}</div>`;
-  if(!m.folhas.length){ box.innerHTML=h+'<div class="empty">Nenhuma placa do arquivo tem carga na Lista de Carga.</div>'; return; }
+  if(m.faltam.length) h+=`<div class="desc" style="margin-bottom:8px;"><b>Cargas da Lista sem linhas no relatório:</b> ${m.faltam.map(it=>'carga '+it.n+' · '+pEsc(it.placa)).join(' · ')}</div>`;
+  if(!m.folhas.length){ if(pr) pr.style.display='none'; box.innerHTML=h+'<div class="empty">Nenhuma placa do relatório tem carga na Lista de Carga.</div>'; return; }
   const sel=m.folhas.find(f=>f.pk===REL.sel)||m.folhas[0], dataPad=protoDataOperacao();
-  h+='<div class="table-wrap" style="max-height:320px;overflow-y:auto;margin-bottom:14px;"><table><thead><tr><th>Carga</th><th>Placa</th><th>Transportadora</th><th>Doca · onda</th><th>Entregas</th><th>Data</th></tr></thead><tbody>'
-    + m.folhas.map(f=>{
-        const dn = f.a ? (f.pend ? 'sem doca' : pDoca(f.a)+' · '+f.a.onda+'ª') : '—';
-        return `<tr onclick="relSel('${f.pk}')" style="cursor:pointer;${f.pk===sel.pk?'background:var(--bg-3);':''}"><td>${f.n==null?'<span class="badge alert">sem carga</span>':f.n}</td><td class="mono"><b>${pEsc(f.placa)}</b></td><td>${pEsc(f.transp)}</td><td class="mono">${pEsc(dn)}</td><td>${f.rows.length}</td><td>${pEsc(f.data||dataPad)}</td></tr>`;
-      }).join('') + '</tbody></table></div>';
+  h+='<div class="table-wrap" style="max-height:320px;overflow-y:auto;margin-bottom:14px;"><table><thead><tr><th title="Marque as cargas que serão impressas">Imprimir</th><th>Carga</th><th>Placa</th><th>Transportadora</th><th>Doca · onda</th><th>Entregas</th><th>Data</th></tr></thead><tbody>'
+    + m.folhas.map(f=>`<tr onclick="relSel('${f.pk}')" style="cursor:pointer;${f.pk===sel.pk?'background:var(--bg-3);':''}"><td onclick="event.stopPropagation()"><input type="checkbox" ${REL.off[f.pk]?'':'checked'} onchange="relToggle('${f.pk}',this.checked)"></td><td>${f.n==null?'<span class="badge alert">sem carga</span>':f.n}</td><td class="mono"><b>${pEsc(f.placa)}</b></td><td>${pEsc(f.transp)}</td><td class="mono">${pEsc(f.dn)}</td><td>${f.rows.length}</td><td>${pEsc(f.data||dataPad)}</td></tr>`).join('')
+    + '</tbody></table></div>';
   h+='<div class="desc" style="margin-bottom:6px;">Pré-visualização da folha selecionada (clique numa linha da tabela para trocar):</div>'
     + '<div style="overflow:auto;background:#3a4560;border:1px solid var(--line);border-radius:8px;padding:14px;"><style>'+REL_CSS+'</style><div style="max-width:760px;margin:0 auto;">'+relFolhaHtml(sel,dataPad)+'</div></div>';
   box.innerHTML=h;
+  if(pr) pr.style.display='';
+  const n=m.folhas.filter(f=>!REL.off[f.pk]).length;
+  if(inf) inf.innerHTML='<b>'+n+'</b> de '+m.folhas.length+' folha(s) marcada(s) para impressão'+(n?' · '+m.folhas.filter(f=>!REL.off[f.pk]).reduce((s,f)=>s+f.rows.length,0)+' entrega(s)':'')+'.';
 }
 function relSel(pk){ REL.sel=pk; renderRelEntrega(); }
-
+function relToggle(pk,on){ if(on) delete REL.off[pk]; else REL.off[pk]=true; renderRelEntrega(); }
+function relMarcar(on){ const m=relModelo(!!(document.getElementById('relIncSem')||{}).checked); REL.off={}; if(!on) m.folhas.forEach(f=>{ REL.off[f.pk]=true; }); renderRelEntrega(); }
+function relIntervalo(){
+  const de=parseInt((document.getElementById('relDe')||{}).value,10), ate=parseInt((document.getElementById('relAte')||{}).value,10);
+  if(isNaN(de)&&isNaN(ate)){ toast('Informe a carga inicial e/ou a final.','err'); return; }
+  const lo=isNaN(de)?-Infinity:de, hi=isNaN(ate)?Infinity:ate;
+  const m=relModelo(!!(document.getElementById('relIncSem')||{}).checked); REL.off={};
+  m.folhas.forEach(f=>{ if(!(f.n!=null && f.n>=lo && f.n<=hi)) REL.off[f.pk]=true; });
+  renderRelEntrega();
+}
 function relFolhasParaSaida(){
-  const m=relModelo(!!(document.getElementById('relIncSem')||{}).checked);
-  return m.folhas;
+  return relModelo(!!(document.getElementById('relIncSem')||{}).checked).folhas.filter(f=>!REL.off[f.pk]);
 }
 function relImprimir(){
-  const fl=relFolhasParaSaida(); if(!fl.length){ toast('Nenhuma folha para imprimir.','err'); return; }
+  const fl=relFolhasParaSaida(); if(!fl.length){ toast('Nenhuma carga marcada para imprimir.','err'); return; }
   const dp=protoDataOperacao();
   const html='<!doctype html><html><head><meta charset="utf-8"><title>Relação de Entrega</title><style>'+REL_CSS
     + '@page{size:A4 portrait;margin:12mm 14mm}html,body{margin:0;background:#fff}.rel-sheet{padding:0;page-break-after:always}.rel-sheet:last-child{page-break-after:auto}'
@@ -5325,7 +5375,7 @@ function relImprimir(){
   const fr=document.createElement('iframe'); fr.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
   document.body.appendChild(fr);
   const d=fr.contentWindow.document; d.open(); d.write(html); d.close();
-  setTimeout(()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(e){ toast('Não consegui abrir a impressão. Use “Baixar Word”.','err'); } setTimeout(()=>fr.remove(),60000); },350);
+  setTimeout(()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(e){ toast('Não consegui abrir a impressão. Use “Baixar Word” ou “Baixar Excel”.','err'); } setTimeout(()=>fr.remove(),60000); },350);
   toast(fl.length+' folha(s) enviadas para impressão, em ordem de carga.','ok');
 }
 async function relGerarDocx(folhas, dataPadrao){
@@ -5356,13 +5406,68 @@ async function relGerarDocx(folhas, dataPadrao){
   zip.file('word/document.xml',doc);
   return zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
 }
+/* Excel: uma planilha só, um bloco por carga, com quebra de página entre as cargas (A4 retrato, ajustado à largura) */
+async function relGerarXlsx(folhas, dataPadrao){
+  const esc=s=>String(s==null?'':s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const col='ABCDE';
+  const str=(c,r,t,st)=> String(t)==='' ? `<c r="${c}${r}" s="${st}"/>` : `<c r="${c}${r}" s="${st}" t="inlineStr"><is><t xml:space="preserve">${esc(t)}</t></is></c>`;
+  const num=(c,r,v,st)=>`<c r="${c}${r}" s="${st}"><v>${v}</v></c>`;
+  let rows='', merges=[], breaks=[], r=1;
+  folhas.forEach((f,i)=>{
+    const data=f.data||dataPadrao||'';
+    rows+=`<row r="${r}" ht="22" customHeight="1">${str('A',r,data+'     CARGA: '+(f.n==null?'—':f.n),3)}${str('B',r,'',3)}${str('C',r,'',3)}${str('D',r,'PLACA: '+f.placa,4)}${str('E',r,'',4)}</row>`;
+    merges.push(`A${r}:C${r}`,`D${r}:E${r}`); r++;
+    rows+=`<row r="${r}" ht="20" customHeight="1">${['SEQ. ENTREGA','NF','NOME CLIENTE','ENDEREÇO','CEP'].map((t,k)=>str(col[k],r,t,1)).join('')}</row>`; r++;
+    f.rows.forEach(x=>{
+      rows+=`<row r="${r}">${x.seq===99999?str('A',r,'',2):num('A',r,x.seq,2)}${str('B',r,x.nf,2)}${str('C',r,x.nome,2)}${str('D',r,x.end,2)}${str('E',r,x.cep,2)}</row>`; r++;
+    });
+    if(i<folhas.length-1) breaks.push(r-1);
+  });
+  const last=r-1;
+  const sheet=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:E${last}"/><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="18"/>`
+    + `<cols><col min="1" max="1" width="14" customWidth="1"/><col min="2" max="2" width="11" customWidth="1"/><col min="3" max="3" width="36" customWidth="1"/><col min="4" max="4" width="36" customWidth="1"/><col min="5" max="5" width="12" customWidth="1"/></cols>`
+    + `<sheetData>${rows}</sheetData>`
+    + (merges.length?`<mergeCells count="${merges.length}">${merges.map(m=>`<mergeCell ref="${m}"/>`).join('')}</mergeCells>`:'')
+    + `<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/>`
+    + (breaks.length?`<rowBreaks count="${breaks.length}" manualBreakCount="${breaks.length}">${breaks.map(b=>`<brk id="${b}" max="16383" man="1"/>`).join('')}</rowBreaks>`:'')
+    + `</worksheet>`;
+  const styles=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`
+    + `<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font></fonts>`
+    + `<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFA6A6A6"/><bgColor indexed="64"/></patternFill></fill></fills>`
+    + `<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FF000000"/></left><right style="thin"><color rgb="FF000000"/></right><top style="thin"><color rgb="FF000000"/></top><bottom style="thin"><color rgb="FF000000"/></bottom><diagonal/></border></borders>`
+    + `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>`
+    + `<cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>`
+    + `<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>`
+    + `<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>`
+    + `<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>`
+    + `<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf></cellXfs>`
+    + `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  const zip=new JSZip();
+  zip.file('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>');
+  zip.file('_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+  zip.file('xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Relação de Entrega" sheetId="1" r:id="rId1"/></sheets></workbook>');
+  zip.file('xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+  zip.file('xl/styles.xml',styles);
+  zip.file('xl/worksheets/sheet1.xml',sheet);
+  return zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+function relNomeArq(fl,ext){
+  const d=(fl[0].data||protoDataOperacao()).match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  return 'relacao_de_entrega_'+(d?d[3]+'-'+d[2]+'-'+d[1]:new Date().toISOString().slice(0,10))+'.'+ext;
+}
 async function relBaixarWord(){
-  const fl=relFolhasParaSaida(); if(!fl.length){ toast('Nenhuma folha para gerar.','err'); return; }
+  const fl=relFolhasParaSaida(); if(!fl.length){ toast('Nenhuma carga marcada.','err'); return; }
   if(typeof JSZip==='undefined'){ toast('Biblioteca de ZIP não carregou (verifique a internet).','err'); return; }
-  const dp=protoDataOperacao(), d=(fl[0].data||dp).match(/(\d{2})\/(\d{2})\/(\d{4})/);
-  const blob=await relGerarDocx(fl,dp);
-  bkBaixar(blob,'relacao_de_entrega_'+(d?d[3]+'-'+d[2]+'-'+d[1]:new Date().toISOString().slice(0,10))+'.docx');
-  toast(fl.length+' folha(s) geradas, em ordem de carga — '+fl.reduce((s,f)=>s+f.rows.length,0)+' entrega(s).','ok');
+  const blob=await relGerarDocx(fl,protoDataOperacao());
+  bkBaixar(blob,relNomeArq(fl,'docx'));
+  toast(fl.length+' folha(s) no Word, em ordem de carga — '+fl.reduce((s,f)=>s+f.rows.length,0)+' entrega(s).','ok');
+}
+async function relBaixarExcel(){
+  const fl=relFolhasParaSaida(); if(!fl.length){ toast('Nenhuma carga marcada.','err'); return; }
+  if(typeof JSZip==='undefined'){ toast('Biblioteca de ZIP não carregou (verifique a internet).','err'); return; }
+  const blob=await relGerarXlsx(fl,protoDataOperacao());
+  bkBaixar(blob,relNomeArq(fl,'xlsx'));
+  toast(fl.length+' carga(s) no Excel, uma por página, em ordem de carga — '+fl.reduce((s,f)=>s+f.rows.length,0)+' entrega(s).','ok');
 }
 
 /* =========================================================
