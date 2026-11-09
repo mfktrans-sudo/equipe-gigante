@@ -507,6 +507,7 @@
 </div>
 
 <div class="tabs">
+  <button class="tab-btn" data-tab="upload" onclick="switchTab('upload')">Upload &amp; Consolidação</button>
   <button class="tab-btn" data-tab="painel" onclick="switchTab('painel')">1 · Lista de Carga</button>
   <button class="tab-btn" data-tab="protocolo" onclick="switchTab('protocolo')">2 · Protocolo de Bancada</button>
   <button class="tab-btn" data-tab="kitcoletas" onclick="switchTab('kitcoletas')">3 · Coleta</button>
@@ -523,7 +524,6 @@
 <div class="subtabs show" id="subtabsConfig">
   <button class="subtab-btn active" data-sub="parametros" onclick="switchTab('parametros')">Parâmetros</button>
   <button class="subtab-btn" data-sub="cadastro" onclick="switchTab('cadastro')">Cadastro de Placas</button>
-  <button class="subtab-btn" data-sub="upload" onclick="switchTab('upload')">Upload &amp; Consolidação</button>
   <button class="subtab-btn" data-sub="backup" onclick="switchTab('backup')">Backup &amp; Upload</button>
   <button class="subtab-btn" data-sub="abas" onclick="switchTab('abas')">Abas Visíveis</button>
 </div>
@@ -1524,7 +1524,7 @@ function toast(msg, type){
 /* =========================================================
    NAVEGAÇÃO
    ========================================================= */
-const CFG_SUBS=['parametros','cadastro','upload','backup','abas'];
+const CFG_SUBS=['parametros','cadastro','backup','abas'];
 let _cfgSubAtual='parametros';
 function switchTab(tab){
   if(tab==='config') tab=_cfgSubAtual;
