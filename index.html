@@ -513,9 +513,10 @@
   <button class="tab-btn" data-tab="iscas" onclick="switchTab('iscas')">4 · Iscas</button>
   <button class="tab-btn" data-tab="folhas" onclick="switchTab('folhas')">5 · Entrada de Veículos CD</button>
   <button class="tab-btn" data-tab="saida" onclick="switchTab('saida')">6 · Saída de Veículos CD</button>
-  <button class="tab-btn" data-tab="ondasfora" onclick="switchTab('ondasfora')">7 · Ondas Fora da doca</button>
-  <button class="tab-btn" data-tab="produtividade" onclick="switchTab('produtividade')">8 · Produtividade<span class="tab-mnt">em manutenção</span></button>
-  <button class="tab-btn" data-tab="terceiros" onclick="switchTab('terceiros')">9 · Relação de Terceiros<span class="tab-mnt">em manutenção</span></button>
+  <button class="tab-btn" data-tab="relentrega" onclick="switchTab('relentrega')">7 · Relação de Entrega</button>
+  <button class="tab-btn" data-tab="ondasfora" onclick="switchTab('ondasfora')">8 · Ondas Fora da doca</button>
+  <button class="tab-btn" data-tab="produtividade" onclick="switchTab('produtividade')">9 · Produtividade<span class="tab-mnt">em manutenção</span></button>
+  <button class="tab-btn" data-tab="terceiros" onclick="switchTab('terceiros')">10 · Relação de Terceiros<span class="tab-mnt">em manutenção</span></button>
   <span class="tab-sep" aria-hidden="true"></span>
   <button class="tab-btn active" data-tab="config" onclick="switchTab('config')">Configurações</button>
 </div>
@@ -1058,6 +1059,32 @@
   </div>
 </div>
 
+<div class="view" id="view-relentrega">
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>Relação de Entrega</h2>
+        <div class="desc">Rotina gerada <b>depois da 00:00</b>, separada do fluxo automático das outras abas. Suba o relatório do <b>Performaxxi</b> (Relatório Analítico Rota Pedidos, .xls ou .xlsx). Para cada placa a ferramenta monta a folha com <b>Seq. entrega, NF, Nome do cliente, Endereço e CEP</b>, na ordem da <i>Sequência Entrega Planejado</i>. O <b>nº da carga</b> é o único dado que vem da aba 1 · Lista de Carga, ligado pela <b>placa</b>, e as folhas saem na ordem das cargas.</div></div>
+      <div id="relBotoes" style="display:none;gap:8px;flex-wrap:wrap;align-items:center;">
+        <button class="primary" onclick="relBaixarWord()">⬇ Baixar Word (.docx)</button>
+        <button class="primary" onclick="relImprimir()">🖨 Imprimir / salvar PDF</button>
+        <button class="danger" onclick="relLimpar()">Remover arquivo</button>
+      </div>
+    </div>
+    <div class="dropzone" id="relDrop" onclick="document.getElementById('relFile').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')"
+         ondrop="event.preventDefault();this.classList.remove('drag');relArquivos(event.dataTransfer.files)">
+      <span class="k">Clique ou arraste o relatório do Performaxxi aqui</span>
+      Relatório Analítico Rota Pedidos — .xls / .xlsx. Pode enviar mais de um; um arquivo com o mesmo nome substitui o anterior.
+      <input type="file" id="relFile" multiple accept=".xls,.xlsx,.xlsm,.ods,.csv" style="display:none" onchange="relArquivos(this.files);this.value=''">
+    </div>
+    <div id="relLog" class="desc" style="margin-top:8px;"></div>
+    <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;margin:10px 0 0;font-size:12.5px;" title="Por padrão só saem as placas que estão na Lista de Carga (as de outros depósitos ficam de fora)"><input type="checkbox" id="relIncSem" onchange="renderRelEntrega()"> Incluir também as placas do arquivo que não estão na Lista de Carga (saem no fim, sem nº de carga)</label>
+  </div>
+  <div class="panel">
+    <div id="relBox"><div class="empty">Nenhum arquivo carregado. Suba o relatório do Performaxxi acima.</div></div>
+  </div>
+</div>
+
 <div class="view" id="view-ondasfora">
   <div class="panel">
     <div class="panel-head">
@@ -1083,8 +1110,8 @@
     <span class="mnt-tag">🛠 Em manutenção</span>
     <p>Esta aba ainda será criada. Assim que estiver pronta ela passa a funcionar aqui, na mesma posição da sequência da operação.</p>
     <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:6px;">
-      <div class="panel" style="min-width:220px;margin:0;"><h2>8.1 · Separação</h2><span class="mnt-tag">A iniciar</span></div>
-      <div class="panel" style="min-width:220px;margin:0;"><h2>8.2 · Carregamento</h2><span class="mnt-tag">A iniciar</span></div>
+      <div class="panel" style="min-width:220px;margin:0;"><h2>9.1 · Separação</h2><span class="mnt-tag">A iniciar</span></div>
+      <div class="panel" style="min-width:220px;margin:0;"><h2>9.2 · Carregamento</h2><span class="mnt-tag">A iniciar</span></div>
     </div>
   </div>
 </div>
@@ -1354,7 +1381,9 @@ const GDN_IDB = {
   async set(k,v){ try{ const db = await this.open(); return await new Promise((res,rej)=>{ const t=db.transaction('kv','readwrite'); t.objectStore('kv').put(v,k); t.oncomplete=()=>res(true); t.onerror=()=>rej(t.error); }); }catch(e){ return false; } },
   async del(k){ try{ const db = await this.open(); return await new Promise((res)=>{ const t=db.transaction('kv','readwrite'); t.objectStore('kv').delete(k); t.oncomplete=()=>res(true); t.onerror=()=>res(false); }); }catch(e){ return false; } }
 };
-function saveState(){
+function saveState(force){
+  /* durante o "Novo dia", nada que ainda estava em andamento (leitura de arquivo, auto-atualização) pode regravar dados antigos */
+  if(window.__GDN_RESETANDO && force!==true) return false;
   let json;
   try{ json = JSON.stringify(STATE); }
   catch(e){ avisarFalhaSalvar(e,'serializar'); return false; }
@@ -1380,9 +1409,13 @@ function novaOperacao(){
     '• Iscas: placas/docas de prioridade e arquivo de iscas\n'+
     '• Entrada de Veículos CD: programações carregadas\n'+
     '• Filtros e campos de busca\n\n'+
-    'São mantidos: Parâmetros, Cadastro de Placas, Abas Visíveis e as tabelas de apoio (regiões por CEP, territórios das iscas, assinatura). Confirmar?')) return;
+    'São mantidos: Parâmetros, Cadastro de Placas, Abas Visíveis e as tabelas de apoio (regiões por CEP, territórios das iscas, assinatura).\n\n'+
+    'Ao final a página é recarregada para zerar também tudo que estiver só em memória. Confirmar?')) return;
 
   /* cada passo roda isolado: se um falhar, os demais continuam e a operação não fica "meio limpa" */
+  /* bloqueia regravações vindas de leituras de arquivo que ainda estavam em andamento; só os passos abaixo podem gravar */
+  window.__GDN_RESETANDO = true; window.__GDN_PERSIST_OK = true;
+  let salvou = false;
   const passo = (nome, fn)=>{ try{ fn(); }catch(e){ console.error('Novo dia · '+nome, e); } };
   const vazio = id=>{ const el=document.getElementById(id); if(el){ if('value' in el) el.value=''; } };
   const html0 = id=>{ const el=document.getElementById(id); if(el) el.innerHTML=''; };
@@ -1398,12 +1431,14 @@ function novaOperacao(){
     STATE.folhas = null; STATE.folhasArqs = [];
     STATE.ts = [];
     IL_MEM.buf = null; IL_MEM.nome = ''; IL_MEM.folha = '';
-    saveState();
+    salvou = (saveState(true) === true);
   });
 
   /* 2) módulos isolados, com dados próprios no navegador (Saída de Veículos e Coleta) */
   passo('saída (aba 6)', ()=>{ if(typeof window.csNovoDia==='function') window.csNovoDia(); });
   passo('coleta (aba 3)',  ()=>{ if(typeof window.kcNovoDia==='function') window.kcNovoDia(); });
+  passo('relação de entrega (aba 7)', ()=>{ REL.rows=[]; REL.arqs=[]; REL.sel=null; });
+  window.__GDN_PERSIST_OK = false;
 
   /* 3) arquivos carregados e ainda não consolidados (Upload & Consolidação) */
   passo('upload', ()=>{
@@ -1425,8 +1460,40 @@ function novaOperacao(){
   ['renderArquivosCarregados','atualizarPreviaUpload','renderAlocacao','renderOndasFora','renderIscas','renderFolhas','renderProtocolo','renderPainel','renderDashboard','renderConsolidado','renderOrfaos','renderTS']
     .forEach(fn=>passo(fn, ()=>{ if(typeof window[fn]==='function') window[fn](); }));
 
-  toast('Operação limpa em todas as abas. Parâmetros e cadastros foram mantidos.', 'ok');
+  /* 7) confere que o estado ZERADO foi mesmo gravado e recarrega a página: isso descarta qualquer leitura de arquivo
+        ainda em andamento e todas as variáveis em memória (telas, filtros, janelas abertas, caches). */
+  (async ()=>{
+    let gravado = false, raw = null;
+    try{ raw = localStorage.getItem(STORAGE_KEY); }catch(e){}
+    if(raw){
+      try{
+        const p = JSON.parse(raw);
+        gravado = !((p.cargas||[]).length || (p.alocacao||[]).length || (p.iscas||[]).length || (p.ts||[]).length ||
+                    (p.presOrfaos||[]).length || p.iscaLote || p.folhas || (p.folhasArqs||[]).length);
+      }catch(e){}
+      if(gravado){ try{ await GDN_IDB.del('state'); }catch(e){} }   // não deixa cópia antiga na reserva do navegador
+    }else{
+      gravado = salvou;   // sem localStorage: o estado zerado foi para a reserva (IndexedDB)
+    }
+    if(!gravado){
+      window.__GDN_RESETANDO = false; window.__GDN_PERSIST_OK = false;
+      toast('A tela foi limpa, mas o navegador não confirmou a gravação. Faça um backup, limpe o armazenamento do site e tente de novo.', 'err');
+      return;
+    }
+    try{ sessionStorage.setItem('gdn_novodia_ok','1'); }catch(e){}
+    location.reload();
+  })();
 }
+/* depois do recarregamento do "Novo dia": abre o Upload e avisa que está tudo zerado */
+document.addEventListener('DOMContentLoaded', ()=>{
+  try{
+    if(sessionStorage.getItem('gdn_novodia_ok')){
+      sessionStorage.removeItem('gdn_novodia_ok');
+      switchTab('upload');
+      toast('Operação limpa em todas as abas. Parâmetros e cadastros foram mantidos.', 'ok');
+    }
+  }catch(e){}
+});
 
 /* =========================================================
    TOASTS
@@ -1465,6 +1532,7 @@ function switchTab(tab){
   if(tab==='abas') renderAbasVisiveis();
   if(tab==='protocolo') renderProtocolo();
   if(tab==='ondasfora') renderOndasFora();
+  if(tab==='relentrega') renderRelEntrega();
 }
 
 /* =========================================================
@@ -1479,9 +1547,10 @@ const ABAS_DEF = [
   {id:'iscas',         nome:'Iscas',                   n:'4'},
   {id:'folhas',        nome:'Entrada de Veículos CD',  n:'5'},
   {id:'saida',         nome:'Saída de Veículos CD',    n:'6'},
-  {id:'ondasfora',     nome:'Ondas Fora da doca',      n:'7'},
-  {id:'produtividade', nome:'Produtividade',           n:'8', mnt:true},
-  {id:'terceiros',     nome:'Relação de Terceiros',    n:'9', mnt:true}
+  {id:'relentrega',    nome:'Relação de Entrega',      n:'7'},
+  {id:'ondasfora',     nome:'Ondas Fora da doca',      n:'8'},
+  {id:'produtividade', nome:'Produtividade',           n:'9', mnt:true},
+  {id:'terceiros',     nome:'Relação de Terceiros',    n:'10', mnt:true}
 ];
 function abaVisivel(id){
   const m = (STATE && STATE.config && STATE.config.abasVisiveis) || {};
@@ -2214,7 +2283,7 @@ function classificarPlanilhaExtra(nome, buf){
     const temPrefixo = (needs, pref) => aoa.some(r=>{ const ks=(r||[]).map(N); return needs.every(n=>ks.includes(n)) && ks.some(k=>k.indexOf(pref)===0); });
     if(typeof ilDetectar==='function' && ilDetectar(aoa)) return {tipo:'iscas'};
     if(tem(['SEQ','PLACA','QTDNF'])) return {tipo:'lista_cs'};
-    if(temPrefixo(['CARGA','PLACAS'],'PREROMANEIO')) return {tipo:'lista_kc'};
+    if(temPrefixo(['CARGA','PLACAS'],'PRE')) return {tipo:'lista_kc'};   /* PRÉ-CAJ-33 (atual) ou PRÉ-ROMANEIO CAJ-33 (arquivos antigos) */
     if(tem(['ORM','PLACA','TIPODECOLETA'])) return {tipo:'kit'};
     if(tem(['NFDV','ORM'])) return {tipo:'coletas'};
     if(tem(['PLACA','CLIENTE','FILIAL','NF'])) return {tipo:'tipo'};
@@ -3886,7 +3955,10 @@ function iscaOrdenadas(){
   const ls = iscaTodas().map(isca=>({isca, v:iscaVinculo(isca)}));
   const rank = x => x.v.st==='ok' ? 0 : (x.v.st==='semdoca'||x.v.st==='semalocacao') ? 1 : 2;
   const num = (v)=> v==null ? 1e9 : v;
-  return ls.sort((a,b)=> rank(a)-rank(b) || num(a.v.doca)-num(b.v.doca) || num(a.v.onda)-num(b.v.onda) || String(a.isca.placa).localeCompare(String(b.isca.placa)));
+  /* ordem alfabética (A→Z) pelo nome do cliente; sem nome vai para o fim; empate: doca, onda, placa */
+  const cli = x => iscaClienteDe(x.isca).trim();
+  const porCliente = (a,b)=>{ const ca = cli(a), cb = cli(b); if(!ca && !cb) return 0; if(!ca) return 1; if(!cb) return -1; return ca.localeCompare(cb,'pt-BR',{sensitivity:'base',numeric:true}); };
+  return ls.sort((a,b)=> rank(a)-rank(b) || porCliente(a,b) || num(a.v.doca)-num(b.v.doca) || num(a.v.onda)-num(b.v.onda) || String(a.isca.placa).localeCompare(String(b.isca.placa)));
 }
 function iscaPreTexto(pres){
   pres = pres||[];
@@ -4478,7 +4550,12 @@ function ilLinhasEtiqueta(){
     if(i.doca==null){ semDoca++; return; }
     itens.push({doca:i.doca, onda:i.onda, cliente:r.cliente, placa:r.placa, equip:r.equip, seq:r.seq, bairro:r.bairro, cidade:r.cidade, regiao:i.regiao, transp:i.transp});
   });
-  itens.sort((a,b)=> (a.doca-b.doca) || ((a.onda||0)-(b.onda||0)) || ((parseInt(a.seq)||0)-(parseInt(b.seq)||0)));
+  const _cl = v => String(v==null?'':v).trim();
+  itens.sort((a,b)=>{
+    const ca = _cl(a.cliente), cb = _cl(b.cliente);
+    if(!ca!==!cb) return ca ? -1 : 1;   /* sem nome por último */
+    return (ca && cb ? ca.localeCompare(cb,'pt-BR',{sensitivity:'base',numeric:true}) : 0) || (a.doca-b.doca) || ((a.onda||0)-(b.onda||0)) || ((parseInt(a.seq)||0)-(parseInt(b.seq)||0));
+  });
   return {itens, semDoca, semPlaca};
 }
 function ilBaixarEtiquetas(){
@@ -4495,7 +4572,7 @@ function ilBaixarEtiquetas(){
   const base = String(L.nome).replace(/\.[^.]+$/,'');
   bkBaixar(new Blob([out],{type:IL_XLSX_MIME}), base+' - ETIQUETAS (doca-onda-cliente).xlsx');
   const av = []; if(semPlaca) av.push(semPlaca+' sem placa'); if(semDoca) av.push(semDoca+' com carga sem doca');
-  toast('Planilha de etiquetas gerada com '+itens.length+' linha(s), em ordem de doca e onda.'+(av.length?' Ficaram de fora: '+av.join(' e ')+'.':''), av.length?'err':'ok');
+  toast('Planilha de etiquetas gerada com '+itens.length+' linha(s), em ordem alfabética de cliente.'+(av.length?' Ficaram de fora: '+av.join(' e ')+'.':''), av.length?'err':'ok');
 }
 
 /* ---------- tela ---------- */
@@ -4750,7 +4827,7 @@ function iscaRenderPreview(et){
   if(!et.length){ el.innerHTML = '<div class="empty">Nenhuma etiqueta pronta ainda.</div>'; return; }
   const px = 220 / c.larg;
   const fl = iscaFolhas();
-  el.innerHTML = `<div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">Prévia — ${et.length} isca(s) em ${fl.length} etiqueta(s) de ${c.larg/10} × ${c.alt/10} cm, na ordem de impressão (doca menor → maior). Cada etiqueta tem 2 cargas diferentes: uma na metade de cima e outra na de baixo.</div>
+  el.innerHTML = `<div style="font-size:12px;color:var(--text-2);margin-bottom:8px;">Prévia — ${et.length} isca(s) em ${fl.length} etiqueta(s) de ${c.larg/10} × ${c.alt/10} cm, na ordem de impressão (cliente A → Z). Cada etiqueta tem 2 cargas diferentes: uma na metade de cima e outra na de baixo.</div>
     <div style="display:flex;flex-wrap:wrap;gap:14px;max-height:520px;overflow:auto;padding:4px;">
     ${fl.map(f=>`<div><div style="font-size:11px;color:var(--text-2);margin-bottom:3px;">#${f.n}</div><div style="border:1px solid var(--line);">${iscaLabelHTML(f,c,px)}</div></div>`).join('')}</div>`;
 }
@@ -4790,7 +4867,7 @@ function iscaBaixarZPL(){
   const ts = new Date().toISOString().slice(0,10);
   /* .txt (e não .zpl): no Windows a extensão .zpl é associada ao Windows Media Player (playlist) e o arquivo vira "vídeo" */
   bkBaixar(new Blob([z],{type:'text/plain;charset=utf-8'}), 'iscas_zebra_'+ts+'.txt');
-  toast(iscaFolhas().length+' etiqueta(s) com 2 cargas cada geradas em ZPL (ordem: doca menor → maior).','ok');
+  toast(iscaFolhas().length+' etiqueta(s) com 2 cargas cada geradas em ZPL (ordem: cliente A → Z).','ok');
 }
 /* ---------- Word (.docx): 1 página = 1 etiqueta (tamanho configurado, margens 0), 2 cargas por página ---------- */
 function iscaXmlEsc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -4875,7 +4952,7 @@ function fecharAlterarDoca(){ const m=document.getElementById('modalDoca'); if(m
 /* =========================================================
    CARGAS DO DIA POR FILIAL + ACUMULADO (tela e Excel)
    Layout igual ao da planilha Cargas_Acumuladas.xlsx:
-   CARGA | PRÉ-ROMANEIO <filial> ... | PLACAS | DOCA <unidade> | REGIÃO | QTD ENTREGA | ONDA | TRANSP.
+   CARGA | PRÉ-<filial> ... | PLACAS | DOCA <unidade> | REGIÃO | QTD ENTREGA | ONDA | TRANSP.
    ========================================================= */
 let pFilialSel = 'ACUM';   // 'ACUM' ou o código da filial
 
@@ -4919,9 +4996,9 @@ function pLinhaCarga(it, filialCod, temOutras){
   const pres = filialCod ? a.pres.filter(p=>p.filial===filialCod) : a.pres;
   const o={'CARGA':it.n};
   (filialCod ? f.filter(x=>x.codigo===filialCod) : f).forEach(x=>{
-    o['PRÉ-ROMANEIO '+x.nome]=pPreVal(a.pres.filter(p=>p.filial===x.codigo));
+    o['PRÉ-'+x.nome]=pPreVal(a.pres.filter(p=>p.filial===x.codigo));
   });
-  if(!filialCod && temOutras) o['PRÉ-ROMANEIO (filial não cadastrada)']=pPreVal(a.pres.filter(p=>!conhecidos.has(p.filial)));
+  if(!filialCod && temOutras) o['PRÉ (filial não cadastrada)']=pPreVal(a.pres.filter(p=>!conhecidos.has(p.filial)));
   o['PLACAS']=a.placa;
   STATE.config.unidades.forEach(u=>{ o['DOCA '+u.nome]=(d!=null && uNome===u.nome) ? d+' ('+a.onda+'ªONDA)' : ''; });
   o['REGIÃO']=a.regiao||'';
@@ -4989,7 +5066,7 @@ function renderCargasFilial(){
   const {rows,pend} = pLinhasLista(items, cod);
   if(!rows.length){ elB.innerHTML='<div class="empty">Nenhuma carga desta filial no filtro atual.</div>'; return; }
   const cols=Object.keys(rows[0]);
-  const rotulo=c=>String(c).replace(/^PRÉ-ROMANEIO\s+(?:CAJ-?)?/,'PRÉ-');   // só na tela; o Excel mantém o nome completo
+  const rotulo=c=>String(c);   // tela e Excel usam o mesmo cabeçalho (PRÉ-CAJ-33 ...)
   const mono=/^(CARGA|PRÉ|PLACAS|DOCA|ONDA|FILIAL$)/;
   const totEnt=rows.reduce((s,r)=>s+(parseInt(r['QTD ENTREGA'])||0),0);
   elB.innerHTML=`<div style="color:var(--text-2);font-size:12.5px;margin-bottom:8px;">${rows.length} carga(s) · ${totEnt} entregas${pend.some(Boolean)?' · <span style="color:var(--red)">'+pend.filter(Boolean).length+' sem doca (no fim da lista)</span>':''}</div>
@@ -5104,7 +5181,192 @@ async function etqBaixarWord(){
 }
 
 /* =========================================================
-   ABA 6 · ONDAS FORA DA DOCA
+   ABA 7 · RELAÇÃO DE ENTREGA  (gerada depois da 00:00 — fora do fluxo automático)
+   Fonte das entregas: relatório do Performaxxi (Relatório Analítico Rota Pedidos).
+   Da Lista de Carga vem só o nº da carga, ligado pela PLACA (mesma numeração de pCargasNumeradas).
+   Uma folha por placa, na ordem das cargas: DATA · CARGA · PLACA + Seq. entrega / NF / Nome / Endereço / CEP.
+   NF = miolo do "ID Pedido" (33507495UA -> 507495; D0009521U1 -> 009521).
+   ========================================================= */
+const REL = { rows:[], arqs:[], sel:null };
+const REL_CSS = '.rel-sheet{background:#fff;color:#000;font-family:Calibri,Carlito,Arial,sans-serif;padding:14px 16px;box-sizing:border-box;}'
+  + '.rel-sheet .rel-cab{display:flex;justify-content:space-between;align-items:baseline;font-size:15px;font-weight:700;margin:0 0 5px;color:#000;}'
+  + '.rel-sheet .rel-cab span b{margin-right:18px;}'
+  + '.rel-sheet .rel-tb{width:100%;border-collapse:collapse;table-layout:fixed;background:#fff;}'
+  + '.rel-sheet .rel-tb th,.rel-sheet .rel-tb td{border:1px solid #000;color:#000;text-align:center;vertical-align:middle;padding:3px 4px;font-size:12px;line-height:1.25;text-transform:none;letter-spacing:0;position:static;word-break:break-word;background:#fff;}'
+  + '.rel-sheet .rel-tb th{background:#a6a6a6;font-weight:700;font-size:11px;}';
+
+function relNorm(s){ return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toUpperCase(); }
+function relTxt(v){ return String(v==null?'':v).replace(/\s+/g,' ').trim(); }
+function relNF(id){ const t=relTxt(id), m=t.match(/^[A-Z0-9]{2}(\d+)U[A-Z0-9]$/i); return m ? m[1] : t; }
+function relCEP(v){
+  let d=String(v==null?'':v).replace(/\D/g,'');
+  if(d.length===7) d='0'+d;
+  return d.length===8 ? d.slice(0,5)+'-'+d.slice(5) : relTxt(v);
+}
+function relData(v){
+  if(v==null||v==='') return '';
+  if(typeof v==='number' && v>20000){ const d=new Date(Math.round((v-25569)*86400000)); return String(d.getUTCDate()).padStart(2,'0')+'/'+String(d.getUTCMonth()+1).padStart(2,'0')+'/'+d.getUTCFullYear(); }
+  const t=String(v).trim(), m=t.match(/(\d{2})\/(\d{2})\/(\d{4})/); if(m) return m[0];
+  const i=t.match(/^(\d{4})-(\d{2})-(\d{2})/); return i ? i[3]+'/'+i[2]+'/'+i[1] : t;
+}
+/* lê o relatório (qualquer aba): devolve as linhas ou null se não tiver as colunas Placa / Sequência Entrega Planejado / ID Pedido */
+function relParse(m2){
+  let h=-1, c=null;
+  for(let i=0;i<Math.min(m2.length,15);i++){
+    const m={}; (m2[i]||[]).forEach((v,j)=>{ const k=relNorm(v); if(k && m[k]===undefined) m[k]=j; });
+    if(m['PLACA']!==undefined && m['SEQUENCIA ENTREGA PLANEJADO']!==undefined && m['ID PEDIDO']!==undefined){ h=i; c=m; break; }
+  }
+  if(h<0) return null;
+  const g=n=>c[n]===undefined ? -1 : c[n];
+  const iPl=c['PLACA'], iSq=c['SEQUENCIA ENTREGA PLANEJADO'], iId=c['ID PEDIDO'], iNo=g('NOME CLIENTE'), iEn=g('ENDERECO'), iCp=g('CEP'), iDt=g('DATA ROTA'), iTr=g('NOME TRANSPORTADORA');
+  const at=(r,i)=> i<0 ? null : r[i];
+  const out=[];
+  for(let i=h+1;i<m2.length;i++){
+    const r=m2[i]||[], placa=relTxt(r[iPl]); if(!placaKey(placa)) continue;
+    const sq=parseInt(String(r[iSq]==null?'':r[iSq]).replace(/\D/g,''),10);
+    out.push({ placa:placa.toUpperCase(), pk:placaKey(placa), seq:isNaN(sq)?99999:sq, nf:relNF(r[iId]), nome:relTxt(at(r,iNo)), end:relTxt(at(r,iEn)), cep:relCEP(at(r,iCp)), data:relData(at(r,iDt)), transp:relTxt(at(r,iTr)) });
+  }
+  return out;
+}
+function relLer(file){
+  return new Promise((res,rej)=>{
+    const fr=new FileReader();
+    fr.onerror=()=>rej(new Error('Não consegui ler '+file.name));
+    fr.onload=()=>{ try{ const wb=XLSX.read(new Uint8Array(fr.result),{type:'array'}); res(wb.SheetNames.map(sn=>XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:null,raw:true}))); }catch(e){ rej(e); } };
+    fr.readAsArrayBuffer(file);
+  });
+}
+async function relArquivos(fileList){
+  if(typeof XLSX==='undefined'){ toast('Biblioteca de planilhas (XLSX) não carregou. Confira a internet e recarregue a página.','err'); return; }
+  const falhas=[]; let ok=0;
+  for(const f of Array.from(fileList||[])){
+    try{
+      const sheets=await relLer(f); let dados=null;
+      for(const sh of sheets){ dados=relParse(sh); if(dados) break; }
+      if(!dados){ falhas.push(f.name+': não é o relatório do Performaxxi (faltam as colunas Placa, Sequência Entrega Planejado e ID Pedido).'); continue; }
+      if(!dados.length){ falhas.push(f.name+': o relatório não tem nenhuma linha com placa.'); continue; }
+      dados.forEach(r=>{ r.arq=f.name; });
+      REL.rows=REL.rows.filter(r=>r.arq!==f.name).concat(dados);
+      REL.arqs=REL.arqs.filter(a=>a.nome!==f.name).concat([{nome:f.name, linhas:dados.length}]);
+      ok++;
+    }catch(e){ falhas.push(f.name+': '+(e&&e.message||e)); }
+  }
+  REL.sel=null;
+  renderRelEntrega();
+  if(ok) toast(ok+' arquivo(s) carregado(s) na Relação de Entrega.','ok');
+  falhas.forEach(m=>toast(m,'err'));
+}
+function relLimpar(){ REL.rows=[]; REL.arqs=[]; REL.sel=null; renderRelEntrega(); }
+
+/* junta o relatório com a Lista de Carga (nº da carga pela placa) */
+function relModelo(incluirSem){
+  const num={};
+  if((STATE.alocacao||[]).length) pCargasNumeradas().forEach(it=>{ const k=placaKey(it.a.placa); if(k && num[k]===undefined) num[k]=it; });
+  const por={}, ordem=[];
+  REL.rows.forEach(r=>{ if(!por[r.pk]){ por[r.pk]=[]; ordem.push(r.pk); } por[r.pk].push(r); });
+  const com=[], sem=[];
+  ordem.forEach(k=>{
+    const rs=por[k].map((r,i)=>({r,i})).sort((a,b)=>(a.r.seq-b.r.seq)||(a.i-b.i)).map(x=>x.r);
+    const it=num[k], f={ pk:k, placa:rs[0].placa, n:it?it.n:null, a:it?it.a:null, pend:it?it.pend:false, transp:it?(it.a.transportadora||''):(rs[0].transp||''), data:(rs.find(x=>x.data)||{}).data||'', rows:rs };
+    (it?com:sem).push(f);
+  });
+  com.sort((a,b)=>a.n-b.n);
+  sem.sort((a,b)=>a.placa.localeCompare(b.placa));
+  const faltam=Object.keys(num).filter(k=>!por[k]).map(k=>num[k]).sort((a,b)=>a.n-b.n);
+  return { folhas: incluirSem ? com.concat(sem) : com, sem, faltam };
+}
+function relFolhaHtml(f, dataPadrao){
+  const e=pEsc, data=f.data||dataPadrao||'';
+  const linhas=f.rows.map((r,i)=>`<tr><td>${r.seq===99999?'':r.seq}</td><td>${e(r.nf)}</td><td>${e(r.nome)}</td><td>${e(r.end)}</td><td>${e(r.cep)}</td></tr>`).join('');
+  return `<div class="rel-sheet"><div class="rel-cab"><span><b>${e(data)}</b><b>CARGA: ${f.n==null?'—':f.n}</b></span><b>PLACA: ${e(f.placa)}</b></div>`
+    + `<table class="rel-tb"><colgroup><col style="width:13%"><col style="width:9%"><col style="width:35%"><col style="width:32%"><col style="width:11%"></colgroup>`
+    + `<thead><tr><th>SEQ. ENTREGA</th><th>NF</th><th>NOME CLIENTE</th><th>ENDEREÇO</th><th>CEP</th></tr></thead><tbody>${linhas}</tbody></table></div>`;
+}
+function renderRelEntrega(){
+  const box=document.getElementById('relBox'); if(!box) return;
+  const bt=document.getElementById('relBotoes'), lg=document.getElementById('relLog');
+  if(lg) lg.innerHTML = REL.arqs.length ? 'Arquivo(s): '+REL.arqs.map(a=>pEsc(a.nome)+' <span style="color:var(--text-2)">('+a.linhas+' linhas)</span>').join(' · ') : '';
+  if(!REL.rows.length){ if(bt) bt.style.display='none'; box.innerHTML='<div class="empty">Nenhum arquivo carregado. Suba o relatório do Performaxxi acima.</div>'; return; }
+  const inc=!!(document.getElementById('relIncSem')||{}).checked, m=relModelo(inc), semAloc=!(STATE.alocacao||[]).length;
+  if(bt) bt.style.display = m.folhas.length ? 'flex' : 'none';
+  const stat=(n,l,cor)=>`<div class="stat"><div class="num"${cor?` style="color:var(--${cor})"`:''}>${n}</div><div class="lbl">${l}</div></div>`;
+  const nEnt=m.folhas.reduce((s,f)=>s+f.rows.length,0), semFora=inc?0:m.sem.length;
+  let h='';
+  if(semAloc) h+='<div class="badge alert" style="display:block;margin-bottom:12px;padding:9px 12px;">Ainda não há Lista de Carga alocada, então nenhuma placa tem nº de carga. Rode a alocação na aba 1 · Lista de Carga (ou marque “Incluir também as placas…” para imprimir sem número).</div>';
+  h+='<div class="grid cols-4" style="margin-bottom:14px;">'
+    + stat(m.folhas.length,'folhas a imprimir (uma por placa)') + stat(nEnt,'entregas nessas folhas','teal')
+    + stat(semFora,'placas do arquivo sem carga (não impressas)','amber') + stat(m.faltam.length,'cargas da lista sem entregas no arquivo') + '</div>';
+  if(semFora) h+=`<div class="desc" style="margin-bottom:8px;"><b>Fora da impressão (placa não está na Lista de Carga):</b> ${m.sem.map(f=>pEsc(f.placa)).join(' · ')}</div>`;
+  if(m.faltam.length) h+=`<div class="desc" style="margin-bottom:8px;"><b>Cargas da Lista sem linhas no arquivo:</b> ${m.faltam.map(it=>'carga '+it.n+' · '+pEsc(String(it.a.placa||'').toUpperCase())).join(' · ')}</div>`;
+  if(!m.folhas.length){ box.innerHTML=h+'<div class="empty">Nenhuma placa do arquivo tem carga na Lista de Carga.</div>'; return; }
+  const sel=m.folhas.find(f=>f.pk===REL.sel)||m.folhas[0], dataPad=protoDataOperacao();
+  h+='<div class="table-wrap" style="max-height:320px;overflow-y:auto;margin-bottom:14px;"><table><thead><tr><th>Carga</th><th>Placa</th><th>Transportadora</th><th>Doca · onda</th><th>Entregas</th><th>Data</th></tr></thead><tbody>'
+    + m.folhas.map(f=>{
+        const dn = f.a ? (f.pend ? 'sem doca' : pDoca(f.a)+' · '+f.a.onda+'ª') : '—';
+        return `<tr onclick="relSel('${f.pk}')" style="cursor:pointer;${f.pk===sel.pk?'background:var(--bg-3);':''}"><td>${f.n==null?'<span class="badge alert">sem carga</span>':f.n}</td><td class="mono"><b>${pEsc(f.placa)}</b></td><td>${pEsc(f.transp)}</td><td class="mono">${pEsc(dn)}</td><td>${f.rows.length}</td><td>${pEsc(f.data||dataPad)}</td></tr>`;
+      }).join('') + '</tbody></table></div>';
+  h+='<div class="desc" style="margin-bottom:6px;">Pré-visualização da folha selecionada (clique numa linha da tabela para trocar):</div>'
+    + '<div style="overflow:auto;background:#3a4560;border:1px solid var(--line);border-radius:8px;padding:14px;"><style>'+REL_CSS+'</style><div style="max-width:760px;margin:0 auto;">'+relFolhaHtml(sel,dataPad)+'</div></div>';
+  box.innerHTML=h;
+}
+function relSel(pk){ REL.sel=pk; renderRelEntrega(); }
+
+function relFolhasParaSaida(){
+  const m=relModelo(!!(document.getElementById('relIncSem')||{}).checked);
+  return m.folhas;
+}
+function relImprimir(){
+  const fl=relFolhasParaSaida(); if(!fl.length){ toast('Nenhuma folha para imprimir.','err'); return; }
+  const dp=protoDataOperacao();
+  const html='<!doctype html><html><head><meta charset="utf-8"><title>Relação de Entrega</title><style>'+REL_CSS
+    + '@page{size:A4 portrait;margin:12mm 14mm}html,body{margin:0;background:#fff}.rel-sheet{padding:0;page-break-after:always}.rel-sheet:last-child{page-break-after:auto}'
+    + '.rel-sheet .rel-cab{font-size:12pt}.rel-sheet .rel-tb th{font-size:9.5pt}.rel-sheet .rel-tb td{font-size:10.5pt}.rel-sheet .rel-tb tr{page-break-inside:avoid}.rel-sheet .rel-tb thead{display:table-header-group}'
+    + '</style></head><body>'+fl.map(f=>relFolhaHtml(f,dp)).join('')+'</body></html>';
+  const fr=document.createElement('iframe'); fr.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  document.body.appendChild(fr);
+  const d=fr.contentWindow.document; d.open(); d.write(html); d.close();
+  setTimeout(()=>{ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(e){ toast('Não consegui abrir a impressão. Use “Baixar Word”.','err'); } setTimeout(()=>fr.remove(),60000); },350);
+  toast(fl.length+' folha(s) enviadas para impressão, em ordem de carga.','ok');
+}
+async function relGerarDocx(folhas, dataPadrao){
+  const esc=s=>String(s==null?'':s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const FONT='<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/>';
+  const run=(t,sz,b)=>`<w:r><w:rPr>${FONT}${b?'<w:b/>':''}<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/></w:rPr><w:t xml:space="preserve">${esc(t)}</w:t></w:r>`;
+  const W=[1360,960,3520,3290,1076], TOT=W.reduce((a,b)=>a+b,0);            // A4 com margem de 1,5 cm = 10206 twips
+  const bd=k=>`<w:${k} w:val="single" w:sz="8" w:space="0" w:color="000000"/>`;
+  const cel=(w,t,sz,b,fill)=>`<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/>${fill?`<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>`:''}<w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="center"/></w:pPr>${String(t)===''?'':run(t,sz,b)}</w:p></w:tc>`;
+  const tr=(cells,hdr)=>`<w:tr><w:trPr><w:cantSplit/><w:trHeight w:val="${hdr?360:340}" w:hRule="atLeast"/>${hdr?'<w:tblHeader/>':''}</w:trPr>${cells}</w:tr>`;
+  let corpo='';
+  folhas.forEach((f,i)=>{
+    const data=f.data||dataPadrao||'';
+    corpo+=`<w:p><w:pPr>${i>0?'<w:pageBreakBefore/>':''}<w:tabs><w:tab w:val="right" w:pos="${TOT}"/></w:tabs><w:spacing w:before="0" w:after="80"/></w:pPr>`
+      + run(data,26,true) + run('     CARGA: '+(f.n==null?'—':f.n),26,true) + '<w:r><w:tab/></w:r>' + run('PLACA: '+f.placa,26,true) + '</w:p>';
+    const H=['SEQ. ENTREGA','NF','NOME CLIENTE','ENDEREÇO','CEP'];
+    let linhas=tr(H.map((t,k)=>cel(W[k],t,19,true,'A6A6A6')).join(''),true);
+    f.rows.forEach(r=>{ linhas+=tr([r.seq===99999?'':r.seq, r.nf, r.nome, r.end, r.cep].map((t,k)=>cel(W[k],t,20,false,'')).join(''),false); });
+    corpo+=`<w:tbl><w:tblPr><w:tblW w:w="${TOT}" w:type="dxa"/><w:jc w:val="center"/><w:tblBorders>${bd('top')}${bd('left')}${bd('bottom')}${bd('right')}${bd('insideH')}${bd('insideV')}</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="15" w:type="dxa"/><w:left w:w="60" w:type="dxa"/><w:bottom w:w="15" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tblCellMar></w:tblPr>`
+      + `<w:tblGrid>${W.map(w=>`<w:gridCol w:w="${w}"/>`).join('')}</w:tblGrid>${linhas}</w:tbl>`;
+  });
+  corpo+='<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/></w:pPr></w:p>';
+  const SECT='<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="850" w:bottom="720" w:left="850" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr>';
+  const doc=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${corpo}${SECT}</w:body></w:document>`;
+  const zip=new JSZip();
+  zip.file('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+  zip.file('_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+  zip.file('word/document.xml',doc);
+  return zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+}
+async function relBaixarWord(){
+  const fl=relFolhasParaSaida(); if(!fl.length){ toast('Nenhuma folha para gerar.','err'); return; }
+  if(typeof JSZip==='undefined'){ toast('Biblioteca de ZIP não carregou (verifique a internet).','err'); return; }
+  const dp=protoDataOperacao(), d=(fl[0].data||dp).match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  const blob=await relGerarDocx(fl,dp);
+  bkBaixar(blob,'relacao_de_entrega_'+(d?d[3]+'-'+d[2]+'-'+d[1]:new Date().toISOString().slice(0,10))+'.docx');
+  toast(fl.length+' folha(s) geradas, em ordem de carga — '+fl.reduce((s,f)=>s+f.rows.length,0)+' entrega(s).','ok');
+}
+
+/* =========================================================
+   ABA 8 · ONDAS FORA DA DOCA
    Usa a MESMA numeração/ordem da Lista de Carga (pCargasNumeradas: onda > doca) e o mesmo
    gerador de Word A4 das etiquetas (etqGerarDocx). Só entram cargas com doca.
    ========================================================= */
@@ -5877,6 +6139,7 @@ function hojeISO(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMon
 function dataBR(iso){ var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||''); return m ? m[3]+'/'+m[2]+'/'+m[1] : ''; }
 
 function persist(){
+  if(window.__GDN_RESETANDO && !window.__GDN_PERSIST_OK) return;
   try{ localStorage.setItem(KEY, JSON.stringify({lista:S.lista, prog:S.prog, coletas:S.coletas, nfdv:S.nfdv, arqs:S.arqs, regTxt:S.regTxt, opts:{terceiros:S.opts.terceiros, juntar:S.opts.juntar}})); }
   catch(e){ console.warn('Controle de saída: não consegui salvar no navegador', e); }
 }
@@ -6350,6 +6613,7 @@ function dataBR(iso){ var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||''); return m 
 function dataDoNome(nome){ var m=/(\d{2})[._-](\d{2})[._-](\d{4})/.exec(String(nome||'')); return m ? m[3]+'-'+m[2]+'-'+m[1] : ''; }
 
 function persist(){
+  if(window.__GDN_RESETANDO && !window.__GDN_PERSIST_OK) return;
   try{ localStorage.setItem(KEY, JSON.stringify(S)); }
   catch(e){ console.warn('Kit coletas: não consegui salvar no navegador', e); }
 }
@@ -6372,7 +6636,7 @@ function findHeader(rows, needs){
 }
 function detectar(rows){
   var h = findHeader(rows,['CARGA','PLACAS']);
-  if(h && Object.keys(h.map).some(function(k){ return k.indexOf('PREROMANEIO')===0; })) return 'lista';
+  if(h && Object.keys(h.map).some(function(k){ return k.indexOf('PRE')===0; })) return 'lista';   /* PRÉ-CAJ-33 ou PRÉ-ROMANEIO CAJ-33 */
   if(findHeader(rows,['NFDV','ORM'])) return 'coletas';
   if(findHeader(rows,['PLACA','CLIENTE','FILIAL','NF'])) return 'tipo';
   return null;
@@ -6381,8 +6645,8 @@ function parseLista(rows){
   var h = findHeader(rows,['CARGA','PLACAS']);
   var keys = Object.keys(h.map);
   var docaCols = keys.filter(function(k){ return k.indexOf('DOCA')===0; }).map(function(k){ return h.map[k]; });
-  var preCols = keys.filter(function(k){ return k.indexOf('PREROMANEIO')===0; })
-    .map(function(k){ return {f: k.replace('PREROMANEIO','').replace(/^CAJ/,''), c: h.map[k]}; })
+  var preCols = keys.filter(function(k){ return k.indexOf('PRE')===0; })
+    .map(function(k){ return {f: k.replace(/^PREROMANEIO|^PRE/,'').replace(/^CAJ/,''), c: h.map[k]}; })
     .sort(function(a,b){ return a.c-b.c; });
   var out = {};
   for(var i=h.row+1;i<rows.length;i++){
@@ -6499,7 +6763,11 @@ function calcular(){
   });
   rows.sort(function(a,b){
     if(a.ok!==b.ok) return a.ok ? -1 : 1;
-    /* layout do relatório: 'Troca coleta' primeiro, depois 'Coleta'; dentro de cada grupo, ORM crescente */
+    /* ordem: sequência de DOCAS crescente (coluna ONDA); empate: onda, 'Troca coleta' antes de 'Coleta', ORM crescente */
+    var da = docaNum(a.onda), db = docaNum(b.onda);
+    if(da!==db) return da-db;
+    var oa = ondaDe(a.onda), ob = ondaDe(b.onda);
+    if(oa!==ob) return oa-ob;
     var ta = /troca/i.test(a.tipo) ? 0 : 1, tb = /troca/i.test(b.tipo) ? 0 : 1;
     return (ta-tb) || (Number(a.orm)-Number(b.orm)) || String(a.orm).localeCompare(String(b.orm));
   });
