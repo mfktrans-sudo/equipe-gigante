@@ -1089,10 +1089,30 @@
       <div><label>Ou um intervalo de cargas (de / até)</label>
         <div style="display:flex;gap:6px;align-items:center;"><input id="relDe" type="number" min="1" placeholder="de" style="width:80px"><input id="relAte" type="number" min="1" placeholder="até" style="width:80px"><button class="small" onclick="relIntervalo()">Aplicar intervalo</button></div></div>
     </div>
+    <details open style="margin:0 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;">
+      <summary style="cursor:pointer;font-weight:600;font-size:13px;">Formatação do Excel (impressão individual por placa)</summary>
+      <div class="desc" style="margin-top:8px;">Vale para os dois botões de Excel. No <b>“uma aba por placa”</b> cada placa vira uma aba (nome = carga + placa), pronta para imprimir sozinha: no Excel, abra a aba e use Arquivo › Imprimir. Para várias, selecione as abas com Ctrl/Shift e imprima.</div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-top:12px;">
+        <div><label>Nome da aba</label><select id="relXNome" onchange="relXSalvar()"><option value="carga_placa">Carga - Placa (1 - TZA8A14)</option><option value="placa">Só a placa (TZA8A14)</option><option value="placa_carga">Placa - Carga (TZA8A14 - C1)</option></select></div>
+        <div><label>Papel</label><select id="relXPapel" onchange="relXSalvar()"><option value="9">A4</option><option value="1">Carta</option><option value="5">Ofício</option></select></div>
+        <div><label>Orientação</label><select id="relXOri" onchange="relXSalvar()"><option value="portrait">Retrato</option><option value="landscape">Paisagem</option></select></div>
+        <div><label>Margens</label><select id="relXMarg" onchange="relXSalvar()"><option value="estreita">Estreitas</option><option value="normal">Normais</option><option value="larga">Largas</option></select></div>
+        <div><label>Tamanho da letra</label><select id="relXFonte" onchange="relXSalvar()"><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="14">14</option></select></div>
+        <div><label>Ajuste na impressão</label><select id="relXAjuste" onchange="relXSalvar()"><option value="largura">Ajustar à largura (pode ocupar mais de 1 página)</option><option value="pagina">Caber em 1 página por aba</option></select></div>
+      </div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-top:12px;">
+        <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;margin:0;font-size:12.5px;"><input type="checkbox" id="relXRepetir" checked onchange="relXSalvar()"> Repetir cabeçalho (carga/placa e títulos) em cada página</label>
+        <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;margin:0;font-size:12.5px;"><input type="checkbox" id="relXRodape" checked onchange="relXSalvar()"> Rodapé com carga/placa e “Página x de y”</label>
+        <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;margin:0;font-size:12.5px;"><input type="checkbox" id="relXCentro" checked onchange="relXSalvar()"> Centralizar na página</label>
+        <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;margin:0;font-size:12.5px;"><input type="checkbox" id="relXGrade" checked onchange="relXSalvar()"> Ocultar linhas de grade na tela</label>
+        <button class="small" onclick="relXRestaurar(true)">Restaurar padrão</button>
+      </div>
+    </details>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="primary" onclick="relImprimir()">🖨 Imprimir / salvar PDF</button>
       <button class="primary" onclick="relBaixarWord()">⬇ Baixar Word (.docx)</button>
-      <button class="primary" onclick="relBaixarExcel()">⬇ Baixar Excel (.xlsx)</button>
+      <button class="primary" onclick="relBaixarExcel('abas')" title="Cada placa numa aba do Excel, pronta para imprimir individualmente">⬇ Excel — uma aba por placa</button>
+      <button class="primary" onclick="relBaixarExcel('unica')" title="Todas as cargas numa planilha só, uma por página">⬇ Excel — planilha única</button>
       <button class="danger" onclick="relLimpar()">Remover arquivos</button>
     </div>
     <div class="desc" style="margin-top:8px;">Uma carga por folha A4, na ordem das cargas. Em “Imprimir / salvar PDF” escolha a impressora, ou “Salvar como PDF”, na janela que abrir. O Word e o Excel saem prontos para imprimir ou ajustar.</div>
@@ -5406,33 +5426,77 @@ async function relGerarDocx(folhas, dataPadrao){
   zip.file('word/document.xml',doc);
   return zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
 }
-/* Excel: uma planilha só, um bloco por carga, com quebra de página entre as cargas (A4 retrato, ajustado à largura) */
-async function relGerarXlsx(folhas, dataPadrao){
+/* Excel: duas formas de saída, ambas com a formatação escolhida no painel "Formatação do Excel":
+   · modo 'abas'  → UMA ABA POR PLACA (cada aba é uma folha pronta para imprimir sozinha)
+   · modo 'unica' → uma planilha só, um bloco por carga, com quebra de página entre as cargas */
+function relXOpts(){
+  const v=(id,d)=>{ const e=document.getElementById(id); return e?e.value:d; }, c=(id,d)=>{ const e=document.getElementById(id); return e?!!e.checked:d; };
+  return { nome:v('relXNome','carga_placa'), papel:parseInt(v('relXPapel','9'),10)||9, ori:v('relXOri','portrait')==='landscape'?'landscape':'portrait',
+    marg:v('relXMarg','normal'), fonte:parseInt(v('relXFonte','11'),10)||11, ajuste:v('relXAjuste','largura'),
+    repetir:c('relXRepetir',true), rodape:c('relXRodape',true), centro:c('relXCentro',true), grade:c('relXGrade',true) };
+}
+const REL_X_IDS=['relXNome','relXPapel','relXOri','relXMarg','relXFonte','relXAjuste','relXRepetir','relXRodape','relXCentro','relXGrade'];
+function relXSalvar(){
+  try{ const o={}; REL_X_IDS.forEach(id=>{ const e=document.getElementById(id); if(e) o[id]=(e.type==='checkbox')?e.checked:e.value; }); localStorage.setItem('relXlsxOpts',JSON.stringify(o)); }catch(e){}
+}
+function relXRestaurar(salvar){
+  const pad={relXNome:'carga_placa',relXPapel:'9',relXOri:'portrait',relXMarg:'normal',relXFonte:'11',relXAjuste:'largura',relXRepetir:true,relXRodape:true,relXCentro:true,relXGrade:true};
+  REL_X_IDS.forEach(id=>{ const e=document.getElementById(id); if(!e) return; if(e.type==='checkbox') e.checked=pad[id]; else e.value=pad[id]; });
+  if(salvar) relXSalvar();
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  try{ const o=JSON.parse(localStorage.getItem('relXlsxOpts')||'null'); if(o) REL_X_IDS.forEach(id=>{ const e=document.getElementById(id); if(!e||o[id]===undefined) return; if(e.type==='checkbox') e.checked=!!o[id]; else e.value=o[id]; }); }catch(e){}
+});
+function relXNomeAba(f,o,usados){
+  const placa=String(f.placa||'').trim(), n=f.n==null?'':String(f.n);
+  let b = o.nome==='placa' ? placa : (o.nome==='placa_carga' ? (n?placa+' - C'+n:placa) : (n?n+' - '+placa:placa));
+  b=b.replace(/[\\\/?*\[\]:]/g,'').replace(/^'+|'+$/g,'').trim().slice(0,31)||'Folha';
+  let nm=b, k=2; while(usados[nm.toLowerCase()]){ const suf=' ('+k+')'; nm=b.slice(0,31-suf.length)+suf; k++; }
+  usados[nm.toLowerCase()]=1; return nm;
+}
+async function relGerarXlsx(folhas, dataPadrao, modo, o){
+  o=o||relXOpts(); modo=(modo==='unica')?'unica':'abas';
   const esc=s=>String(s==null?'':s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const col='ABCDE';
+  const col='ABCDE', land=o.ori==='landscape', F=o.fonte;
+  const W = land ? [14,11,50,50,14] : [14,11,36,36,12];
+  const M = ({estreita:[0.25,0.4], normal:[0.4,0.5], larga:[0.75,0.9]})[o.marg] || [0.4,0.5];
   const str=(c,r,t,st)=> String(t)==='' ? `<c r="${c}${r}" s="${st}"/>` : `<c r="${c}${r}" s="${st}" t="inlineStr"><is><t xml:space="preserve">${esc(t)}</t></is></c>`;
   const num=(c,r,v,st)=>`<c r="${c}${r}" s="${st}"><v>${v}</v></c>`;
-  let rows='', merges=[], breaks=[], r=1;
-  folhas.forEach((f,i)=>{
-    const data=f.data||dataPadrao||'';
-    rows+=`<row r="${r}" ht="22" customHeight="1">${str('A',r,data+'     CARGA: '+(f.n==null?'—':f.n),3)}${str('B',r,'',3)}${str('C',r,'',3)}${str('D',r,'PLACA: '+f.placa,4)}${str('E',r,'',4)}</row>`;
-    merges.push(`A${r}:C${r}`,`D${r}:E${r}`); r++;
-    rows+=`<row r="${r}" ht="20" customHeight="1">${['SEQ. ENTREGA','NF','NOME CLIENTE','ENDEREÇO','CEP'].map((t,k)=>str(col[k],r,t,1)).join('')}</row>`; r++;
-    f.rows.forEach(x=>{
-      rows+=`<row r="${r}">${x.seq===99999?str('A',r,'',2):num('A',r,x.seq,2)}${str('B',r,x.nf,2)}${str('C',r,x.nome,2)}${str('D',r,x.end,2)}${str('E',r,x.cep,2)}</row>`; r++;
+  const htT=Math.round((F+3)*1.7), htH=Math.round(F*1.8), htD=Math.round(F*1.65);
+  /* uma worksheet com um ou mais blocos (folhas) */
+  const montar=(grupo, primeira, nomeAba)=>{
+    let rows='', merges=[], breaks=[], r=1;
+    grupo.forEach((f,i)=>{
+      const data=f.data||dataPadrao||'';
+      rows+=`<row r="${r}" ht="${htT}" customHeight="1">${str('A',r,data+'     CARGA: '+(f.n==null?'—':f.n),3)}${str('B',r,'',3)}${str('C',r,'',3)}${str('D',r,'PLACA: '+f.placa,4)}${str('E',r,'',4)}</row>`;
+      merges.push(`A${r}:C${r}`,`D${r}:E${r}`); r++;
+      rows+=`<row r="${r}" ht="${htH}" customHeight="1">${['SEQ. ENTREGA','NF','NOME CLIENTE','ENDEREÇO','CEP'].map((t,k)=>str(col[k],r,t,1)).join('')}</row>`; r++;
+      f.rows.forEach(x=>{
+        rows+=`<row r="${r}">${x.seq===99999?str('A',r,'',2):num('A',r,x.seq,2)}${str('B',r,x.nf,2)}${str('C',r,x.nome,2)}${str('D',r,x.end,2)}${str('E',r,x.cep,2)}</row>`; r++;
+      });
+      if(i<grupo.length-1) breaks.push(r-1);
     });
-    if(i<folhas.length-1) breaks.push(r-1);
-  });
-  const last=r-1;
-  const sheet=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:E${last}"/><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="18"/>`
-    + `<cols><col min="1" max="1" width="14" customWidth="1"/><col min="2" max="2" width="11" customWidth="1"/><col min="3" max="3" width="36" customWidth="1"/><col min="4" max="4" width="36" customWidth="1"/><col min="5" max="5" width="12" customWidth="1"/></cols>`
-    + `<sheetData>${rows}</sheetData>`
-    + (merges.length?`<mergeCells count="${merges.length}">${merges.map(m=>`<mergeCell ref="${m}"/>`).join('')}</mergeCells>`:'')
-    + `<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/>`
-    + (breaks.length?`<rowBreaks count="${breaks.length}" manualBreakCount="${breaks.length}">${breaks.map(b=>`<brk id="${b}" max="16383" man="1"/>`).join('')}</rowBreaks>`:'')
-    + `</worksheet>`;
+    const last=r-1, umaPag = (modo==='abas' && o.ajuste==='pagina');
+    let rod='';
+    if(o.rodape){ const g=grupo[0]; rod = modo==='abas'
+        ? `<headerFooter><oddFooter>&amp;L&amp;9${esc('CARGA '+(g.n==null?'—':g.n)+' · '+g.placa)}&amp;R&amp;9Página &amp;P de &amp;N</oddFooter></headerFooter>`
+        : `<headerFooter><oddFooter>&amp;C&amp;9Página &amp;P de &amp;N</oddFooter></headerFooter>`; }
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:E${last}"/>`
+      + `<sheetViews><sheetView${o.grade?' showGridLines="0"':''}${primeira?' tabSelected="1"':''} workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="${htD}"/>`
+      + `<cols>${W.map((w,k)=>`<col min="${k+1}" max="${k+1}" width="${w}" customWidth="1"/>`).join('')}</cols>`
+      + `<sheetData>${rows}</sheetData>`
+      + (merges.length?`<mergeCells count="${merges.length}">${merges.map(m=>`<mergeCell ref="${m}"/>`).join('')}</mergeCells>`:'')
+      + (o.centro?`<printOptions horizontalCentered="1"/>`:'')
+      + `<pageMargins left="${M[0]}" right="${M[0]}" top="${M[1]}" bottom="${M[1]}" header="0.3" footer="0.3"/>`
+      + `<pageSetup paperSize="${o.papel}" orientation="${o.ori}" fitToWidth="1" fitToHeight="${umaPag?1:0}"/>`
+      + rod
+      + (breaks.length?`<rowBreaks count="${breaks.length}" manualBreakCount="${breaks.length}">${breaks.map(b=>`<brk id="${b}" max="16383" man="1"/>`).join('')}</rowBreaks>`:'')
+      + `</worksheet>`;
+  };
+  const grupos = modo==='abas' ? folhas.map(f=>[f]) : [folhas];
+  const usados={}, nomes = modo==='abas' ? folhas.map(f=>relXNomeAba(f,o,usados)) : ['Relação de Entrega'];
   const styles=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`
-    + `<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font></fonts>`
+    + `<fonts count="3"><font><sz val="${F}"/><name val="Calibri"/></font><font><b/><sz val="${F}"/><name val="Calibri"/></font><font><b/><sz val="${F+3}"/><name val="Calibri"/></font></fonts>`
     + `<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFA6A6A6"/><bgColor indexed="64"/></patternFill></fill></fills>`
     + `<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FF000000"/></left><right style="thin"><color rgb="FF000000"/></right><top style="thin"><color rgb="FF000000"/></top><bottom style="thin"><color rgb="FF000000"/></bottom><diagonal/></border></borders>`
     + `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>`
@@ -5442,13 +5506,22 @@ async function relGerarXlsx(folhas, dataPadrao){
     + `<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>`
     + `<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf></cellXfs>`
     + `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+  const H='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>', NS='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const n=grupos.length;
   const zip=new JSZip();
-  zip.file('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>');
-  zip.file('_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
-  zip.file('xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Relação de Entrega" sheetId="1" r:id="rId1"/></sheets></workbook>');
-  zip.file('xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+  zip.file('[Content_Types].xml',H+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+    + grupos.map((g,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')
+    + '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>');
+  zip.file('_rels/.rels',H+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="'+NS+'/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+  const titulos = (modo==='abas' && o.repetir)
+    ? '<definedNames>'+nomes.map((nm,i)=>`<definedName name="_xlnm.Print_Titles" localSheetId="${i}">'${esc(nm).replace(/'/g,"''")}'!$1:$2</definedName>`).join('')+'</definedNames>' : '';
+  zip.file('xl/workbook.xml',H+'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="'+NS+'"><sheets>'
+    + nomes.map((nm,i)=>`<sheet name="${esc(nm).replace(/"/g,'&quot;')}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('') + '</sheets>'+titulos+'</workbook>');
+  zip.file('xl/_rels/workbook.xml.rels',H+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + grupos.map((g,i)=>`<Relationship Id="rId${i+1}" Type="${NS}/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')
+    + `<Relationship Id="rId${n+1}" Type="${NS}/styles" Target="styles.xml"/></Relationships>`);
   zip.file('xl/styles.xml',styles);
-  zip.file('xl/worksheets/sheet1.xml',sheet);
+  grupos.forEach((g,i)=>zip.file(`xl/worksheets/sheet${i+1}.xml`, montar(g,i===0,nomes[i])));
   return zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
 }
 function relNomeArq(fl,ext){
@@ -5462,12 +5535,15 @@ async function relBaixarWord(){
   bkBaixar(blob,relNomeArq(fl,'docx'));
   toast(fl.length+' folha(s) no Word, em ordem de carga — '+fl.reduce((s,f)=>s+f.rows.length,0)+' entrega(s).','ok');
 }
-async function relBaixarExcel(){
+async function relBaixarExcel(modo){
+  modo = (modo==='unica') ? 'unica' : 'abas';
   const fl=relFolhasParaSaida(); if(!fl.length){ toast('Nenhuma carga marcada.','err'); return; }
   if(typeof JSZip==='undefined'){ toast('Biblioteca de ZIP não carregou (verifique a internet).','err'); return; }
-  const blob=await relGerarXlsx(fl,protoDataOperacao());
+  relXSalvar();
+  const blob=await relGerarXlsx(fl,protoDataOperacao(),modo,relXOpts());
   bkBaixar(blob,relNomeArq(fl,'xlsx'));
-  toast(fl.length+' carga(s) no Excel, uma por página, em ordem de carga — '+fl.reduce((s,f)=>s+f.rows.length,0)+' entrega(s).','ok');
+  const ent=fl.reduce((s,f)=>s+f.rows.length,0);
+  toast(modo==='abas' ? fl.length+' aba(s) no Excel, uma por placa — '+ent+' entrega(s).' : fl.length+' carga(s) numa planilha só, uma por página — '+ent+' entrega(s).','ok');
 }
 
 /* =========================================================
