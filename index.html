@@ -35,7 +35,7 @@
   .topbar{
     display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
     padding:8px 28px;background:linear-gradient(180deg,var(--bg-1),var(--bg-0));
-    border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;
+    border-bottom:1px solid var(--line);position:relative;z-index:50;
     flex-wrap:wrap;gap:12px;
   }
   .brand{display:flex;align-items:center;gap:12px;justify-self:start;}
@@ -436,6 +436,12 @@
 
   /* ===== ajuste fino do cabeçalho (igual à imagem de referência) — animações mantidas ===== */
   .topbar{ padding-top:11px; padding-bottom:11px; }
+
+  /* ===== Navegação fixa: banner + abas + sub-abas ficam parados; só o conteúdo da aba rola ===== */
+  #navFixo{ position:sticky; top:0; z-index:50; background:var(--bg-0); box-shadow:0 6px 14px rgba(0,0,0,.35); }
+  #navFixo .subtabs.show{ padding-bottom:10px; border-bottom:1px solid var(--line); }
+  html{ scroll-padding-top:calc(var(--topbar-h,0px) + 8px); }   /* scrollIntoView não esconde conteúdo atrás da barra fixa */
+  @media print{ #navFixo{ position:static; box-shadow:none; } }
   .brand .logo-img{ width:102px; height:94px; }
   .top-center h1{ font-weight:900; letter-spacing:.3px; }
   .hdr-line path{ stroke:#25a9db; stroke-width:1.9; }
@@ -485,6 +491,7 @@
 
 <div id="appContent">
 
+<div id="navFixo">
 <div class="topbar">
   <div class="hdr-fx" aria-hidden="true"><div class="hdr-diag hdr-diag-l"></div><div class="hdr-diag hdr-diag-r"></div><svg class="hdr-line hdr-line-l" viewBox="0 0 300 24" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="dLgL" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#22d3ee" stop-opacity="0"/><stop offset=".5" stop-color="#22d3ee" stop-opacity=".55"/><stop offset="1" stop-color="#38bdf8" stop-opacity=".95"/></linearGradient><radialGradient id="dSg"><stop offset="0" stop-color="#fff"/><stop offset=".25" stop-color="#bff3ff" stop-opacity=".95"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></radialGradient></defs><path d="M0 22 L180 22 L202 2 L296 2" fill="none" stroke="url(#dLgL)" stroke-width="1.6"/><circle cx="297" cy="2" r="4" fill="#22d3ee" class="hdr-dot"/><g class="hdr-spark hdr-spark-l"><circle cx="0" cy="22" r="10" fill="url(#dSg)"/><circle cx="0" cy="22" r="2.2" fill="#fff"/></g><g class="hdr-spark hdr-spark-l hdr-spark2"><circle cx="0" cy="22" r="8" fill="url(#dSg)"/><circle cx="0" cy="22" r="1.7" fill="#fff"/></g></svg><svg class="hdr-line hdr-line-r" viewBox="0 0 330 40" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="dLgR" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#38bdf8" stop-opacity=".95"/><stop offset=".6" stop-color="#22d3ee" stop-opacity=".6"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></linearGradient></defs><path d="M0 4 L60 4 L103 31 L330 31" fill="none" stroke="url(#dLgR)" stroke-width="1.6"/><circle cx="1" cy="4" r="4" fill="#22d3ee" class="hdr-dot"/><circle cx="103" cy="31" r="3.2" fill="#22d3ee" class="hdr-dot"/><g class="hdr-spark hdr-spark-r"><circle cx="0" cy="4" r="10" fill="url(#dSg)"/><circle cx="0" cy="4" r="2.2" fill="#fff"/></g><g class="hdr-spark hdr-spark-r hdr-spark2"><circle cx="0" cy="4" r="8" fill="url(#dSg)"/><circle cx="0" cy="4" r="1.7" fill="#fff"/></g></svg><div class="hdr-sweep"></div></div>
   <div class="brand">
@@ -527,6 +534,7 @@
   <button class="subtab-btn" data-sub="backup" onclick="switchTab('backup')">Backup &amp; Upload</button>
   <button class="subtab-btn" data-sub="abas" onclick="switchTab('abas')">Abas Visíveis</button>
 </div>
+</div><!-- /#navFixo -->
 
 <!-- ================= TAB 1: PARAMETROS ================= -->
 <div class="view active" id="view-parametros">
@@ -1587,8 +1595,10 @@ function switchTab(tab){
   document.getElementById('subtabsConfig').classList.toggle('show', emCfg);
   document.querySelectorAll('.subtab-btn').forEach(b=>b.classList.toggle('active', b.dataset.sub===tab));
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===(emCfg?'config':tab)));
+  const _alvo = document.getElementById('view-'+tab), _mudou = !_alvo.classList.contains('active');
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-  document.getElementById('view-'+tab).classList.add('active');
+  _alvo.classList.add('active');
+  if(_mudou) window.scrollTo(0,0);   // abas ficam fixas: ao trocar de aba a nova começa do topo
   if(tab==='parametros') renderParametros();
   if(tab==='cadastro') renderCadastro();
   if(tab==='upload') { renderConsolidado(); renderOrfaos(); try{ renderFluxo(); }catch(e){} }
@@ -3686,11 +3696,20 @@ function pAplicarFixar(){
   if(panel) panel.classList.toggle('pf-sticky', !on || on.checked);
 }
 function pAjustarOffsetFixo(){
-  const t = document.querySelector('.topbar');
-  if(t) document.documentElement.style.setProperty('--topbar-h', t.offsetHeight+'px');
+  /* --topbar-h = altura de TODO o bloco fixo (banner + abas + sub-abas). Só grava se > 0: enquanto a tela de login
+     está aberta o app fica oculto e a altura mediria 0. */
+  const t = document.getElementById('navFixo') || document.querySelector('.topbar');
+  if(!t) return;
+  const h = t.getBoundingClientRect().height;
+  if(h>0) document.documentElement.style.setProperty('--topbar-h', h+'px');
 }
 window.addEventListener('resize', pAjustarOffsetFixo);
-document.addEventListener('DOMContentLoaded', ()=>{ pAjustarOffsetFixo(); pAplicarFixar(); setTimeout(pAjustarOffsetFixo,300); });
+document.addEventListener('DOMContentLoaded', ()=>{
+  pAjustarOffsetFixo(); pAplicarFixar(); setTimeout(pAjustarOffsetFixo,300);
+  /* re-mede sozinho quando o bloco muda de altura: login, sub-abas de Configurações aparecendo/sumindo, quebra de linha das abas */
+  const nav = document.getElementById('navFixo');
+  if(nav && typeof ResizeObserver!=='undefined') new ResizeObserver(pAjustarOffsetFixo).observe(nav);
+});
 
 function mxOndasMax(){ return Math.max(5, ...STATE.alocacao.map(a=>a.onda||0)); }
 function mxDocasLinhas(){
@@ -5418,13 +5437,26 @@ function relIntervalo(){
 function relFolhasParaSaida(){
   return relModelo(!!(document.getElementById('relIncSem')||{}).checked).folhas.filter(f=>!REL.off[f.pk]);
 }
+/* Impressão sem cabeçalho/rodapé do navegador (URL do site, data, título): o navegador só imprime esses textos na margem da página.
+   Por isso a página é impressa com margem 0 e as margens "de verdade" ficam dentro do conteúdo: uma linha-espaçador no topo
+   (repete em cada página, junto com carga/placa e títulos) e outra no rodapé. */
+function relFolhaHtmlImp(f, dataPadrao){
+  const e=pEsc, data=f.data||dataPadrao||'';
+  const linhas=f.rows.map(r=>`<tr><td>${r.seq===99999?'':r.seq}</td><td>${e(r.nf)}</td><td>${e(r.nome)}</td><td>${e(r.end)}</td><td>${e(r.cep)}</td></tr>`).join('');
+  return `<div class="rel-sheet pgw"><table class="rel-tb"><colgroup><col style="width:13%"><col style="width:9%"><col style="width:35%"><col style="width:32%"><col style="width:11%"></colgroup>`
+    + `<thead><tr class="sp"><td colspan="5"></td></tr>`
+    + `<tr class="cb"><td colspan="5"><div class="rel-cab"><span><b>${e(data)}</b><b>CARGA: ${f.n==null?'—':f.n}</b></span><b>PLACA: ${e(f.placa)}</b></div></td></tr>`
+    + `<tr><th>SEQ. ENTREGA</th><th>NF</th><th>NOME CLIENTE</th><th>ENDEREÇO</th><th>CEP</th></tr></thead>`
+    + `<tfoot><tr class="sp"><td colspan="5"></td></tr></tfoot><tbody>${linhas}</tbody></table></div>`;
+}
 function relImprimir(){
   const fl=relFolhasParaSaida(); if(!fl.length){ toast('Nenhuma carga marcada para imprimir.','err'); return; }
   const dp=protoDataOperacao();
-  const html='<!doctype html><html><head><meta charset="utf-8"><title>Relação de Entrega</title><style>'+REL_CSS
-    + '@page{size:A4 portrait;margin:12mm 14mm}html,body{margin:0;background:#fff}.rel-sheet{padding:0;page-break-after:always}.rel-sheet:last-child{page-break-after:auto}'
-    + '.rel-sheet .rel-cab{font-size:12pt}.rel-sheet .rel-tb th{font-size:9.5pt}.rel-sheet .rel-tb td{font-size:10.5pt}.rel-sheet .rel-tb tr{page-break-inside:avoid}.rel-sheet .rel-tb thead{display:table-header-group}'
-    + '</style></head><body>'+fl.map(f=>relFolhaHtml(f,dp)).join('')+'</body></html>';
+  const html='<!doctype html><html><head><meta charset="utf-8"><title> </title><style>'+REL_CSS
+    + '@page{size:A4 portrait;margin:0}html,body{margin:0;background:#fff}.rel-sheet{padding:0 14mm;page-break-after:always;break-after:page}.rel-sheet:last-child{page-break-after:auto;break-after:auto}'
+    + '.rel-sheet .rel-cab{font-size:12pt}.rel-sheet .rel-tb th{font-size:9.5pt}.rel-sheet .rel-tb td{font-size:10.5pt}.rel-sheet .rel-tb tr{page-break-inside:avoid}.rel-sheet .rel-tb thead{display:table-header-group}.rel-sheet .rel-tb tfoot{display:table-footer-group}'
+    + '.rel-sheet .rel-tb tr.sp td,.rel-sheet .rel-tb tr.cb td{border:0;padding:0;background:transparent}.rel-sheet .rel-tb tr.sp td{height:12mm}.rel-sheet .rel-tb tr.cb td{text-align:left;padding:0 0 5px}'
+    + '</style></head><body>'+fl.map(f=>relFolhaHtmlImp(f,dp)).join('')+'</body></html>';
   const fr=document.createElement('iframe'); fr.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
   document.body.appendChild(fr);
   const d=fr.contentWindow.document; d.open(); d.write(html); d.close();
@@ -7059,16 +7091,17 @@ window.kcImprimir = function(){
   if(!ROWS.length){ say('Nada para imprimir.','err'); return; }
   var w = [8,13,24,8,6,6,12,10,4,9];
   var html = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Kit coletas</title><style>'+
-    '@page{size:A4 portrait;margin:10mm}html,body{margin:0;padding:0;background:#fff;color:#000;font-family:Calibri,Arial,sans-serif}'+
+    '@page{size:A4 portrait;margin:0}html,body{margin:0;padding:0 10mm;background:#fff;color:#000;font-family:Calibri,Arial,sans-serif}'+
     '.dt{font-size:15px;font-weight:700;margin:0 0 4px 0}'+
     'table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:10.5px}'+
     'th,td{border:1px solid #000;padding:4px 3px;text-align:center;vertical-align:middle;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
-    'th{font-weight:700;background:#FABF8F}tr{page-break-inside:avoid}thead{display:table-header-group}</style></head><body>'+
-    '<div class="dt">'+esc(dataForm())+'</div><table><colgroup>'+
-    w.map(function(x){ return '<col style="width:'+x+'%">'; }).join('')+'</colgroup><thead><tr>'+
+    'th{font-weight:700;background:#FABF8F}tr{page-break-inside:avoid}thead{display:table-header-group}tfoot{display:table-footer-group}'+
+    'tr.sp td,tr.cb td{border:0;padding:0;background:transparent}tr.sp td{height:10mm}tr.cb td{text-align:left}</style></head><body>'+
+    '<table><colgroup>'+
+    w.map(function(x){ return '<col style="width:'+x+'%">'; }).join('')+'</colgroup><thead><tr class="sp"><td colspan="'+w.length+'"></td></tr><tr class="cb"><td colspan="'+w.length+'"><div class="dt">'+esc(dataForm())+'</div></td></tr><tr>'
     COLS.map(function(c){ return '<th>'+esc(c)+'</th>'; }).join('')+'</tr></thead><tbody>'+
     ROWS.map(function(r){ var a = linhaArr(r); return '<tr>'+a.map(function(v){ return '<td>'+esc(v)+'</td>'; }).join('')+'</tr>'; }).join('')+
-    '</tbody></table></body></html>';
+    '</tbody><tfoot><tr class="sp"><td colspan="'+w.length+'"></td></tr></tfoot></table></body></html>';
   var win = null; try{ win = window.open('','_blank'); }catch(e){}
   if(win){ win.document.open(); win.document.write(html); win.document.close(); win.focus(); setTimeout(function(){ win.print(); }, 500); }
   else{
