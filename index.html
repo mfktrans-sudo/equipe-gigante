@@ -7173,7 +7173,7 @@ function linhaArr(r){ return [numOuTxt(r.orm), '', r.desc, r.placa, r.carga, num
 function dataForm(){ return dataBR(S.data) || dataBR(hojeISO()); }
 /* ---- Excel no layout do relatório (data em A1 em negrito, cabeçalho laranja, bordas, tudo centralizado) ----
    O SheetJS da versão gratuita não grava estilos; por isso o .xlsx é montado direto (XML + JSZip). */
-var KC_LARG = [11,26,36,11,9,9,15,15,6,14];   /* larguras (caracteres) das 10 colunas */
+var KC_LARG = [11,9,36,11,9,9,15,15,6,14];   /* larguras (caracteres) das 10 colunas */
 function kcColL(i){ return String.fromCharCode(65+i); }
 function kcX(v){ return String(v==null?'':v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function kcCel(ref, v, st){
@@ -7235,7 +7235,7 @@ window.kcBaixar = async function(){
 };
 window.kcImprimir = function(){
   if(!ROWS.length){ say('Nada para imprimir.','err'); return; }
-  var w = [8,13,24,8,6,6,12,10,4,9];
+  var w = [8,8,29,8,6,6,12,10,4,9];
   var html = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Kit coletas</title><style>'+
     '@page{size:A4 portrait;margin:0}html,body{margin:0;padding:0 10mm;background:#fff;color:#000;font-family:Calibri,Arial,sans-serif}'+
     '.dt{font-size:15px;font-weight:700;margin:0 0 4px 0}'+
