@@ -460,6 +460,32 @@
   @media (max-width:640px){
     #watermark{font-size:9.5px;right:8px;bottom:6px;}
   }
+
+  /* ===== Produtividade ===== */
+  .pr-top{display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:space-between;}
+  .pr-sub{color:var(--text-2);font-size:12.5px;margin-top:4px;}
+  .pr-files{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+  .pr-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px;}
+  .pr-tabs button{border-radius:999px;padding:8px 16px;font-weight:600;}
+  .pr-tabs button.on{background:var(--amber);border-color:var(--amber);color:#1a1200;}
+  .pr-tabs button .tab-mnt{margin-left:6px;}
+  .pr-fil{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;align-items:end;}
+  .pr-fil label{display:block;font-size:11px;color:var(--text-2);margin-bottom:4px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;}
+  .pr-fil input:not([type=checkbox]),.pr-fil select{width:100%;}
+  .pr-chips{display:flex;gap:6px;flex-wrap:wrap;}
+  .pr-chip{border-radius:999px;padding:5px 12px;font-size:12px;}
+  .pr-chip.on{background:var(--teal-dim);border-color:var(--teal);color:var(--teal);}
+  .pr-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px;}
+  .pr-blk h3{margin:0;font-size:16px;}
+  .pr-leg{display:flex;gap:14px;margin:8px 0 4px;font-size:12px;color:var(--text-1);}
+  .pr-leg span{cursor:pointer;display:inline-flex;align-items:center;gap:6px;user-select:none;}
+  .pr-leg i{width:10px;height:10px;border-radius:3px;display:inline-block;}
+  .pr-leg .off{opacity:.35;text-decoration:line-through;}
+  .pr-chart{overflow-x:auto;padding-bottom:6px;margin-bottom:12px;}
+  .pr-rk{display:inline-flex;width:22px;height:22px;border-radius:50%;align-items:center;justify-content:center;font-size:11px;font-weight:700;background:var(--bg-3);color:var(--text-1);}
+  .pr-rk.r1{background:#F5A623;color:#1a1200;} .pr-rk.r2{background:#AEBBD6;color:#0D1526;} .pr-rk.r3{background:#B5733A;color:#fff;}
+  .pr-bar{height:6px;background:var(--bg-3);border-radius:3px;min-width:90px;overflow:hidden;} .pr-bar b{display:block;height:100%;background:var(--amber);}
+  th.pr-sort{cursor:pointer;} th.pr-sort:hover{color:var(--text-0);}
 </style>
 </head>
 <body>
@@ -523,7 +549,7 @@
   <button class="tab-btn" data-tab="saida" onclick="switchTab('saida')">6 · Saída de Veículos CD</button>
   <button class="tab-btn" data-tab="relentrega" onclick="switchTab('relentrega')">7 · Relação de Entrega</button>
   <button class="tab-btn" data-tab="ondasfora" onclick="switchTab('ondasfora')">8 · Ondas Fora da doca</button>
-  <button class="tab-btn" data-tab="produtividade" onclick="switchTab('produtividade')">9 · Produtividade<span class="tab-mnt">em manutenção</span></button>
+  <button class="tab-btn" data-tab="produtividade" onclick="switchTab('produtividade')">9 · Produtividade</button>
   <button class="tab-btn" data-tab="terceiros" onclick="switchTab('terceiros')">10 · Relação de Terceiros<span class="tab-mnt">em manutenção</span></button>
   <span class="tab-sep" aria-hidden="true"></span>
   <button class="tab-btn active" data-tab="config" onclick="switchTab('config')">Configurações</button>
@@ -1146,15 +1172,38 @@
 </div>
 
 <div class="view" id="view-produtividade">
-  <div class="panel mnt-box">
-    <div class="mnt-ico">📈</div>
-    <h2>Produtividade</h2>
-    <span class="mnt-tag">🛠 Em manutenção</span>
-    <p>Esta aba ainda será criada. Assim que estiver pronta ela passa a funcionar aqui, na mesma posição da sequência da operação.</p>
-    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:6px;">
-      <div class="panel" style="min-width:220px;margin:0;"><h2>9.1 · Separação</h2><span class="mnt-tag">A iniciar</span></div>
-      <div class="panel" style="min-width:220px;margin:0;"><h2>9.2 · Carregamento</h2><span class="mnt-tag">A iniciar</span></div>
+  <div class="panel">
+    <div class="pr-top">
+      <div><h2 style="margin:0">Produtividade</h2>
+        <div class="pr-sub" id="prStatus">Carregue o relatório de produtividade (Separação e Expedição) para montar os rankings.</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input type="file" id="prFile" accept=".xls,.xlsx,.txt,.csv,.tsv" multiple style="display:none" onchange="prodAdd(this.files);this.value='';">
+        <button class="primary" onclick="document.getElementById('prFile').click()">⬆ Carregar relatório</button>
+        <button onclick="prodExcel()">⬇ Excel do ranking</button>
+        <button class="danger" onclick="prodLimpar()">Limpar dados</button>
+      </div>
     </div>
+    <div class="pr-files" id="prFiles"></div>
+  </div>
+  <div class="pr-tabs" id="prTabs"></div>
+  <div id="prMov" class="panel" style="display:none"><div class="empty"><b>Movimentação (Operador)</b><br>Armazenagem, Ressuprimento e Transferência — será configurada em uma próxima etapa, quando o arquivo de origem estiver disponível.</div></div>
+  <div id="prOp">
+    <div class="panel"><div class="pr-fil">
+      <div><label>Período — de</label><input type="date" id="prDe" onchange="PROD.from=this.value;prodRender()"></div>
+      <div><label>até</label><input type="date" id="prAte" onchange="PROD.to=this.value;prodRender()"></div>
+      <div style="grid-column:span 2"><label>Atalhos</label><div class="pr-chips">
+        <button class="small" onclick="prodPer('dia')">Último dia</button><button class="small" onclick="prodPer('sem')">7 dias</button>
+        <button class="small" onclick="prodPer('mes')">Mês</button><button class="small" onclick="prodPer('tudo')">Tudo</button></div></div>
+      <div style="grid-column:span 2"><label>Linha</label><div class="pr-chips" id="prLinhas"></div></div>
+      <div><label>Tipo de operação</label><select id="prTipo" onchange="PROD.tipo=this.value;prodRender()"></select></div>
+      <div><label>Pessoa</label><input id="prQ" placeholder="Nome ou matrícula" oninput="PROD.q=this.value;prodRender()"></div>
+      <div><label>Ordenar por</label><select id="prOrd" onchange="PROD.ui[PROD.op].ord=this.value;prodRender()"></select></div>
+      <div><label>Exibir</label><select id="prTop" onchange="PROD.top=+this.value;prodRender()"><option value="10">Top 10</option><option value="20" selected>Top 20</option><option value="40">Top 40</option><option value="9999">Todos</option></select></div>
+      <div><label style="display:flex;gap:6px;align-items:center;text-transform:none;font-size:12.5px;cursor:pointer"><input type="checkbox" id="prSep" style="width:auto" onchange="PROD.ui[PROD.op].sep=this.checked;prodRender()"> Separar por linha</label>
+        <label style="display:flex;gap:6px;align-items:center;text-transform:none;font-size:12.5px;cursor:pointer;margin-top:6px"><input type="checkbox" id="prFull" style="width:auto" onchange="PROD.full=this.checked;prodRender()"> Nome completo</label></div>
+    </div></div>
+    <div class="pr-kpis" id="prKpis"></div>
+    <div id="prBlocos"></div>
   </div>
 </div>
 
@@ -1611,6 +1660,7 @@ function switchTab(tab){
   if(tab==='protocolo') renderProtocolo();
   if(tab==='ondasfora') renderOndasFora();
   if(tab==='relentrega') renderRelEntrega();
+  if(tab==='produtividade') renderProd();
 }
 
 /* =========================================================
@@ -1627,7 +1677,7 @@ const ABAS_DEF = [
   {id:'saida',         nome:'Saída de Veículos CD',    n:'6'},
   {id:'relentrega',    nome:'Relação de Entrega',      n:'7'},
   {id:'ondasfora',     nome:'Ondas Fora da doca',      n:'8'},
-  {id:'produtividade', nome:'Produtividade',           n:'9', mnt:true},
+  {id:'produtividade', nome:'Produtividade',           n:'9'},
   {id:'terceiros',     nome:'Relação de Terceiros',    n:'10', mnt:true}
 ];
 function abaVisivel(id){
@@ -7403,5 +7453,188 @@ import { getFirestore, doc, getDoc, onSnapshot, setDoc, serverTimestamp }
 })();
 </script>
 
+
+<script>
+/* =========================================================
+   PRODUTIVIDADE (aba 9)
+   Fonte: relatório “Produtividade na Separação e Expedição” (texto separado por TAB ou Excel).
+   Mapeamento (ajustável nas constantes abaixo):
+     Volumes = Qt. Volumes Separados/Conferidos/Carregados · Pré / Tt. Cargas = romaneios distintos · Apanhas = Qt. Endereços Visitados
+     BR = Linha Branca + Refrigeradores · MA = Linha Marrom · LV = Linha Vermelha · demais = Outros
+   ========================================================= */
+const PROD_GRUPOS = {BR:'BR · Branca', MA:'MA · Marrom', LV:'Linha Vermelha', OUT:'Outros'};
+const PROD_OPS = {
+  conf:{nome:'Conferência', ativ:'CONFERENCIA', v:'vc', tit:'Volumes Conferidos', S:[['vol','Volumes','#F5A623'],['pre','Tt. Cargas','#9C8CFF']]},
+  sep :{nome:'Separação', ativ:'SEPARACAO', v:'vs', tit:'Volume e Pré separados', S:[['vol','Volumes','#F5A623'],['pre','Pré','#9C8CFF'],['end','Apanhas','#2FD9B9']]},
+  carr:{nome:'Fechamento de Carga', ativ:'CARREGAMENTO', v:'vl', tit:'Fechamento Pré-Romaneio', S:[['vol','Volumes','#F5A623'],['pre','Total de Pré','#9C8CFF']]}
+};
+const PROD = {rows:[], files:[], op:'sep', hide:new Set(), from:'', to:'', tipo:'', q:'', top:20, full:false, blocos:[], nomes:{},
+  ui:{conf:{g:['BR','MA','LV','OUT'],sep:false,ord:'vol'}, sep:{g:['BR','MA','LV'],sep:true,ord:'vol'}, carr:{g:['BR','MA','LV','OUT'],sep:false,ord:'vol'}}};
+const prNorm = s=>String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+const prNum = x=>{ const v=Number(String(x==null?'':x).replace(/\./g,'').replace(',','.')); return isFinite(v)?v:0; };
+function prGrupo(l){ const n=prNorm(l); return /branca|refriger/.test(n)?'BR':/marrom/.test(n)?'MA':/vermelha/.test(n)?'LV':'OUT'; }
+function prData(x){   // 'dd/mm/yyyy hh:mm' (ou serial Excel) -> 'yyyy-mm-dd'
+  x=String(x||'').trim(); let m=x.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  if(/^\d{5}(\.\d+)?$/.test(x)) return new Date(Math.round((+x-25569)*864e5)).toISOString().slice(0,10);
+  return '';
+}
+function prodParse(linhas, fid){
+  const hi = linhas.findIndex(r=>{ const n=r.map(prNorm); return n.includes('matricula') && n.some(c=>c.startsWith('nome')); });
+  if(hi<0) return {rows:[], erro:'Cabeçalho não encontrado (esperado: Matricula, Nome Funcionario, Atividade…).'};
+  const h = linhas[hi].map(prNorm), col = f=>h.findIndex(f);
+  const C = {ini:col(c=>c.startsWith('data de')), m:col(c=>c==='matricula'), n:col(c=>c.startsWith('nome')), r:col(c=>c.startsWith('romaneio')),
+    e:col(c=>c.includes('enderecos')), p:col(c=>c.includes('paletes')), vs:col(c=>c.includes('volumes separados')), vc:col(c=>c.includes('volumes conferidos')),
+    vl:col(c=>c.includes('volumes carregados')), l:col(c=>c.startsWith('linha de')), t:col(c=>c.includes('tipo de operacao')), a:col(c=>c.startsWith('atividade'))};
+  if([C.ini,C.m,C.n,C.a].some(i=>i<0)) return {rows:[], erro:'Faltam colunas obrigatórias (Data_de, Matricula, Nome Funcionario, Atividade).'};
+  const rows=[]; let ign=0;
+  linhas.slice(hi+1).forEach(c=>{
+    const d=prData(c[C.ini]), a0=prNorm(c[C.a]), m=String(c[C.m]||'').trim();
+    const a = /separ/.test(a0)?'SEPARACAO':/confer/.test(a0)?'CONFERENCIA':/carreg/.test(a0)?'CARREGAMENTO':'';
+    if(!d||!m||!a){ if(c.some(x=>String(x).trim())) ign++; return; }
+    const g=x=>C[x]>=0?c[C[x]]:'';
+    const r={f:fid,d,m,n:String(c[C.n]||'').replace(/\s+/g,' ').trim(),r:String(g('r')).trim(),e:prNum(g('e')),p:prNum(g('p')),vs:prNum(g('vs')),vc:prNum(g('vc')),vl:prNum(g('vl')),
+      g:prGrupo(g('l')),l:String(g('l')).trim(),t:String(g('t')).trim(),a};
+    r.k=[m,c[C.ini],r.r,a,r.l,r.t,r.e,r.p,r.vs,r.vc,r.vl].join('|');
+    rows.push(r);
+  });
+  return {rows, ign};
+}
+async function prodAdd(files){
+  for(const f of Array.from(files||[])){
+    try{
+      const buf=await f.arrayBuffer(), u=new Uint8Array(buf); let linhas;
+      if((u[0]===0x50&&u[1]===0x4B)||(u[0]===0xD0&&u[1]===0xCF)){ const wb=XLSX.read(buf,{type:'array'}); linhas=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:''}); }
+      else linhas=new TextDecoder('windows-1252').decode(buf).split(/\r?\n/).map(l=>l.split('\t'));
+      const fid=Date.now()+Math.floor(Math.random()*1000), res=prodParse(linhas,fid);
+      if(res.erro){ toast(f.name+': '+res.erro,'err'); continue; }
+      const ks=new Set(PROD.rows.map(r=>r.k)); let dup=0;
+      const novas=res.rows.filter(r=>{ if(ks.has(r.k)){dup++;return false;} ks.add(r.k); return true; });
+      PROD.rows=PROD.rows.concat(novas);
+      const ds=novas.map(r=>r.d).sort();
+      PROD.files.push({id:fid,nome:f.name,n:novas.length,de:ds[0]||'',ate:ds[ds.length-1]||''});
+      toast(f.name+': '+novas.length+' registros carregados'+(dup?' ('+dup+' já existiam)':'')+(res.ign?' · '+res.ign+' linhas ignoradas':''),'ok');
+    }catch(e){ console.error(e); toast('Não foi possível ler '+f.name,'err'); }
+  }
+  prodNomes(); prodSalvar(); prodPer('tudo'); renderProd();
+}
+function prodRemFile(id){ PROD.files=PROD.files.filter(f=>f.id!==id); PROD.rows=PROD.rows.filter(r=>r.f!==id); prodNomes(); prodSalvar(); renderProd(); }
+function prodLimpar(){ if(!PROD.rows.length||!confirm('Remover todos os dados de produtividade carregados?')) return; PROD.rows=[]; PROD.files=[]; PROD.nomes={}; prodSalvar(); renderProd(); }
+/* persistência própria (IndexedDB), para não pesar no estado principal da ferramenta */
+function prodIdb(){ return new Promise((ok,er)=>{ const q=indexedDB.open('gdn_prod_db',1); q.onupgradeneeded=()=>q.result.createObjectStore('kv'); q.onsuccess=()=>ok(q.result); q.onerror=()=>er(q.error); }); }
+async function prodSalvar(){ try{ const db=await prodIdb(); db.transaction('kv','readwrite').objectStore('kv').put({rows:PROD.rows,files:PROD.files},'dados'); }catch(e){ console.warn('prod: não salvou',e); } }
+async function prodCarregar(){ try{ const db=await prodIdb(); const q=db.transaction('kv').objectStore('kv').get('dados');
+  q.onsuccess=()=>{ if(q.result){ PROD.rows=q.result.rows||[]; PROD.files=q.result.files||[]; prodNomes(); renderProd(); } }; }catch(e){ console.warn(e); } }
+document.addEventListener('DOMContentLoaded', prodCarregar);
+
+/* nomes curtos: “SIZOEL PEREIRA” -> “Sizoel P.” (se repetir entre pessoas, usa o 2º nome por extenso) */
+function prodNomes(){
+  const full={}; PROD.rows.forEach(r=>{ full[r.m]=r.n; });
+  const part=['DE','DA','DO','DAS','DOS','E','D'], cap=w=>w.charAt(0)+w.slice(1).toLowerCase(), cont={};
+  const ini={}; Object.keys(full).forEach(m=>{
+    const p=full[m].replace(/\./g,' ').split(/\s+/).filter(Boolean), rest=p.slice(1).filter(x=>!part.includes(x.toUpperCase()));
+    ini[m]={c:p.length?cap(p[0])+(rest.length?' '+rest[0][0].toUpperCase()+'.':''):'—', l:p.length?cap(p[0])+(rest.length?' '+cap(rest[0]):''):'—'};
+    cont[ini[m].c]=(cont[ini[m].c]||0)+1; });
+  PROD.nomes={}; Object.keys(full).forEach(m=>{ PROD.nomes[m]={curto:cont[ini[m].c]>1?ini[m].l:ini[m].c, cheio:full[m].split(' ').map(cap).join(' ')}; });
+}
+const prNomeDe = m=>{ const x=PROD.nomes[m]; return x?(PROD.full?x.cheio:x.curto):m; };
+const prFmt = d=>d?d.slice(8,10)+'/'+d.slice(5,7):'';
+function prodPer(t){
+  const ds=PROD.rows.map(r=>r.d).sort(), mx=ds[ds.length-1]||'', mn=ds[0]||'';
+  const sub=(d,n)=>{ const x=new Date(d+'T12:00:00'); x.setDate(x.getDate()-n); return x.toISOString().slice(0,10); };
+  if(t==='tudo'){PROD.from='';PROD.to='';} else if(t==='dia'){PROD.from=PROD.to=mx;} else if(t==='sem'){PROD.from=sub(mx,6);PROD.to=mx;} else if(t==='mes'){PROD.from=mx.slice(0,8)+'01';PROD.to=mx;}
+  const a=document.getElementById('prDe'), b=document.getElementById('prAte'); if(a){a.value=PROD.from;a.min=b.min=mn;a.max=b.max=mx;} if(b) b.value=PROD.to;
+  if(t!=='tudo'||PROD.rows.length) prodRender();
+}
+function prodTab(op){ PROD.op=op; renderProd(); }
+function prodChip(g){ const u=PROD.ui[PROD.op], i=u.g.indexOf(g); if(i>=0) u.g.splice(i,1); else u.g.push(g); renderProd(); }
+function prodLeg(k){ if(PROD.hide.has(k)) PROD.hide.delete(k); else PROD.hide.add(k); prodRender(); }
+function prodOrdClick(k){ PROD.ui[PROD.op].ord=k; prodRender(); }
+
+function renderProd(){
+  const tabs=Object.keys(PROD_OPS).map(k=>`<button class="${PROD.op===k?'on':''}" onclick="prodTab('${k}')">${PROD_OPS[k].nome}</button>`).join('')
+    +`<button class="${PROD.op==='mov'?'on':''}" onclick="prodTab('mov')">Movimentação<span class="tab-mnt">em configuração</span></button>`;
+  document.getElementById('prTabs').innerHTML=tabs;
+  const ds=PROD.rows.map(r=>r.d).sort();
+  document.getElementById('prStatus').textContent = PROD.rows.length
+    ? PROD.rows.length.toLocaleString('pt-BR')+' registros · '+Object.keys(PROD.nomes).length+' pessoas · '+prFmt(ds[0])+'/'+ds[0].slice(0,4)+' a '+prFmt(ds[ds.length-1])+'/'+ds[ds.length-1].slice(0,4)
+    : 'Carregue o relatório de produtividade (Separação e Expedição) para montar os rankings.';
+  document.getElementById('prFiles').innerHTML=PROD.files.map(f=>`<span class="pill">${pEsc(f.nome)} · ${f.n.toLocaleString('pt-BR')}<span class="x" title="Remover este arquivo" onclick="prodRemFile(${f.id})">✕</span></span>`).join('');
+  const mov=PROD.op==='mov';
+  document.getElementById('prMov').style.display=mov?'block':'none'; document.getElementById('prOp').style.display=mov?'none':'block';
+  if(mov) return;
+  const cfg=PROD_OPS[PROD.op], u=PROD.ui[PROD.op];
+  document.getElementById('prLinhas').innerHTML=Object.keys(PROD_GRUPOS).map(g=>`<button class="pr-chip ${u.g.includes(g)?'on':''}" onclick="prodChip('${g}')">${PROD_GRUPOS[g]}</button>`).join('');
+  const tipos=Array.from(new Set(PROD.rows.filter(r=>r.a===cfg.ativ).map(r=>r.t).filter(Boolean))).sort();
+  const st=document.getElementById('prTipo'); st.innerHTML='<option value="">Todos os tipos</option>'+tipos.map(t=>`<option ${t===PROD.tipo?'selected':''}>${pEsc(t)}</option>`).join('');
+  document.getElementById('prOrd').innerHTML=cfg.S.map(s=>`<option value="${s[0]}" ${u.ord===s[0]?'selected':''}>${s[1]}</option>`).join('')+`<option value="nome" ${u.ord==='nome'?'selected':''}>Nome (A–Z)</option>`;
+  document.getElementById('prSep').checked=u.sep; document.getElementById('prFull').checked=PROD.full;
+  prodRender();
+}
+function prodSVG(rows,S){
+  const n=rows.length, sw=17, gw=S.length*(sw+2)+20, L=44, T=24, PH=210, B=n>8?78:34, W=L+n*gw+16, H=T+PH+B;
+  const mx=Math.max(1,...rows.flatMap(r=>S.map(s=>r[s[0]]))), mag=Math.pow(10,Math.floor(Math.log10(mx)));
+  const stp=[1,2,2.5,5,10].map(f=>f*mag).find(x=>mx/x<=5), top=Math.ceil(mx/stp)*stp;
+  let o=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="Segoe UI,Arial,sans-serif">`;
+  for(let v=0;v<=top+1e-9;v+=stp){ const y=T+PH-v/top*PH; o+=`<line x1="${L}" x2="${W-8}" y1="${y}" y2="${y}" stroke="#26365A"/><text x="${L-6}" y="${y+4}" font-size="10" fill="#71809E" text-anchor="end">${+v.toFixed(1)}</text>`; }
+  rows.forEach((r,i)=>{
+    const x0=L+i*gw+10;
+    S.forEach((s,j)=>{ const val=r[s[0]], h=val/top*PH, x=x0+j*(sw+2), y=T+PH-h;
+      o+=`<rect x="${x}" y="${y}" width="${sw}" height="${val?Math.max(h,1):0}" rx="3" fill="${s[2]}"><title>${pEsc(r.nc)} · ${s[1]}: ${val}</title></rect>`;
+      if(val) o+=`<text x="${x+sw/2}" y="${y-3}" font-size="9" fill="#AEBBD6" text-anchor="middle">${val}</text>`; });
+    const cx=x0+S.length*(sw+2)/2, ty=T+PH+14;
+    o+= n>8 ? `<text transform="translate(${cx+4},${ty}) rotate(-40)" font-size="11" fill="#AEBBD6" text-anchor="end">${pEsc(r.nc)}</text>` : `<text x="${cx}" y="${ty}" font-size="11" fill="#AEBBD6" text-anchor="middle">${pEsc(r.nc)}</text>`;
+  });
+  return o+'</svg>';
+}
+function prodRender(){
+  if(PROD.op==='mov') return;
+  const cfg=PROD_OPS[PROD.op], u=PROD.ui[PROD.op], q=prNorm(PROD.q);
+  const base=PROD.rows.filter(r=>r.a===cfg.ativ && u.g.includes(r.g) && (!PROD.from||r.d>=PROD.from) && (!PROD.to||r.d<=PROD.to) && (!PROD.tipo||r.t===PROD.tipo)
+    && (!q || prNorm(r.n).includes(q) || r.m.includes(q)));
+  const agg=rs=>{ const m=new Map(); rs.forEach(r=>{ let x=m.get(r.m); if(!x){ x={m:r.m,nc:prNomeDe(r.m),vol:0,pre:new Set(),end:0}; m.set(r.m,x); } x.vol+=r[cfg.v]; x.pre.add(r.r); x.end+=r.e; });
+    const a=[...m.values()].map(x=>({...x,pre:x.pre.size}));
+    return a.sort((x,y)=> u.ord==='nome' ? x.nc.localeCompare(y.nc) : (y[u.ord]-x[u.ord]) || (y.vol-x.vol)); };
+  const ds=base.map(r=>r.d).sort(), de=PROD.from||ds[0]||'', ate=PROD.to||ds[ds.length-1]||'';
+  const per=!de?'':(de===ate?prFmt(de):prFmt(de)+' a '+prFmt(ate));
+  const tot=agg(base), S=cfg.S.filter(s=>!PROD.hide.has(s[0]));
+  const lider=tot.slice().sort((a,b)=>b.vol-a.vol)[0], pres=new Set(base.map(r=>r.r)).size, vt=tot.reduce((a,x)=>a+x.vol,0);
+  const kp=(n,l,c)=>`<div class="stat"><div class="num" ${c?`style="color:${c}"`:''}>${n}</div><div class="lbl">${l}</div></div>`;
+  document.getElementById('prKpis').innerHTML = !tot.length ? '' :
+    kp(vt.toLocaleString('pt-BR'),'volumes') + kp(pres.toLocaleString('pt-BR'),cfg.S[1][1].toLowerCase()+' (romaneios distintos)','#9C8CFF')
+    + (PROD.op==='sep'?kp(tot.reduce((a,x)=>a+x.end,0).toLocaleString('pt-BR'),'apanhas (endereços visitados)','#2FD9B9'):'')
+    + kp(tot.length,'pessoas','var(--text-0)') + kp(Math.round(vt/tot.length).toLocaleString('pt-BR'),'volumes por pessoa','var(--text-0)') + kp(lider.nc,'líder · '+lider.vol.toLocaleString('pt-BR')+' volumes','var(--teal)');
+  const grupos = u.sep ? u.g.slice().sort((a,b)=>Object.keys(PROD_GRUPOS).indexOf(a)-Object.keys(PROD_GRUPOS).indexOf(b)).map(g=>({g,rs:base.filter(r=>r.g===g)})) : [{g:null,rs:base}];
+  PROD.blocos=[]; let h='';
+  grupos.forEach(b=>{
+    const rows=agg(b.rs); if(!rows.length) return;
+    const suf = b.g ? ' · '+PROD_GRUPOS[b.g] : (u.g.length<4 ? ' · '+u.g.map(g=>PROD_GRUPOS[g].split(' ')[0]).join(' + ') : '');
+    const titulo=cfg.tit+suf+(per?' — '+per:''), vis=rows.slice(0,PROD.top), mxv=Math.max(1,...rows.map(r=>r.vol));
+    PROD.blocos.push({titulo,rows,S:cfg.S});
+    const th=(k,l)=>`<th class="pr-sort" onclick="prodOrdClick('${k}')" title="Ordenar">${l}${u.ord===k?' ▼':''}</th>`;
+    h+=`<div class="panel pr-blk"><h3>${pEsc(titulo)}</h3><div class="pr-sub">${rows.length} pessoa(s)${rows.length>vis.length?' · exibindo as '+vis.length+' primeiras':''}</div>
+      <div class="pr-leg">${cfg.S.map(s=>`<span class="${PROD.hide.has(s[0])?'off':''}" onclick="prodLeg('${s[0]}')" title="Clique para mostrar/ocultar"><i style="background:${s[2]}"></i>${s[1]}</span>`).join('')}</div>
+      <div class="pr-chart">${S.length?prodSVG(vis,S):'<div class="empty">Todas as séries estão ocultas.</div>'}</div>
+      <div class="table-wrap" style="max-height:460px;overflow-y:auto"><table><thead><tr><th>#</th>${th('nome','Pessoa')}<th>Matrícula</th>${cfg.S.map(s=>th(s[0],s[1])).join('')}<th>Vol./${cfg.S[1][1]}</th><th></th></tr></thead><tbody>`
+      + vis.map((r,i)=>`<tr><td><span class="pr-rk ${i<3&&u.ord!=='nome'?'r'+(i+1):''}">${i+1}</span></td><td title="${pEsc(PROD.nomes[r.m]?PROD.nomes[r.m].cheio:'')}"><b>${pEsc(r.nc)}</b></td><td class="mono">${pEsc(r.m)}</td>`
+        + cfg.S.map(s=>`<td class="mono"${s[0]==='vol'?' style="color:var(--amber);font-weight:700"':''}>${r[s[0]].toLocaleString('pt-BR')}</td>`).join('')
+        + `<td class="mono">${r.pre?(r.vol/r.pre).toFixed(1).replace('.',','):'—'}</td><td><div class="pr-bar"><b style="width:${r.vol/mxv*100}%"></b></div></td></tr>`).join('')
+      + '</tbody></table></div></div>';
+  });
+  document.getElementById('prBlocos').innerHTML = h || `<div class="panel"><div class="empty">${PROD.rows.length?'<b>Nenhum registro</b> com os filtros atuais.':'<b>Sem dados.</b> Clique em “Carregar relatório” e selecione o arquivo de produtividade.'}</div></div>`;
+}
+function prodExcel(){
+  if(!PROD.blocos.length){ toast('Não há ranking para exportar com os filtros atuais.','err'); return; }
+  const wb=XLSX.utils.book_new(), usados=new Set();
+  PROD.blocos.forEach((b,i)=>{
+    const aoa=[[b.titulo],[],['#','Matrícula','Pessoa',...b.S.map(s=>s[1]),'Vol./'+b.S[1][1]]]
+      .concat(b.rows.map((r,j)=>[j+1,r.m,PROD.nomes[r.m]?PROD.nomes[r.m].cheio:r.nc,...b.S.map(s=>r[s[0]]),r.pre?Math.round(r.vol/r.pre*10)/10:'']));
+    const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:5},{wch:11},{wch:30},...b.S.map(()=>({wch:13})),{wch:12}];
+    let nm=b.titulo.replace(/[\\\/\?\*\[\]:]/g,'-').slice(0,28)||'Ranking'; while(usados.has(nm)) nm=nm.slice(0,26)+'-'+(i+1); usados.add(nm);
+    XLSX.utils.book_append_sheet(wb,ws,nm);
+  });
+  XLSX.writeFile(wb,'produtividade_'+PROD_OPS[PROD.op].nome.toLowerCase().replace(/\s+/g,'_')+'.xlsx');
+}
+</script>
 </body>
 </html>
