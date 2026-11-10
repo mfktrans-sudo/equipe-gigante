@@ -1087,7 +1087,7 @@
   <div class="panel">
     <div class="panel-head">
       <div><h2>Protocolo de Bancada</h2>
-        <div class="desc"><b>Histórico de Bancada LV</b> — usado na bancada para marcar onde cada carga foi embalada (linha vermelha). A ferramenta preenche <b>DOCA CAJ-1</b>, <b>PRÉ- CAJ-33</b>, <b>PRÉ- CAJ-05</b> e <b>PRÉ- CAJ-D0</b> com as mesmas cargas da <b>Lista de Carga</b> (ordem: onda &gt; doca). As colunas 33 / 05 / D0 e o bloco da direita saem em branco, para marcação à mão.</div></div>
+        <div class="desc"><b>Histórico de Bancada LV</b> — usado na bancada para marcar onde cada carga foi embalada (linha vermelha). A ferramenta preenche <b>DOCA CAJ-1</b>, <b>PRÉ- CAJ-33</b>, <b>PRÉ- CAJ-05</b> e <b>PRÉ- CAJ-D0</b> com as mesmas cargas da <b>Lista de Carga</b> (ordem: onda &gt; doca). O relatório tem 50 cargas por bloco: da 1ª à 50ª ficam no bloco da esquerda e, a partir da 51ª, a ferramenta continua a sequência no bloco da direita (são duas páginas do mesmo relatório). Passou de 100 cargas, o Excel ganha uma nova aba com o mesmo layout. As colunas 33 / 05 / D0 saem em branco, para marcação à mão.</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <button class="primary" onclick="protoBaixarHistorico()">📥 Gerar Histórico de Bancada (Excel)</button>
       </div>
@@ -5807,8 +5807,8 @@ async function ofdBaixarWord(){
 /* =========================================================
    PROTOCOLO DE BANCADA — HISTÓRICO DE BANCADA LV (Excel)
    Preenche DOCA CAJ-1 / PRÉ-CAJ-33 / PRÉ-CAJ-05 / PRÉ-CAJ-D0 com as MESMAS cargas e
-   valores da Lista de Carga (ordem: onda > doca). As colunas 33 / 05 / D0 e o bloco da
-   direita ficam em branco, para marcação à mão na bancada.
+   valores da Lista de Carga (ordem: onda > doca). 50 cargas por bloco: 1-50 na esquerda, 51-100 no bloco da
+   direita (continuação); acima de 100, nova aba. As colunas 33 / 05 / D0 ficam em branco, para marcação à mão.
    ========================================================= */
 function protoLinhas(){
   return pCargasNumeradas().filter(it=>!it.pend).map(it=>{
@@ -5839,7 +5839,7 @@ function renderProtocolo(){
 async function protoXlsxBytes(L, dataBR){
   const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const col=n=>String.fromCharCode(65+n);                       // 0..14 -> A..O
-  const NB=Math.max(60, L.length+8), R0=3, ULT=R0+NB-1;         // linhas de dados: 3..ULT
+  const NB=50, PG=NB*2, NP=Math.max(1,Math.ceil(L.length/PG)), R0=3, ULT=R0+NB-1;   // 50 linhas por bloco; esquerda = cargas 1-50, direita = 51-100 (mesmo relatório em 2 páginas lado a lado); passou de 100 -> nova aba
   // estilos: 0 padrão | 1 dado | 2 cabeçalho | 3 título | 4/5/6 info (esq/meio/dir)
   const S={DADO:1,HDR:2,TIT:3,IL:4,IM:5,IR:6};
   const cel=(c,r,v,st)=>{
@@ -5849,6 +5849,7 @@ async function protoXlsxBytes(L, dataBR){
     return `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`;
   };
   const row=(r,cells)=>`<row r="${r}" ht="18.75" customHeight="1">${cells.join('')}</row>`;
+  const mkRows=(pg)=>{
   const rows=[];
   // linha 1: DATA | título | total
   rows.push(row(1,[ cel(0,1,'DATA:',S.IL), cel(1,1,dataBR,S.IM), cel(2,1,'',S.IM), cel(3,1,'',S.IR),
@@ -5859,18 +5860,22 @@ async function protoXlsxBytes(L, dataBR){
   H.forEach((t,i)=>c2.push(cel(i,2,t,S.HDR))); H.forEach((t,i)=>c2.push(cel(8+i,2,t,S.HDR)));
   rows.push(row(2,c2));
   for(let i=0;i<NB;i++){
-    const r=R0+i, d=L[i], c=[];
+    const r=R0+i, d=L[pg*PG+i], d2=L[pg*PG+NB+i], c=[];
     c.push(cel(0,r,d?d.doca:'',S.DADO), cel(1,r,d?d.p33:'',S.DADO), cel(2,r,d?d.p05:'',S.DADO), cel(3,r,d?d.pD0:'',S.DADO));
     [4,5,6].forEach(k=>c.push(cel(k,r,'',S.DADO)));
-    for(let k=8;k<=14;k++) c.push(cel(k,r,'',S.DADO));
+    // bloco da direita: continuação da sequência (a partir da carga 51)
+    c.push(cel(8,r,d2?d2.doca:'',S.DADO), cel(9,r,d2?d2.p33:'',S.DADO), cel(10,r,d2?d2.p05:'',S.DADO), cel(11,r,d2?d2.pD0:'',S.DADO));
+    for(let k=12;k<=14;k++) c.push(cel(k,r,'',S.DADO));
     rows.push(row(r,c));
   }
+  return rows;
+  };
   const W=[13.5,11.5,11.5,12,7.5,7.5,7.5,3,13.5,11.5,11.5,12,7.5,7.5,7.5];
-  const sheet='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+  const mkSheet=(pg)=>{ const rows=mkRows(pg); return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
     '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:O'+ULT+'"/><sheetViews><sheetView showGridLines="0" workbookViewId="0"><pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'+
     '<sheetFormatPr defaultRowHeight="15"/><cols>'+W.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('')+'</cols>'+
     '<sheetData>'+rows.join('')+'</sheetData><mergeCells count="2"><mergeCell ref="E1:J1"/><mergeCell ref="K1:N1"/></mergeCells>'+
-    '<printOptions horizontalCentered="1"/><pageMargins left="0.3" right="0.3" top="0.4" bottom="0.4" header="0.2" footer="0.2"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="1"/></worksheet>';
+    '<printOptions horizontalCentered="1"/><pageMargins left="0.3" right="0.3" top="0.4" bottom="0.4" header="0.2" footer="0.2"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="1"/></worksheet>'; };
   const bd=(t,l,b,r)=>`<border><left${l?' style="thin"><color auto="1"/></left':'/'}><right${r?' style="thin"><color auto="1"/></right':'/'}><top${t?' style="thin"><color auto="1"/></top':'/'}><bottom${b?' style="thin"><color auto="1"/></bottom':'/'}><diagonal/></border>`;
   const xf=(f,fi,b,wrap)=>`<xf numFmtId="0" fontId="${f}" fillId="${fi}" borderId="${b}" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"${wrap?' wrapText="1"':''}/></xf>`;
   const styles='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
@@ -5881,12 +5886,12 @@ async function protoXlsxBytes(L, dataBR){
     '<cellXfs count="7"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+xf(0,0,1)+xf(1,2,1,true)+xf(2,2,1)+xf(1,0,2)+xf(1,0,3)+xf(1,0,4)+'</cellXfs>'+
     '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
   const zip=new JSZip();
-  zip.file('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>');
+  zip.file('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'+Array.from({length:NP},(_,i)=>'<Override PartName="/xl/worksheets/sheet'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('')+'<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>');
   zip.file('_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
-  zip.file('xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Histórico de Bancada" sheetId="1" r:id="rId1"/></sheets></workbook>');
-  zip.file('xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
+  zip.file('xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'+Array.from({length:NP},(_,i)=>'<sheet name="Histórico de Bancada'+(i?' '+(i+1):'')+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>').join('')+'</sheets></workbook>');
+  zip.file('xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+Array.from({length:NP},(_,i)=>'<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>').join('')+'<Relationship Id="rId'+(NP+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
   zip.file('xl/styles.xml',styles);
-  zip.file('xl/worksheets/sheet1.xml',sheet);
+  for(let i=0;i<NP;i++) zip.file('xl/worksheets/sheet'+(i+1)+'.xml',mkSheet(i));
   return zip.generateAsync({type:'uint8array'});
 }
 async function protoBaixarHistorico(){
