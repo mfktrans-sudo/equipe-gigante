@@ -485,6 +485,9 @@
   .pr-rk{display:inline-flex;width:22px;height:22px;border-radius:50%;align-items:center;justify-content:center;font-size:11px;font-weight:700;background:var(--bg-3);color:var(--text-1);}
   .pr-rk.r1{background:#F5A623;color:#1a1200;} .pr-rk.r2{background:#AEBBD6;color:#0D1526;} .pr-rk.r3{background:#B5733A;color:#fff;}
   .pr-bar{height:6px;background:var(--bg-3);border-radius:3px;min-width:90px;overflow:hidden;} .pr-bar b{display:block;height:100%;background:var(--amber);}
+  .pr-warn{background:rgba(245,166,35,.1);border:1px solid var(--amber-dim);border-left:4px solid var(--amber);color:#ffd999;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;}
+  .pr-warn.orange{background:rgba(255,140,60,.1);border-color:#7a3d13;border-left-color:#ff8c3c;color:#ffc9a3;}
+  .pr-add{display:flex;gap:12px;flex-wrap:wrap;} .pr-add input{flex:1;min-width:200px;}
   th.pr-sort{cursor:pointer;} th.pr-sort:hover{color:var(--text-0);}
 </style>
 </head>
@@ -1185,7 +1188,31 @@
     </div>
     <div class="pr-files" id="prFiles"></div>
   </div>
+  <div id="prAvisoSem" class="pr-warn" style="display:none"><b>Atenção!</b> Você precisa cadastrar funcionários antes de fazer upload. Vá para a aba “Minha Equipe” primeiro.</div>
+  <div id="prFalt" class="pr-warn orange" style="display:none">
+    <div><b>Colaboradores não cadastrados detectados!</b> <span id="prFaltTxt"></span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button class="small" onclick="prFaltVer()">👁️ Ver Listagem Completa</button>
+      <button class="primary small" onclick="prFaltTodos()">✅ Cadastrar Todos</button>
+      <button class="small" onclick="prFaltLimpar()">✖️ Limpar Alerta</button></div>
+  </div>
+  <div id="prFaltModal" class="panel" style="display:none">
+    <div class="pr-top"><h3 style="margin:0">👥 Colaboradores Não Cadastrados</h3><button class="small" onclick="prFaltFechar()">✕</button></div>
+    <div class="pr-sub" style="margin:6px 0 12px">Selecione os colaboradores que deseja cadastrar no sistema:</div>
+    <div class="table-wrap" style="max-height:360px;overflow-y:auto"><table><thead><tr>
+      <th><input type="checkbox" id="prFaltAll" style="width:auto" onchange="prFaltToggle()"></th><th>Nome</th><th>Matrícula</th><th style="text-align:center">Ações</th></tr></thead>
+      <tbody id="prFaltTbody"></tbody></table></div>
+    <div class="pr-top" style="margin-top:12px"><span class="pr-sub"><b id="prFaltSel">0</b> selecionado(s)</span>
+      <div style="display:flex;gap:8px"><button class="primary" onclick="prFaltSelecionados()">✅ Cadastrar Selecionados</button><button onclick="prFaltFechar()">Cancelar</button></div></div>
+  </div>
   <div class="pr-tabs" id="prTabs"></div>
+  <div id="prEquipe" style="display:none">
+    <div class="panel"><h3 style="margin:0 0 12px">➕ Adicionar Funcionário</h3>
+      <div class="pr-add"><input id="prEqNome" placeholder="Nome do Funcionário"><input id="prEqMat" placeholder="Matrícula (ou várias: 12345, 67890)">
+        <button class="primary" onclick="prEqAdd()">Adicionar</button></div></div>
+    <div class="panel" style="padding:0;overflow:hidden"><div style="padding:14px 20px;border-bottom:1px solid var(--line)"><h3 style="margin:0">👥 Equipe Cadastrada (<span id="prEqCount">0</span>)</h3></div>
+      <div class="table-wrap" style="border:0;border-radius:0"><table><thead><tr><th>Nome</th><th>Matrícula</th><th style="text-align:center">Ações</th></tr></thead><tbody id="prEqTbody"></tbody></table></div></div>
+  </div>
   <div id="prMov" class="panel" style="display:none"><div class="empty"><b>Movimentação (Operador)</b><br>Armazenagem, Ressuprimento e Transferência — será configurada em uma próxima etapa, quando o arquivo de origem estiver disponível.</div></div>
   <div id="prOp">
     <div class="panel"><div class="pr-fil">
@@ -7146,7 +7173,7 @@ function linhaArr(r){ return [numOuTxt(r.orm), '', r.desc, r.placa, r.carga, num
 function dataForm(){ return dataBR(S.data) || dataBR(hojeISO()); }
 /* ---- Excel no layout do relatório (data em A1 em negrito, cabeçalho laranja, bordas, tudo centralizado) ----
    O SheetJS da versão gratuita não grava estilos; por isso o .xlsx é montado direto (XML + JSZip). */
-var KC_LARG = [11,26,36,11,9,9,15,15,6,14];   /* larguras (caracteres) das 10 colunas */
+var KC_LARG = [11,9,36,11,9,9,15,15,6,14];   /* larguras (caracteres) das 10 colunas */
 function kcColL(i){ return String.fromCharCode(65+i); }
 function kcX(v){ return String(v==null?'':v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function kcCel(ref, v, st){
@@ -7208,7 +7235,7 @@ window.kcBaixar = async function(){
 };
 window.kcImprimir = function(){
   if(!ROWS.length){ say('Nada para imprimir.','err'); return; }
-  var w = [8,13,24,8,6,6,12,10,4,9];
+  var w = [8,8,29,8,6,6,12,10,4,9];
   var html = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Kit coletas</title><style>'+
     '@page{size:A4 portrait;margin:0}html,body{margin:0;padding:0 10mm;background:#fff;color:#000;font-family:Calibri,Arial,sans-serif}'+
     '.dt{font-size:15px;font-weight:700;margin:0 0 4px 0}'+
@@ -7468,7 +7495,7 @@ const PROD_OPS = {
   sep :{nome:'Separação', ativ:'SEPARACAO', v:'vs', tit:'Volume e Pré separados', S:[['vol','Volumes','#F5A623'],['pre','Pré','#9C8CFF'],['end','Apanhas','#2FD9B9']]},
   carr:{nome:'Fechamento de Carga', ativ:'CARREGAMENTO', v:'vl', tit:'Fechamento Pré-Romaneio', S:[['vol','Volumes','#F5A623'],['pre','Total de Pré','#9C8CFF']]}
 };
-const PROD = {rows:[], files:[], op:'sep', hide:new Set(), from:'', to:'', tipo:'', q:'', top:20, full:false, blocos:[], nomes:{},
+const PROD = {rows:[], files:[], op:'sep', hide:new Set(), from:'', to:'', tipo:'', q:'', top:20, full:false, blocos:[], nomes:{}, equipe:[], falt:{ativo:false,ign:new Set()},
   ui:{conf:{g:['BR','MA','LV','OUT'],sep:false,ord:'vol'}, sep:{g:['BR','MA','LV'],sep:true,ord:'vol'}, carr:{g:['BR','MA','LV','OUT'],sep:false,ord:'vol'}}};
 const prNorm = s=>String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 const prNum = x=>{ const v=Number(String(x==null?'':x).replace(/\./g,'').replace(',','.')); return isFinite(v)?v:0; };
@@ -7501,6 +7528,8 @@ function prodParse(linhas, fid){
   return {rows, ign};
 }
 async function prodAdd(files){
+  if(!PROD.equipe.length){ document.getElementById('prAvisoSem').style.display='block'; toast('⚠️ Cadastre funcionários antes de fazer upload!','err'); return; }
+  document.getElementById('prAvisoSem').style.display='none';
   for(const f of Array.from(files||[])){
     try{
       const buf=await f.arrayBuffer(), u=new Uint8Array(buf); let linhas;
@@ -7516,7 +7545,9 @@ async function prodAdd(files){
       toast(f.name+': '+novas.length+' registros carregados'+(dup?' ('+dup+' já existiam)':'')+(res.ign?' · '+res.ign+' linhas ignoradas':''),'ok');
     }catch(e){ console.error(e); toast('Não foi possível ler '+f.name,'err'); }
   }
-  prodNomes(); prodSalvar(); prodPer('tudo'); renderProd();
+  prodNomes(); prodSalvar(); PROD.falt.ativo=true; PROD.falt.ign.clear();
+  const mm=prMatMap(); if(PROD.rows.length && !PROD.rows.some(r=>mm.has(r.m))) toast('❌ Nenhum dado encontrado para os funcionários cadastrados.','err');
+  prodPer('tudo'); renderProd();
 }
 function prodRemFile(id){ PROD.files=PROD.files.filter(f=>f.id!==id); PROD.rows=PROD.rows.filter(r=>r.f!==id); prodNomes(); prodSalvar(); renderProd(); }
 function prodLimpar(){ if(!PROD.rows.length||!confirm('Remover todos os dados de produtividade carregados?')) return; PROD.rows=[]; PROD.files=[]; PROD.nomes={}; prodSalvar(); renderProd(); }
@@ -7529,7 +7560,7 @@ document.addEventListener('DOMContentLoaded', prodCarregar);
 
 /* nomes curtos: “SIZOEL PEREIRA” -> “Sizoel P.” (se repetir entre pessoas, usa o 2º nome por extenso) */
 function prodNomes(){
-  const full={}; PROD.rows.forEach(r=>{ full[r.m]=r.n; });
+  const full={}; PROD.equipe.forEach(e=>{ const p=prPartes(e.matricula)[0]; if(p) full[p]=e.nome; });
   const part=['DE','DA','DO','DAS','DOS','E','D'], cap=w=>w.charAt(0)+w.slice(1).toLowerCase(), cont={};
   const ini={}; Object.keys(full).forEach(m=>{
     const p=full[m].replace(/\./g,' ').split(/\s+/).filter(Boolean), rest=p.slice(1).filter(x=>!part.includes(x.toUpperCase()));
@@ -7538,6 +7569,65 @@ function prodNomes(){
   PROD.nomes={}; Object.keys(full).forEach(m=>{ PROD.nomes[m]={curto:cont[ini[m].c]>1?ini[m].l:ini[m].c, cheio:full[m].split(' ').map(cap).join(' ')}; });
 }
 const prNomeDe = m=>{ const x=PROD.nomes[m]; return x?(PROD.full?x.cheio:x.curto):m; };
+/* ===== MINHA EQUIPE (mesma regra da ferramenta de produtividade de referência) =====
+   Só entram nos rankings as matrículas cadastradas; várias matrículas separadas por vírgula somam na 1ª (principal);
+   o nome exibido é o nome cadastrado. Guardada em chave própria do navegador (não é apagada pelo “Novo dia”). */
+const PR_EQ_KEY = 'gdn_prod_equipe';
+function prEqLoad(){ try{ PROD.equipe = JSON.parse(localStorage.getItem(PR_EQ_KEY)||'[]') || []; }catch(e){ PROD.equipe = []; } if(!PROD.equipe.length) PROD.op='equipe'; }
+function prEqSave(){ try{ localStorage.setItem(PR_EQ_KEY, JSON.stringify(PROD.equipe)); }catch(e){ toast('Não foi possível salvar a equipe no navegador.','err'); } prodNomes(); renderProd(); }
+const prPartes = m=>String(m||'').split(',').map(x=>x.trim()).filter(Boolean);
+function prMatMap(){ const map=new Map(); PROD.equipe.forEach(emp=>{ const p=prPartes(emp.matricula); p.forEach(m=>map.set(m,{emp,principal:p[0]})); }); return map; }
+function prEqDup(partes, ignorarId){ const mm=prMatMap(); return partes.some(m=>mm.has(m) && mm.get(m).emp.id!==ignorarId); }
+function prEqAdd(){
+  const n=document.getElementById('prEqNome'), m=document.getElementById('prEqMat'), nome=n.value.trim(), mat=m.value.trim();
+  if(!nome||!mat){ toast('Por favor, preencha nome e matrícula!','err'); return; }
+  if(prEqDup(prPartes(mat))){ toast('⚠️ Esta matrícula já está cadastrada para outro colaborador!','err'); return; }
+  PROD.equipe.push({id:Date.now(),nome,matricula:mat}); n.value=''; m.value=''; prEqSave(); toast('Funcionário adicionado com sucesso!','ok');
+}
+function prEqDel(id){ if(!confirm('Tem certeza que deseja excluir este funcionário?')) return; PROD.equipe=PROD.equipe.filter(e=>e.id!==id); prEqSave(); }
+function prEqEdit(id){
+  const emp=PROD.equipe.find(e=>e.id===id); if(!emp) return;
+  const nome=prompt('Editar Nome:',emp.nome); if(nome===null) return;
+  if(!nome.trim()){ toast('⚠️ O nome não pode ficar vazio!','err'); return; }
+  const mat=prompt('Editar Matrícula:',emp.matricula); if(mat===null) return;
+  if(!mat.trim()){ toast('⚠️ A matrícula não pode ficar vazia!','err'); return; }
+  if(prEqDup(prPartes(mat),id)){ toast('⚠️ Esta matrícula já está cadastrada para outro colaborador!','err'); return; }
+  emp.nome=nome.trim(); emp.matricula=mat.trim(); prEqSave(); toast('✅ Colaborador atualizado com sucesso!','ok');
+}
+function prEqRender(){
+  document.getElementById('prEqCount').textContent=PROD.equipe.length;
+  document.getElementById('prEqTbody').innerHTML = PROD.equipe.length ? PROD.equipe.slice().sort((a,b)=>a.nome.localeCompare(b.nome)).map(e=>`<tr><td><b>${pEsc(e.nome)}</b></td><td class="mono">${pEsc(e.matricula)}</td>
+    <td style="text-align:center"><button class="small" onclick="prEqEdit(${e.id})" title="Editar">✏️</button> <button class="small danger" onclick="prEqDel(${e.id})" title="Remover">🗑️</button></td></tr>`).join('')
+    : '<tr><td colspan="3"><div class="empty">Nenhum funcionário cadastrado. Adicione acima antes de carregar o relatório.</div></td></tr>';
+}
+/* colaboradores que estão no relatório e não na equipe (aviso após o upload) */
+function prFaltantes(){ const mm=prMatMap(), v=new Map(); PROD.rows.forEach(r=>{ if(!mm.has(r.m)&&!v.has(r.m)&&!PROD.falt.ign.has(r.m)) v.set(r.m,{nome:r.n,matricula:r.m}); }); return [...v.values()]; }
+function prFaltRender(){
+  const l=PROD.falt.ativo?prFaltantes():[], box=document.getElementById('prFalt');
+  box.style.display=l.length?'block':'none';
+  if(!l.length){ document.getElementById('prFaltModal').style.display='none'; return; }
+  document.getElementById('prFaltTxt').textContent='Foram encontrados '+l.length+' colaborador(es) no Excel: '+l.slice(0,5).map(e=>e.nome).join(', ')+(l.length>5?' e mais '+(l.length-5):'')+'.';
+  if(document.getElementById('prFaltModal').style.display!=='none') prFaltVer();
+}
+function prFaltVer(){
+  const l=prFaltantes(); if(!l.length){ toast('Nenhum colaborador pendente de cadastro.'); return; }
+  document.getElementById('prFaltTbody').innerHTML=l.map((e,i)=>`<tr><td><input type="checkbox" class="pr-fchk" style="width:auto" data-m="${pEsc(e.matricula)}" onchange="prFaltCount()"></td><td><b>${pEsc(e.nome)}</b></td><td class="mono">${pEsc(e.matricula)}</td>
+    <td style="text-align:center"><button class="small danger" onclick="prFaltRem('${pEsc(e.matricula)}')" title="Remover da lista">🗑️</button></td></tr>`).join('');
+  document.getElementById('prFaltAll').checked=false; document.getElementById('prFaltModal').style.display='block'; prFaltCount();
+}
+const prFaltMarcados=()=>Array.from(document.querySelectorAll('.pr-fchk:checked')).map(c=>c.dataset.m);
+function prFaltCount(){ document.getElementById('prFaltSel').textContent=prFaltMarcados().length; }
+function prFaltToggle(){ const v=document.getElementById('prFaltAll').checked; document.querySelectorAll('.pr-fchk').forEach(c=>c.checked=v); prFaltCount(); }
+function prFaltFechar(){ document.getElementById('prFaltModal').style.display='none'; }
+function prFaltLimpar(){ PROD.falt.ativo=false; renderProd(); }
+function prFaltRem(m){ if(!confirm('Tem certeza que deseja remover este colaborador da lista?')) return; PROD.falt.ign.add(m); prFaltRender(); }
+function prFaltCad(mats){
+  const l=prFaltantes().filter(e=>mats.includes(e.matricula)); l.forEach(e=>PROD.equipe.push({id:Date.now()+Math.random(),nome:e.nome,matricula:e.matricula}));
+  prEqSave(); toast('✅ '+l.length+' colaborador(es) cadastrado(s) com sucesso! Os rankings já foram atualizados.','ok');
+}
+function prFaltTodos(){ const l=prFaltantes(); if(!l.length){ toast('Nenhum colaborador pendente de cadastro.'); return; } prFaltCad(l.map(e=>e.matricula)); }
+function prFaltSelecionados(){ const m=prFaltMarcados(); if(!m.length){ toast('⚠️ Selecione pelo menos um colaborador para cadastrar.','err'); return; } prFaltCad(m); }
+prEqLoad();
 const prFmt = d=>d?d.slice(8,10)+'/'+d.slice(5,7):'';
 function prodPer(t){
   const ds=PROD.rows.map(r=>r.d).sort(), mx=ds[ds.length-1]||'', mn=ds[0]||'';
@@ -7552,17 +7642,18 @@ function prodLeg(k){ if(PROD.hide.has(k)) PROD.hide.delete(k); else PROD.hide.ad
 function prodOrdClick(k){ PROD.ui[PROD.op].ord=k; prodRender(); }
 
 function renderProd(){
-  const tabs=Object.keys(PROD_OPS).map(k=>`<button class="${PROD.op===k?'on':''}" onclick="prodTab('${k}')">${PROD_OPS[k].nome}</button>`).join('')
+  const tabs=`<button class="${PROD.op==='equipe'?'on':''}" onclick="prodTab('equipe')">👥 Minha Equipe<span class="tab-mnt" style="color:var(--teal);border-color:var(--teal-dim)">${PROD.equipe.length}</span></button>`+Object.keys(PROD_OPS).map(k=>`<button class="${PROD.op===k?'on':''}" onclick="prodTab('${k}')">${PROD_OPS[k].nome}</button>`).join('')
     +`<button class="${PROD.op==='mov'?'on':''}" onclick="prodTab('mov')">Movimentação<span class="tab-mnt">em configuração</span></button>`;
   document.getElementById('prTabs').innerHTML=tabs;
   const ds=PROD.rows.map(r=>r.d).sort();
   document.getElementById('prStatus').textContent = PROD.rows.length
-    ? PROD.rows.length.toLocaleString('pt-BR')+' registros · '+Object.keys(PROD.nomes).length+' pessoas · '+prFmt(ds[0])+'/'+ds[0].slice(0,4)+' a '+prFmt(ds[ds.length-1])+'/'+ds[ds.length-1].slice(0,4)
+    ? PROD.rows.length.toLocaleString('pt-BR')+' registros · '+Object.keys(PROD.nomes).length+' na equipe · '+prFmt(ds[0])+'/'+ds[0].slice(0,4)+' a '+prFmt(ds[ds.length-1])+'/'+ds[ds.length-1].slice(0,4)
     : 'Carregue o relatório de produtividade (Separação e Expedição) para montar os rankings.';
   document.getElementById('prFiles').innerHTML=PROD.files.map(f=>`<span class="pill">${pEsc(f.nome)} · ${f.n.toLocaleString('pt-BR')}<span class="x" title="Remover este arquivo" onclick="prodRemFile(${f.id})">✕</span></span>`).join('');
-  const mov=PROD.op==='mov';
-  document.getElementById('prMov').style.display=mov?'block':'none'; document.getElementById('prOp').style.display=mov?'none':'block';
-  if(mov) return;
+  const mov=PROD.op==='mov', eq=PROD.op==='equipe';
+  document.getElementById('prMov').style.display=mov?'block':'none'; document.getElementById('prEquipe').style.display=eq?'block':'none'; document.getElementById('prOp').style.display=(mov||eq)?'none':'block';
+  prEqRender(); prFaltRender();
+  if(mov||eq) return;
   const cfg=PROD_OPS[PROD.op], u=PROD.ui[PROD.op];
   document.getElementById('prLinhas').innerHTML=Object.keys(PROD_GRUPOS).map(g=>`<button class="pr-chip ${u.g.includes(g)?'on':''}" onclick="prodChip('${g}')">${PROD_GRUPOS[g]}</button>`).join('');
   const tipos=Array.from(new Set(PROD.rows.filter(r=>r.a===cfg.ativ).map(r=>r.t).filter(Boolean))).sort();
@@ -7588,11 +7679,11 @@ function prodSVG(rows,S){
   return o+'</svg>';
 }
 function prodRender(){
-  if(PROD.op==='mov') return;
-  const cfg=PROD_OPS[PROD.op], u=PROD.ui[PROD.op], q=prNorm(PROD.q);
-  const base=PROD.rows.filter(r=>r.a===cfg.ativ && u.g.includes(r.g) && (!PROD.from||r.d>=PROD.from) && (!PROD.to||r.d<=PROD.to) && (!PROD.tipo||r.t===PROD.tipo)
-    && (!q || prNorm(r.n).includes(q) || r.m.includes(q)));
-  const agg=rs=>{ const m=new Map(); rs.forEach(r=>{ let x=m.get(r.m); if(!x){ x={m:r.m,nc:prNomeDe(r.m),vol:0,pre:new Set(),end:0}; m.set(r.m,x); } x.vol+=r[cfg.v]; x.pre.add(r.r); x.end+=r.e; });
+  if(PROD.op==='mov'||PROD.op==='equipe') return;
+  const cfg=PROD_OPS[PROD.op], u=PROD.ui[PROD.op], q=prNorm(PROD.q), mm=prMatMap();
+  const base=PROD.rows.filter(r=>mm.has(r.m) && r.a===cfg.ativ && u.g.includes(r.g) && (!PROD.from||r.d>=PROD.from) && (!PROD.to||r.d<=PROD.to) && (!PROD.tipo||r.t===PROD.tipo)
+    && (!q || prNorm(mm.get(r.m).emp.nome).includes(q) || r.m.includes(q)));
+  const agg=rs=>{ const m=new Map(); rs.forEach(r=>{ const k=mm.get(r.m).principal; let x=m.get(k); if(!x){ x={m:k,nc:prNomeDe(k),vol:0,pre:new Set(),end:0}; m.set(k,x); } x.vol+=r[cfg.v]; x.pre.add(r.r); x.end+=r.e; });
     const a=[...m.values()].map(x=>({...x,pre:x.pre.size}));
     return a.sort((x,y)=> u.ord==='nome' ? x.nc.localeCompare(y.nc) : (y[u.ord]-x[u.ord]) || (y.vol-x.vol)); };
   const ds=base.map(r=>r.d).sort(), de=PROD.from||ds[0]||'', ate=PROD.to||ds[ds.length-1]||'';
@@ -7621,7 +7712,7 @@ function prodRender(){
         + `<td class="mono">${r.pre?(r.vol/r.pre).toFixed(1).replace('.',','):'—'}</td><td><div class="pr-bar"><b style="width:${r.vol/mxv*100}%"></b></div></td></tr>`).join('')
       + '</tbody></table></div></div>';
   });
-  document.getElementById('prBlocos').innerHTML = h || `<div class="panel"><div class="empty">${PROD.rows.length?'<b>Nenhum registro</b> com os filtros atuais.':'<b>Sem dados.</b> Clique em “Carregar relatório” e selecione o arquivo de produtividade.'}</div></div>`;
+  document.getElementById('prBlocos').innerHTML = h || `<div class="panel"><div class="empty">${!PROD.equipe.length?'<b>Equipe vazia.</b> Cadastre os funcionários na aba “Minha Equipe”.':PROD.rows.length?'<b>Nenhum registro</b> com os filtros atuais.':'<b>Sem dados.</b> Clique em “Carregar relatório” e selecione o arquivo de produtividade.'}</div></div>`;
 }
 function prodExcel(){
   if(!PROD.blocos.length){ toast('Não há ranking para exportar com os filtros atuais.','err'); return; }
