@@ -557,6 +557,7 @@
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;font-size:12.5px;margin:0;" title="Quando a transportadora não tem faixa de docas, usa as docas que sobraram livres em vez de ficar sem doca"><input type="checkbox" id="cfgDocaLivre" onchange="STATE.config.docaLivreSemFaixa=this.checked;saveState();"> Sem faixa → usar doca livre</label>
+        <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;font-size:12.5px;margin:0;" title="Ao alocar, cargas de ondas posteriores sobem para docas livres de ondas anteriores (ex.: 3ª onda → 2ª onda), mesmo em docas de outra transportadora"><input type="checkbox" id="cfgCompactar" onchange="STATE.config.compactarOndas=this.checked;saveState();"> Otimizar ondas (usar docas livres)</label>
         <button class="small" onclick="restaurarTransportadoras()" title="Traz de volta transportadoras que foram excluídas (as da lista padrão desta versão e a última excluída)">↩ Restaurar excluídas</button>
         <button class="primary small" onclick="addTransportadora()">+ Transportadora</button>
       </div>
@@ -782,6 +783,7 @@
         <select id="pFilial" onchange="renderPainel()"></select>
         <select id="pOnda" onchange="renderPainel()"></select>
         <button class="primary" onclick="rodarAlocacao()">Rodar alocação ▶</button>
+        <button class="primary" onclick="otimizarOndas()" title="Sobe para a onda anterior toda carga que tenha doca livre numa onda menor (ex.: 3ª onda → 2ª onda). Mantém ajustes manuais e cargas da base TS.">⚡ Otimizar ondas</button>
         <button class="primary" onclick="exportarListaOndasExcel()">⬇ Gerar Excel da lista</button>
         <select id="etqPorFolha" title="Quantas etiquetas por folha A4"><option value="2" selected>2 etiquetas por folha</option><option value="1">1 etiqueta por folha</option></select>
         <button class="primary" onclick="etqBaixarWord()" title="Word A4 com PRÉ, ONDA (doca-onda) e PLACA das cargas da 3ª onda em diante, ordenado por doca">🖨 Etiquetas Word (3ª onda+)</button>
@@ -1728,6 +1730,7 @@ function removeUnidade(idx){
 
 function renderParametros(){
   const cl = document.getElementById('cfgDocaLivre'); if(cl) cl.checked = STATE.config.docaLivreSemFaixa !== false;
+  const cc = document.getElementById('cfgCompactar'); if(cc) cc.checked = STATE.config.compactarOndas !== false;
   const uWrap = document.getElementById('unidadesList');
   uWrap.innerHTML = '';
   STATE.config.unidades.forEach((u, idx)=>{
@@ -3092,6 +3095,71 @@ function garantirTranspParametros(nomes){
   });
   return criadas;
 }
+/* =========================================================
+   OTIMIZAÇÃO DE ONDAS (compactação)
+   Regra: se existe doca livre numa onda anterior, a carga de onda posterior sobe para ela.
+   Ex.: carga na 3ª onda e doca livre na 2ª onda -> a carga vai para a 2ª onda.
+   - Considera TODAS as docas disponíveis da unidade (inclusive de outras transportadoras), pois o objetivo é
+     reduzir o número de ondas. Ordem de preferência da doca: da própria faixa > fora de qualquer faixa > faixa de outra.
+   - Não mexe em cargas fixadas pela base TS nem em ajustes manuais (AJUSTADO).
+   - Respeita campos ocupados (cargas, reservas da base TS) e docas indisponíveis.
+   - Pode ser desligada em Configurações › Parâmetros (Otimizar ondas).
+   ========================================================= */
+function compactarOndas(linhas, ocupado, un_of, forcar){
+  if(!forcar && STATE.config.compactarOndas === false) return 0;
+  const unidades = STATE.config.unidades, transps = STATE.config.transportadoras;
+  const unDaLinha = r=>{
+    const cfg = transps.find(t=>t.nome===r.transportadora);
+    return (cfg && unidades.find(u=>u.id===cfg.unidade)) || unidades.find(u=>getDocasDisponiveisUnidade(u).includes(un_of(r)));
+  };
+  const faixaPorUn = {};
+  unidades.forEach(u=>{
+    const s = new Set();
+    transps.forEach(t=>{ if(t.unidade===u.id && t.docaIn>0 && t.docaFim>0) for(let d=t.docaIn; d<=t.docaFim; d++) s.add(d); });
+    faixaPorUn[u.id] = s;
+  });
+  let movidas = 0, mudou = true, guarda = 0;
+  while(mudou && guarda++ < 100){
+    mudou = false;
+    const cand = linhas.filter(r=> r.status==='OK' && !r.ts && r.docaManual==null && r.docaSugerida!=null && r.onda>1)
+      .sort((a,b)=> a.onda-b.onda || (a.prioridade||0)-(b.prioridade||0));
+    cand.forEach(r=>{
+      const un = unDaLinha(r); if(!un) return;
+      const cfg = transps.find(t=>t.nome===r.transportadora);
+      const propria = d=> cfg && cfg.docaIn>0 && cfg.docaFim>0 && d>=cfg.docaIn && d<=cfg.docaFim;
+      const emFaixa = faixaPorUn[un.id] || new Set();
+      const rank = d=> propria(d) ? 0 : (emFaixa.has(d) ? 2 : 1);
+      const docas = getDocasDisponiveisUnidade(un).slice().sort((a,b)=> rank(a)-rank(b) || a-b);
+      for(let onda=1; onda<r.onda; onda++){
+        const d = docas.find(x=>!ocupado.has(un.id+'|'+x+'|'+onda));
+        if(d===undefined) continue;
+        ocupado.delete(un.id+'|'+r.docaSugerida+'|'+r.onda);
+        ocupado.add(un.id+'|'+d+'|'+onda);
+        r.compactadaDe = r.compactadaDe || r.onda;      // onda original, para informação
+        r.docaSugerida = d; r.onda = onda;
+        movidas++; mudou = true; break;
+      }
+    });
+  }
+  return movidas;
+}
+/* Botão "Otimizar ondas": roda só a compactação sobre a alocação atual, sem recalcular nada
+   e sem desfazer ajustes manuais feitos no mapa. */
+function otimizarOndas(){
+  if(!STATE.alocacao.length){ toast('Rode a alocação antes de otimizar as ondas.', 'err'); return; }
+  const unidades = STATE.config.unidades;
+  const unDaDoca = d=> unidades.find(u=>getDocasDisponiveisUnidade(u).includes(d));
+  const ocupado = new Set();
+  STATE.alocacao.forEach(a=>{
+    const d = pDoca(a); if(d==null || a.onda==null) return;
+    const u = unDaDoca(d); if(u) ocupado.add(u.id+'|'+d+'|'+a.onda);
+  });
+  Object.keys(tsReservas()).forEach(k=>{ const [d,o]=k.split('|'); const u = unDaDoca(parseInt(d,10)); if(u) ocupado.add(u.id+'|'+d+'|'+o); });
+  const n = compactarOndas(STATE.alocacao, ocupado, r=>r.docaSugerida, true);   // clique explícito = executa mesmo com a opção desligada
+  saveState(); atualizarTodasAsAbas();
+  toast(n ? ('Ondas otimizadas: '+n+' carga(s) movida(s) para ondas anteriores com doca livre.') : 'Nenhuma carga pode subir de onda: não há doca livre em onda anterior.', n?'ok':'');
+}
+
 function rodarAlocacao(silencioso){
   /* silencioso=true: usado pela consolidação — não mostra toast próprio e devolve a mensagem (ou false se não rodou) */
   if(STATE.cargas.length===0){ if(!silencioso) toast('Não há cargas consolidadas.', 'err'); return false; }
@@ -3183,10 +3251,12 @@ function rodarAlocacao(silencioso){
     });
   }
 
+  const nCompactadas = compactarOndas(resultado, ocupado, r=>r.docaSugerida);   // sobe cargas para ondas anteriores com doca livre
   STATE.alocacao = resultado;
   saveState();
   atualizarTodasAsAbas();
   const msgAloc = 'Alocação recalculada: '+resultado.length+' carga(s) processada(s)'+(tsPlano.n?' — '+tsPlano.n+' com doca/onda fixada pela base TS':'')+'.'
+    + (nCompactadas ? ' '+nCompactadas+' carga(s) subiram para ondas anteriores com doca livre (otimização de ondas).' : '')
     + (nDocaLivre ? ' '+nDocaLivre+' carga(s) de transportadora sem faixa foram alocadas em docas livres (confira; o ideal é preencher a faixa em Configurações › Parâmetros).' : '')
     + (transpCriadas.length ? ' Transportadora(s) sem faixa de docas: '+transpCriadas.join(', ')+'.' : '');
   if(!silencioso) toast(msgAloc, 'ok');
