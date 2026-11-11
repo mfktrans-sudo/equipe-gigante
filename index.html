@@ -534,7 +534,7 @@
   </div>
   <div class="top-actions">
     <span id="opDataBadge" class="op-badge" style="display:none"></span>
-    <button class="small danger btn-novo-dia" onclick="novaOperacao()" title="Apaga os dados do dia em todas as abas (mantém Parâmetros e Cadastros)">Novo dia / limpar operação</button>
+    <button class="small danger btn-novo-dia" onclick="novaOperacao()" title="Apaga os dados do dia em todas as abas (mantém Configurações, Cadastro de Placas e a equipe da Produtividade)">Novo dia / limpar operação</button>
     <span class="user-chip">
       <span class="who" id="userEmail">—</span>
       <button class="small ghost" onclick="fazerLogout()">Sair</button>
@@ -568,6 +568,7 @@
 <!-- ================= TAB 1: PARAMETROS ================= -->
 <div class="view active" id="view-parametros">
 
+  <div class="desc" id="paramNuvem" style="max-width:none;margin-bottom:8px;">☁ Parâmetros (unidades, docas indisponíveis, transportadoras, filiais, abas visíveis) são salvos no Firebase e não são apagados pelo “Novo dia”.</div>
   <div class="panel">
     <div class="panel-head">
       <div><h2>Unidades &amp; faixas de doca</h2>
@@ -1210,7 +1211,7 @@
     <div class="panel"><h3 style="margin:0 0 12px">➕ Adicionar Funcionário</h3>
       <div class="pr-add"><input id="prEqNome" placeholder="Nome do Funcionário"><input id="prEqMat" placeholder="Matrícula (ou várias: 12345, 67890)">
         <button class="primary" onclick="prEqAdd()">Adicionar</button></div></div>
-    <div class="panel" style="padding:0;overflow:hidden"><div style="padding:14px 20px;border-bottom:1px solid var(--line)"><h3 style="margin:0">👥 Equipe Cadastrada (<span id="prEqCount">0</span>)</h3></div>
+    <div class="panel" style="padding:0;overflow:hidden"><div style="padding:14px 20px;border-bottom:1px solid var(--line)"><h3 style="margin:0">👥 Equipe Cadastrada (<span id="prEqCount">0</span>)</h3><div class="desc" id="prEqNuvem" style="max-width:none;margin-top:4px;">☁ A equipe é salva no Firebase.</div></div>
       <div class="table-wrap" style="border:0;border-radius:0"><table><thead><tr><th>Nome</th><th>Matrícula</th><th style="text-align:center">Ações</th></tr></thead><tbody id="prEqTbody"></tbody></table></div></div>
   </div>
   <div id="prMov" class="panel" style="display:none"><div class="empty"><b>Movimentação (Operador)</b><br>Armazenagem, Ressuprimento e Transferência — será configurada em uma próxima etapa, quando o arquivo de origem estiver disponível.</div></div>
@@ -1513,7 +1514,7 @@ function saveState(force){
   let json;
   try{ json = JSON.stringify(STATE); }
   catch(e){ avisarFalhaSalvar(e,'serializar'); return false; }
-  try{ localStorage.setItem(STORAGE_KEY, json); GDN_IDB.del('state'); if(window.gdnCadastroSync) window.gdnCadastroSync(); if(window.gdnIscaSync) window.gdnIscaSync(); return true; }
+  try{ localStorage.setItem(STORAGE_KEY, json); GDN_IDB.del('state'); if(window.gdnCadastroSync) window.gdnCadastroSync(); if(window.gdnIscaSync) window.gdnIscaSync(); if(window.gdnParamSync) window.gdnParamSync(); return true; }
   catch(e1){
     /* 1ª tentativa de recuperação: apaga só chaves ANTIGAS desta ferramenta (prefixo gdn_) e tenta de novo */
     try{
@@ -1521,9 +1522,9 @@ function saveState(force){
       antigas.forEach(k=>localStorage.removeItem(k));
       localStorage.removeItem(STORAGE_KEY);
       localStorage.setItem(STORAGE_KEY, json); GDN_IDB.del('state');
-      if(window.gdnCadastroSync) window.gdnCadastroSync(); if(window.gdnIscaSync) window.gdnIscaSync();
+      if(window.gdnCadastroSync) window.gdnCadastroSync(); if(window.gdnIscaSync) window.gdnIscaSync(); if(window.gdnParamSync) window.gdnParamSync();
       return true;
-    }catch(e2){ GDN_IDB.set('state',{json:json,t:Date.now()}); console.warn('localStorage cheio: estado salvo na reserva (IndexedDB).'); try{ localStorage.removeItem(STORAGE_KEY); }catch(_){} if(window.gdnCadastroSync) window.gdnCadastroSync(); if(window.gdnIscaSync) window.gdnIscaSync(); return false; }
+    }catch(e2){ GDN_IDB.set('state',{json:json,t:Date.now()}); console.warn('localStorage cheio: estado salvo na reserva (IndexedDB).'); try{ localStorage.removeItem(STORAGE_KEY); }catch(_){} if(window.gdnCadastroSync) window.gdnCadastroSync(); if(window.gdnIscaSync) window.gdnIscaSync(); if(window.gdnParamSync) window.gdnParamSync(); return false; }
   }
 }
 
@@ -1535,16 +1536,14 @@ function novaOperacao(){
     '• Iscas: placas/docas de prioridade e arquivo de iscas\n'+
     '• Entrada de Veículos CD: programações carregadas\n'+
     '• Relação de Entrega: relatórios e Lista de Carga carregados\n'+
-    '• Configurações › Parâmetros: unidades, faixas de doca e transportadoras VOLTAM AO PADRÃO de fábrica\n'+
-    '• Configurações › Abas Visíveis e opções salvas (formatação do Excel, fluxo automático)\n'+
     '• Filtros e campos de busca\n\n'+
-    'São mantidos apenas os dados compartilhados na nuvem entre os computadores (Cadastro de Placas e tabelas das iscas: regiões/territórios) e a assinatura.\n\n'+
+    'NÃO são apagados (ficam salvos no Firebase): tudo de Configurações — Parâmetros (unidades, docas bloqueadas/indisponíveis e extras, faixas de doca, transportadoras, filiais), Cadastro de Placas, tabelas das iscas e Abas Visíveis —, as opções salvas (Excel, fluxo automático), a equipe cadastrada na Produtividade e a assinatura.\n\n'+
     'Ao final a página é recarregada para zerar também tudo que estiver só em memória. Confirmar?')) return;
 
   /* cada passo roda isolado: se um falhar, os demais continuam e a operação não fica "meio limpa" */
   /* bloqueia regravações vindas de leituras de arquivo que ainda estavam em andamento; só os passos abaixo podem gravar */
   window.__GDN_RESETANDO = true; window.__GDN_PERSIST_OK = true;
-  const CHAVES_DIA = ['kc_kit_v1','cs_saida_v1','fluxo_auto_v1','relXlsxOpts'];   // dados próprios de módulos + preferências salvas
+  const CHAVES_DIA = ['kc_kit_v1','cs_saida_v1'];   // só dados do dia dos módulos; preferências (fluxo_auto_v1, relXlsxOpts) e Configurações NÃO são apagadas
   let salvou = false;
   const passo = (nome, fn)=>{ try{ fn(); }catch(e){ console.error('Novo dia · '+nome, e); } };
   const vazio = id=>{ const el=document.getElementById(id); if(el){ if('value' in el) el.value=''; } };
@@ -1564,18 +1563,14 @@ function novaOperacao(){
     STATE.folhas = null; STATE.folhasArqs = [];
     STATE.ts = [];
     IL_MEM.buf = null; IL_MEM.nome = ''; IL_MEM.folha = '';
-    /* Parâmetros voltam ao padrão. Ficam só os dados que são compartilhados na nuvem (se zerados aqui, voltariam sozinhos
-       ou, pior, sobrescreveriam o cadastro dos outros computadores). */
-    const pad = defaultState().config, c = STATE.config || {}, manter = {};
-    ['cadastroPlacas','iscaTerritorios','iscaMapa','iscaTerrExtra'].forEach(k=>{ if(c[k]!==undefined) manter[k]=c[k]; });
-    STATE.config = Object.assign({}, pad, manter);
+    /* Configurações (STATE.config: unidades, docas indisponíveis/extras, faixas, transportadoras, filiais, abas visíveis, cadastro de placas, iscas) NÃO são tocadas pelo Novo dia. */
     salvou = (saveState(true) === true);
   });
 
   /* 2) módulos isolados, com dados próprios no navegador (Saída de Veículos e Coleta) */
   passo('saída (aba 6)', ()=>{ if(typeof window.csNovoDia==='function') window.csNovoDia(); });
   passo('coleta (aba 3)',  ()=>{ if(typeof window.kcNovoDia==='function') window.kcNovoDia(); });
-  passo('relação de entrega (aba 7)', ()=>{ REL.rows=[]; REL.lista=null; REL.arqs=[]; REL.sel=null; REL.off={}; if(typeof relXRestaurar==='function') relXRestaurar(false); });
+  passo('relação de entrega (aba 7)', ()=>{ REL.rows=[]; REL.lista=null; REL.arqs=[]; REL.sel=null; REL.off={}; });
   window.__GDN_PERSIST_OK = false;
   /* os módulos regravaram "vazio"; apaga de novo as chaves para não sobrar nem o esqueleto (e nada antigo para restaurar) */
   passo('apagar chaves dos módulos', ()=>{ CHAVES_DIA.forEach(k=>{ try{ localStorage.removeItem(k); }catch(e){} }); });
@@ -1642,7 +1637,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if(sessionStorage.getItem('gdn_novodia_ok')){
       sessionStorage.removeItem('gdn_novodia_ok');
       switchTab('upload');
-      toast('Operação limpa em todas as abas. Parâmetros e cadastros foram mantidos.', 'ok');
+      toast('Operação limpa em todas as abas. Configurações, cadastros e equipe da Produtividade foram mantidos.', 'ok');
     }
   }catch(e){}
 });
@@ -6101,7 +6096,7 @@ function iniciarSyncCadastro(){
     cadStatus('⚠ Sem acesso ao Firestore ('+(err.code||err.message)+'). Confira as regras do banco. O cadastro continua só neste navegador.', true);
   });
 }
-function pararSyncCadastro(){ if(cadUnsub){ cadUnsub(); cadUnsub = null; } cadPronto = false; cadUltimo = null; pararSyncIscas(); }
+function pararSyncCadastro(){ if(cadUnsub){ cadUnsub(); cadUnsub = null; } cadPronto = false; cadUltimo = null; pararSyncIscas(); if(typeof pararSyncParam==='function') pararSyncParam(); if(typeof pararSyncEquipe==='function') pararSyncEquipe(); }
 
 /* ---------- Parâmetros das iscas no Firestore (gdn_docas / iscaParametros) ----------
    Região de cada área de entrega, territórios e regiões incluídos pelo usuário: mesmos dados em todos os computadores. */
@@ -6154,6 +6149,95 @@ function iniciarSyncIscas(){
 }
 function pararSyncIscas(){ if(iscaUnsub){ iscaUnsub(); iscaUnsub = null; } iscaPronto = false; iscaUltimo = null; }
 
+/* ---------- Parâmetros (Configurações) no Firestore (gdn_docas / parametrosConfig) ----------
+   Unidades, docas indisponíveis/extras, faixas, transportadoras, filiais, abas visíveis etc.: o "Novo dia" não apaga e o banco é a fonte da verdade. */
+const paramRef = doc(db, 'gdn_docas', 'parametrosConfig');
+let paramUltimo = null, paramTimer = null, paramUnsub = null, paramPronto = false;
+const PARAM_FORA = ['cadastroPlacas','iscaMapa','iscaTerrExtra','iscaRegioesExtra','iscaTerritorios','migFilialCAJD0'];   // têm documentos próprios ou são marcas locais
+function paramDados(){ const C = STATE.config||{}, o = {}; Object.keys(C).forEach(k=>{ if(PARAM_FORA.indexOf(k)<0 && C[k]!==undefined) o[k]=C[k]; }); return JSON.parse(JSON.stringify(o)); }
+function paramStatus(txt, erro){ const el = document.getElementById('paramNuvem'); if(el){ el.textContent = txt; el.style.color = erro ? 'var(--red,#c0392b)' : 'inherit'; } }
+async function paramEnviar(){
+  if(!paramPronto || !auth.currentUser) return;
+  const d = paramDados(), j = canon(d); if(j === paramUltimo) return;
+  try{
+    await setDoc(paramRef, {json: JSON.stringify(d), atualizadoEm: serverTimestamp(), atualizadoPor: auth.currentUser.email || ''});
+    paramUltimo = j;
+    paramStatus('☁ Parâmetros salvos no Firebase — iguais em todos os computadores e não apagados pelo “Novo dia”.');
+  }catch(e){
+    console.error('Firestore parâmetros (gravar)', e);
+    paramStatus('⚠ Não foi possível gravar os parâmetros no Firebase ('+(e.code||e.message)+'). Confira as regras do Firestore para gdn_docas/parametrosConfig. Os dados continuam salvos neste navegador.', true);
+  }
+}
+window.gdnParamSync = function(){ clearTimeout(paramTimer); paramTimer = setTimeout(paramEnviar, 800); };
+function iniciarSyncParam(){
+  if(paramUnsub) return;
+  paramStatus('☁ Conectando ao Firebase…');
+  paramUnsub = onSnapshot(paramRef, snap => {
+    if(snap.metadata.hasPendingWrites) return;
+    paramPronto = true;
+    if(!snap.exists()){ paramUltimo = null; paramEnviar(); return; }   // primeira vez: sobe os parâmetros deste computador
+    let rem = {};
+    try{ rem = JSON.parse(snap.data().json || '{}') || {}; }catch(e){ rem = {}; }
+    paramUltimo = canon(rem);
+    if(paramUltimo !== canon(paramDados())){                           // o banco é a fonte da verdade
+      const C = STATE.config = STATE.config||{};
+      Object.keys(rem).forEach(k=>{ if(PARAM_FORA.indexOf(k)<0) C[k] = rem[k]; });
+      try{ revincularTransportadoras(); }catch(e){}
+      try{ saveState(); }catch(e){}
+      ['renderParametros','renderAbasVisiveis','aplicarAbasVisiveis','renderPainel','renderOndasFora'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(e){} });
+    }
+    paramStatus('☁ Parâmetros salvos no Firebase — iguais em todos os computadores e não apagados pelo “Novo dia”.');
+  }, err => {
+    console.error('Firestore parâmetros (ler)', err);
+    paramPronto = false;
+    paramStatus('⚠ Sem acesso ao Firestore para os parâmetros ('+(err.code||err.message)+'). Confira as regras do banco para gdn_docas/parametrosConfig. Os dados continuam salvos neste navegador.', true);
+  });
+}
+function pararSyncParam(){ if(paramUnsub){ paramUnsub(); paramUnsub = null; } paramPronto = false; paramUltimo = null; }
+
+/* ---------- Equipe da Produtividade no Firestore (gdn_docas / equipeProdutividade) ---------- */
+const eqRef = doc(db, 'gdn_docas', 'equipeProdutividade');
+let eqUltimo = null, eqTimer = null, eqUnsub = null, eqPronto = false;
+const eqJson = () => canon(PROD.equipe || []);
+function eqStatus(txt, erro){ window.__eqNuvem = {txt, err:!!erro}; const el = document.getElementById('prEqNuvem'); if(el){ el.textContent = txt; el.style.color = erro ? 'var(--red,#c0392b)' : 'inherit'; } }
+async function eqEnviar(){
+  if(!eqPronto || !auth.currentUser) return;
+  const j = eqJson(); if(j === eqUltimo) return;
+  if(eqUltimo === null && !(PROD.equipe||[]).length) return;           // nada para subir ainda
+  try{
+    const equipe = JSON.parse(JSON.stringify(PROD.equipe||[]));
+    await setDoc(eqRef, {equipe, total: equipe.length, atualizadoEm: serverTimestamp(), atualizadoPor: auth.currentUser.email || ''});
+    eqUltimo = j;
+    eqStatus('☁ Equipe salva no Firebase ('+equipe.length+' colaboradores) — igual em todos os computadores.');
+  }catch(e){
+    console.error('Firestore equipe (gravar)', e);
+    eqStatus('⚠ Não foi possível gravar a equipe no Firebase ('+(e.code||e.message)+'). Confira as regras do Firestore para gdn_docas/equipeProdutividade. A equipe continua salva neste navegador.', true);
+  }
+}
+window.gdnEquipeSync = function(){ clearTimeout(eqTimer); eqTimer = setTimeout(eqEnviar, 800); };
+function iniciarSyncEquipe(){
+  if(eqUnsub) return;
+  eqStatus('☁ Conectando ao Firebase…');
+  eqUnsub = onSnapshot(eqRef, snap => {
+    if(snap.metadata.hasPendingWrites) return;
+    eqPronto = true;
+    if(!snap.exists()){ eqUltimo = null; eqEnviar(); return; }          // primeira vez: sobe a equipe deste computador
+    const rem = Array.isArray(snap.data().equipe) ? snap.data().equipe : [];
+    eqUltimo = canon(rem);
+    if(eqUltimo !== eqJson()){                                          // o banco é a fonte da verdade
+      PROD.equipe = rem;
+      try{ localStorage.setItem(PR_EQ_KEY, JSON.stringify(rem)); }catch(e){}
+      try{ prodNomes(); renderProd(); }catch(e){}
+    }
+    eqStatus('☁ Equipe salva no Firebase ('+rem.length+' colaboradores) — igual em todos os computadores.');
+  }, err => {
+    console.error('Firestore equipe (ler)', err);
+    eqPronto = false;
+    eqStatus('⚠ Sem acesso ao Firestore para a equipe ('+(err.code||err.message)+'). Confira as regras do banco para gdn_docas/equipeProdutividade. A equipe continua salva neste navegador.', true);
+  });
+}
+function pararSyncEquipe(){ if(eqUnsub){ eqUnsub(); eqUnsub = null; } eqPronto = false; eqUltimo = null; }
+
 onAuthStateChanged(auth, (user) => {
   splash.hidden = true;
   elPass.value = '';
@@ -6165,6 +6249,8 @@ onAuthStateChanged(auth, (user) => {
     entrarNaFerramenta();
     iniciarSyncCadastro();
     iniciarSyncIscas();
+    iniciarSyncParam();
+    iniciarSyncEquipe();
   }else{
     elWho.textContent = '—';
     pararSyncCadastro();
@@ -7579,7 +7665,7 @@ const prNomeDe = m=>{ const x=PROD.nomes[m]; return x?(PROD.full?x.cheio:x.curto
    o nome exibido é o nome cadastrado. Guardada em chave própria do navegador (não é apagada pelo “Novo dia”). */
 const PR_EQ_KEY = 'gdn_prod_equipe';
 function prEqLoad(){ try{ PROD.equipe = JSON.parse(localStorage.getItem(PR_EQ_KEY)||'[]') || []; }catch(e){ PROD.equipe = []; } if(!PROD.equipe.length) PROD.op='equipe'; }
-function prEqSave(){ try{ localStorage.setItem(PR_EQ_KEY, JSON.stringify(PROD.equipe)); }catch(e){ toast('Não foi possível salvar a equipe no navegador.','err'); } prodNomes(); renderProd(); }
+function prEqSave(){ try{ localStorage.setItem(PR_EQ_KEY, JSON.stringify(PROD.equipe)); }catch(e){ toast('Não foi possível salvar a equipe no navegador.','err'); } if(window.gdnEquipeSync) window.gdnEquipeSync(); prodNomes(); renderProd(); }
 const prPartes = m=>String(m||'').split(',').map(x=>x.trim()).filter(Boolean);
 function prMatMap(){ const map=new Map(); PROD.equipe.forEach(emp=>{ const p=prPartes(emp.matricula); p.forEach(m=>map.set(m,{emp,principal:p[0]})); }); return map; }
 function prEqDup(partes, ignorarId){ const mm=prMatMap(); return partes.some(m=>mm.has(m) && mm.get(m).emp.id!==ignorarId); }
