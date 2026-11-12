@@ -1248,7 +1248,7 @@
     <div class="panel-head">
       <div>
         <h2>PAINEL DIARIO</h2>
-        <div class="desc">Relatório do dia: quadro <b>TS</b> (base TS carregada na aba 1), quadro <b>VM</b> (cargas da <b>1 · Lista de Carga</b>) e os resumos. ENTREGAS, TEMPO, M³ e KM vêm da <b>Linha de Produto</b> (aba “Painel (Diário)”), cruzada pela placa. Carregue a Linha de Produto (.xlsb, .xlsx ou .xls) e baixe o Excel, copie a imagem ou imprima.</div>
+        <div class="desc">Relatório do dia: quadro <b>TS</b> (base TS carregada na aba 1), quadro <b>VM</b> (cargas da <b>1 · Lista de Carga</b>) e os resumos. Da <b>Linha de Produto</b>, cruzando pela placa: ENTREGAS (colunas J:P), M³ (colunas C:I) e TEMPO (coluna Roadshow) vêm da aba “Painel (Diário)”; o KM vem da aba “Base” (coluna R). Carregue a Linha de Produto (.xlsb, .xlsx ou .xls) e baixe o Excel, copie a imagem ou imprima.</div>
       </div>
       <div class="pd-acoes">
         <label>Data <input type="date" id="pdData" onchange="pdOpt()"></label>
@@ -7546,46 +7546,122 @@ function pdTxt(c){                                                            /*
   return String(Math.round(v * 100) / 100).replace('.', ',');
 }
 
-/* Lê a aba "Painel (Diário)" da Linha de Produto (linhas = matriz da planilha). Devolve {data, plates:{PLACA:{e,nf,m,t,k}}} ou {erro}. */
-function pdParseLinha(rows){
-  var nm = function(s){ return String(s == null ? '' : s).normalize('NFKD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, ''); };
-  var hr = -1, pc = -1;
-  for(var i = 0; i < Math.min(rows.length, 40) && hr < 0; i++){
-    var r = rows[i] || [];
-    for(var j = 0; j < Math.min(r.length, 6); j++){ if(nm(r[j]) === 'PLACA'){ hr = i; pc = j; break; } }
+/* ---------- Linha de Produto: posições fixas pedidas ----------
+   Aba "Painel (Diário)": M³ = soma das colunas C:I · ENTREGAS = soma das colunas J:P · TEMPO = coluna "Roadshow" (grupo Tempo)
+   Aba "Base":            KM = coluna R (cruzada pela placa) */
+var PD_M3 = [2, 8], PD_ENT = [9, 15], PD_KM_COL = 17;
+function pdNm(s){ return pdN(s).replace(/[^A-Z0-9]/g, ''); }
+function pdNum(v){
+  if(typeof v === 'number') return isFinite(v) ? v : 0;
+  var s = String(v == null ? '' : v).replace(/[^0-9,.\-]/g, ''); if(!s) return 0;
+  if(s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
+  var x = Number(s); return isFinite(x) ? x : 0;
+}
+function pdSomaCols(x, a, b){ var t = 0; for(var j = a; j <= b; j++) t += pdNum(x[j]); return Math.round(t * 1e6) / 1e6; }
+function pdTempoVal(v){
+  if(typeof v === 'number') return v > 0 ? v : null;
+  var m = /^(\d{1,3}):(\d{2})/.exec(String(v == null ? '' : v).trim()); return m ? (+m[1] * 60 + +m[2]) / 1440 : null;
+}
+function pdPlacaTxt(v){ return String(v == null ? '' : v).toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+/* acha a coluna da placa: cabeçalho "PLACA"; sem cabeçalho, a coluna que mais tem placas (ABC1D23 / ABC1234) */
+function pdAchaPlaca(rows, ncol){
+  var i, j, r, hr = -1, pc = -1;
+  for(i = 0; i < Math.min(rows.length, 40) && hr < 0; i++){
+    r = rows[i] || [];
+    for(j = 0; j < Math.min(r.length, ncol); j++){ if(pdNm(r[j]).indexOf('PLACA') === 0){ hr = i; pc = j; break; } }
   }
-  if(hr < 0) return {erro: 'não achei a coluna PLACA'};
-  var top = rows[hr] || [], sub = rows[hr + 1] || [], n = Math.max(top.length, sub.length, 60);
-  var achar = function(topRx, subNames, depois){
-    var primeiro = -1;
-    for(var j = (depois == null ? pc + 1 : depois); j < n; j++){
-      if(subNames.indexOf(nm(sub[j])) < 0) continue;
-      if(topRx.test(nm(top[j]))) return j;
-      if(primeiro < 0) primeiro = j;
+  if(hr >= 0) return {hr: hr, pc: pc};
+  var rx = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/, cnt = [];
+  for(i = 0; i < Math.min(rows.length, 2000); i++){
+    r = rows[i] || [];
+    for(j = 0; j < Math.min(r.length, ncol); j++){ if(rx.test(pdPlacaTxt(r[j]))) cnt[j] = (cnt[j] || 0) + 1; }
+  }
+  var best = -1, bc = 2; for(j = 0; j < cnt.length; j++){ if((cnt[j] || 0) > bc){ bc = cnt[j]; best = j; } }
+  return best >= 0 ? {hr: -1, pc: best} : null;
+}
+/* rótulo do grupo (ex.: TEMPO, KM, TOTAL) acima de uma coluna — cabeçalhos mesclados só têm texto na 1ª coluna, então procura à esquerda */
+function pdGrupo(rows, i, j){
+  for(var rr = i - 1; rr >= Math.max(0, i - 2); rr--){
+    var q = rows[rr] || [];
+    for(var c = j; c >= Math.max(0, j - 12); c--){ var u = pdNm(q[c]); if(u && u.indexOf('ROADSHOW') < 0) return u; }
+  }
+  return '';
+}
+function pdColRoadshow(rows, hr){
+  var h = hr < 0 ? 0 : hr, a = Math.max(0, h - 3), b = Math.min(rows.length - 1, h + 3), c = [], vistos = {};
+  for(var i = a; i <= b; i++){
+    var r = rows[i] || [];
+    for(var j = 0; j < Math.min(r.length, 60); j++){
+      var t = pdNm(r[j]); if(t.indexOf('ROADSHOW') < 0 || vistos[j]) continue;
+      vistos[j] = 1; c.push({j: j, lab: t + ' ' + pdGrupo(rows, i, j)});
     }
-    return primeiro;
-  };
-  var cE = achar(/^TOTAL/, ['CLIENTE']), cNF = achar(/^TOTAL/, ['NF'], cE >= 0 ? cE : null), cM = achar(/^TOTAL/, ['M3', 'M'], cE >= 0 ? cE : null);
-  var cT = achar(/^TEMPO/, ['ROADSHOW'], cE >= 0 ? cE : null), cK = achar(/^KM/, ['ROADSHOW'], cT >= 0 ? cT + 1 : null);
-  var falta = []; if(cE < 0) falta.push('Cliente (Total)'); if(cM < 0) falta.push('M³ (Total)'); if(cT < 0) falta.push('Tempo Roadshow'); if(cK < 0) falta.push('km Roadshow');
-  if(falta.length) return {erro: 'não achei as colunas: ' + falta.join(', ')};
-  var num = function(v){ if(typeof v === 'number') return isFinite(v) ? v : 0; var x = Number(String(v == null ? '' : v).replace(/\./g, '').replace(',', '.')); return isFinite(x) ? x : 0; };
-  var tempo = function(v){
-    if(typeof v === 'number') return v > 0 ? v : null;
-    var m = /^(\d{1,2}):(\d{2})/.exec(String(v == null ? '' : v).trim()); return m ? (+m[1] * 60 + +m[2]) / 1440 : null;
-  };
-  var out = {}, dup = 0, data = null;
-  for(var a = 0; a < hr + 1 && data == null; a++){ (rows[a] || []).forEach(function(v){ if(data == null && typeof v === 'number' && v > 40000 && v < 70000) data = Math.floor(v); }); }
-  for(var k = hr + 2; k < rows.length; k++){
-    var x = rows[k] || [], pl = String(x[pc] == null ? '' : x[pc]).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  }
+  var tempo = c.filter(function(x){ return x.lab.indexOf('TEMPO') >= 0 && x.lab.indexOf('KM') < 0; })[0]
+           || c.filter(function(x){ return x.lab.indexOf('KM') < 0; })[0] || c[0];
+  var km = c.filter(function(x){ return x.lab.indexOf('KM') >= 0; })[0];
+  return {tempo: tempo ? tempo.j : -1, km: km ? km.j : -1};
+}
+function pdColNF(rows, hr){
+  var h = hr < 0 ? 0 : hr, a = Math.max(0, h - 3), b = Math.min(rows.length - 1, h + 3), c = [];
+  for(var i = a; i <= b; i++){ var r = rows[i] || []; for(var j = 0; j < Math.min(r.length, 60); j++){ if(pdNm(r[j]) === 'NF') c.push({j: j, g: pdGrupo(rows, i, j)}); } }
+  var t = c.filter(function(x){ return x.g.indexOf('TOTAL') === 0; })[0] || c[0]; return t ? t.j : -1;
+}
+/* aba Base: placa -> KM (coluna R). Mais de uma linha por placa: vale o maior KM. */
+function pdParseBase(rows){
+  var f = pdAchaPlaca(rows, 30); if(!f) return {erro: 'não achei a coluna de placa na aba Base'};
+  var rx = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/, out = {}, linhas = 0, comKm = 0;
+  for(var k = f.hr + 1; k < rows.length; k++){
+    var x = rows[k] || [], pl = pdPlacaTxt(x[f.pc]); if(!rx.test(pl)) continue;
+    linhas++; var km = pdNum(x[PD_KM_COL]); if(km > 0){ comKm++; if(!(out[pl] > km)) out[pl] = km; }
+  }
+  if(!linhas) return {erro: 'a aba Base não tem placas'};
+  return {km: out, linhas: linhas, comKm: comKm, colPlaca: f.pc};
+}
+/* rows = aba "Painel (Diário)" · rowsBase = aba "Base" (opcional). Devolve {data, plates:{PLACA:{e,nf,m,t,k}}, n, dup, avisos[], diag} ou {erro} */
+function pdParseLinha(rows, rowsBase){
+  var f = pdAchaPlaca(rows, 6); if(!f) return {erro: 'não achei a coluna PLACA na aba Painel (Diário)'};
+  var hr = f.hr, pc = f.pc, avisos = [];
+  var rs = pdColRoadshow(rows, hr), cT = rs.tempo, cNF = pdColNF(rows, hr);
+  if(cT < 0) return {erro: 'não achei a coluna "Roadshow" (Tempo) na aba Painel (Diário)'};
+  var base = null;
+  if(rowsBase){ base = pdParseBase(rowsBase); if(base.erro){ avisos.push(base.erro + ' — KM ficou 0.'); base = null; } }
+  else if(rs.km >= 0) avisos.push('Não achei a aba "Base" — KM veio da coluna Roadshow do KM na aba Painel (Diário).');
+  else avisos.push('Não achei a aba "Base" — KM ficou 0.');
+  var out = {}, dup = 0, data = null, semKm = 0, k;
+  for(var a = 0; a < Math.max(hr, 0) + 1 && data == null; a++){ (rows[a] || []).forEach(function(v){ if(data == null && typeof v === 'number' && v > 40000 && v < 70000) data = Math.floor(v); }); }
+  for(k = hr + 1; k < rows.length; k++){
+    var x = rows[k] || [], pl = pdPlacaTxt(x[pc]);
     if(!/^[A-Z0-9]{7}$/.test(pl)) continue;
-    var o = {e: num(x[cE]), nf: cNF >= 0 ? num(x[cNF]) : 0, m: num(x[cM]), t: tempo(x[cT]), k: num(x[cK])};
+    var km = base ? (base.km[pl] || 0) : (rs.km >= 0 ? pdNum(x[rs.km]) : 0);
+    var o = {e: pdSomaCols(x, PD_ENT[0], PD_ENT[1]), nf: cNF >= 0 ? pdNum(x[cNF]) : 0, m: pdSomaCols(x, PD_M3[0], PD_M3[1]), t: pdTempoVal(x[cT]), k: km};
     if(out[pl]){ dup++; if(!(out[pl].e || out[pl].m) && (o.e || o.m)) out[pl] = o; continue; }
     out[pl] = o;
   }
   var tot = Object.keys(out).length;
-  if(!tot) return {erro: 'nenhuma placa encontrada'};
-  return {data: data, plates: out, n: tot, dup: dup};
+  if(!tot) return {erro: 'nenhuma placa encontrada na aba Painel (Diário)'};
+  if(base) Object.keys(out).forEach(function(p){ if(!out[p].k) semKm++; });
+  if(base && semKm) avisos.push(semKm + ' placa(s) sem KM na aba Base (ficam com 0).');
+  var L = function(i){ var s = '', n = i + 1; while(n > 0){ s = String.fromCharCode(65 + (n - 1) % 26) + s; n = Math.floor((n - 1) / 26); } return s; };
+  return {data: data, plates: out, n: tot, dup: dup, avisos: avisos,
+    diag: 'M³ C:I · Entregas J:P · Tempo col. ' + L(cT) + ' · KM ' + (base ? 'Base col. R (placa em ' + L(base.colPlaca) + ')' : (rs.km >= 0 ? 'col. ' + L(rs.km) : 'não encontrado'))};
+}
+/* lê o arquivo inteiro (xlsb/xlsx/xls): acha as abas "Painel (Diário)" e "Base" e devolve o resultado de pdParseLinha */
+function pdLerBuf(buf){
+  var nomes = XLSX.read(buf, {type: 'array', bookSheets: true}).SheetNames;
+  var n = function(x){ return pdN(x).replace(/[^A-Z]/g, ''); };
+  var alvo = nomes.filter(function(x){ return n(x) === 'PAINELDIARIO'; })[0] || nomes.filter(function(x){ return n(x).indexOf('PAINEL') >= 0 && n(x).indexOf('DIARIO') >= 0; })[0];
+  if(!alvo) throw new Error('não achei a aba "Painel (Diário)" neste arquivo');
+  var nb = nomes.filter(function(x){ return n(x) === 'BASE'; })[0] || nomes.filter(function(x){ return n(x).indexOf('BASE') === 0; })[0] || nomes.filter(function(x){ return n(x).indexOf('BASE') >= 0; })[0];
+  var wb = XLSX.read(buf, {type: 'array', sheets: nb ? [alvo, nb] : [alvo]});
+  var rd = function(nome, maxC, maxR){
+    var ws = wb.Sheets[nome]; if(!ws || !ws['!ref']) return [];
+    var rg = XLSX.utils.decode_range(ws['!ref']);
+    rg.e.c = Math.min(rg.e.c, maxC); rg.e.r = Math.min(rg.e.r, maxR); ws['!ref'] = XLSX.utils.encode_range(rg);   /* o arquivo pode declarar A1:XFD — limita para não ler milhões de células vazias */
+    return XLSX.utils.sheet_to_json(ws, {header: 1, raw: true, defval: ''});
+  };
+  var rows = rd(alvo, 59, 6000), rowsB = nb ? rd(nb, 29, 200000) : null;
+  var r = pdParseLinha(rows, rowsB); if(r.erro) throw new Error(r.erro);
+  return r;
 }
 
 /* inp = {cargas:[{n,key,placa,transp,doca,pre1,pre2,pre3,pend}], ts:[{seq,placa,doca,onda,pre33[],pre05[],transp}], linha:{PLACA:{e,nf,m,t,k}},
@@ -7869,21 +7945,7 @@ function lerLinha(file){
   return new Promise(function(res,rej){
     var fr = new FileReader();
     fr.onerror = function(){ rej(new Error('Não consegui ler '+file.name)); };
-    fr.onload = function(){
-      try{
-        var buf = new Uint8Array(fr.result);
-        var nomes = XLSX.read(buf,{type:'array',bookSheets:true}).SheetNames;
-        var n = function(s){ return pdN(s).replace(/[^A-Z]/g,''); };
-        var alvo = nomes.filter(function(x){ return n(x)==='PAINELDIARIO'; })[0] || nomes.filter(function(x){ return n(x).indexOf('PAINEL')>=0 && n(x).indexOf('DIARIO')>=0; })[0];
-        if(!alvo) throw new Error('não achei a aba "Painel (Diário)" neste arquivo');
-        var wb = XLSX.read(buf,{type:'array',sheets:alvo});
-        var ws = wb.Sheets[alvo], rg = XLSX.utils.decode_range(ws['!ref']);
-        rg.e.c = Math.min(rg.e.c, 59); rg.e.r = Math.min(rg.e.r, 6000); ws['!ref'] = XLSX.utils.encode_range(rg);   /* o arquivo declara A1:XFD — limita para não ler milhões de células vazias */
-        var rows = XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:''});
-        var r = pdParseLinha(rows); if(r.erro) throw new Error(r.erro);
-        res(r);
-      }catch(e){ rej(e); }
-    };
+    fr.onload = function(){ try{ res(pdLerBuf(new Uint8Array(fr.result))); }catch(e){ rej(e); } };
     fr.readAsArrayBuffer(file);
   });
 }
@@ -7893,7 +7955,7 @@ window.pdFiles = async function(fileList){
   say('Lendo "'+f.name+'"…','ok');
   try{
     var r = await lerLinha(f);
-    S.linha = {nome:f.name, data:r.data, n:r.n, plates:r.plates};
+    S.linha = {nome:f.name, data:r.data, n:r.n, plates:r.plates, diag:r.diag||'', avisos:r.avisos||[]};
     if(r.data) S.data = iso(r.data);
     persist(); window.pdRender();
     say('Linha de Produto lida: '+r.n+' placa(s)'+(r.data?' · data '+pdDataBR(r.data):'')+'.','ok');
@@ -8001,12 +8063,13 @@ window.pdRender = function(){
   if(!S.data) S.data = (S.linha && S.linha.data) ? iso(S.linha.data) : hojeISO();
   $('pdData').value = S.data;
   $('pdPrio').value = (S.prio&&S.prio.length ? S.prio : PD_PRIO).join('\n');
-  $('pdArqs').innerHTML = S.linha ? '<div class="fitem"><span>Linha de Produto — '+esc(S.linha.nome)+(S.linha.data?' · '+esc(pdDataBR(S.linha.data)):'')+'</span><span class="badge ok">'+S.linha.n+' placa(s)</span></div>' : '';
+  $('pdArqs').innerHTML = S.linha ? '<div class="fitem"><span>Linha de Produto — '+esc(S.linha.nome)+(S.linha.data?' · '+esc(pdDataBR(S.linha.data)):'')+'</span><span class="badge ok">'+S.linha.n+' placa(s)</span></div>'+(S.linha.diag?'<div class="fitem"><span style="color:var(--text-2);font-size:12px">Colunas usadas: '+esc(S.linha.diag)+'</span></div>':'') : '';
   montar();
   var M = MODEL, aviso = [];
   if(!S.linha) aviso.push('Carregue a <b>Linha de Produto</b> para preencher ENTREGAS, TEMPO, M³ e KM.');
   else if(S.linha.data && pdSerial(S.data) && S.linha.data !== pdSerial(S.data)) aviso.push('A Linha de Produto é de <b>'+esc(pdDataBR(S.linha.data))+'</b>, diferente da data do painel ('+esc(pdDataBR(pdSerial(S.data)))+').');
   if(S.linha && M.semLinha.length) aviso.push('<b>'+M.semLinha.length+'</b> placa(s) da Lista de Carga não estão na Linha de Produto (ficam com 0): '+esc(M.semLinha.slice(0,12).join(', '))+(M.semLinha.length>12?'…':'')+'.');
+  if(S.linha && S.linha.avisos) S.linha.avisos.forEach(function(x){ aviso.push(esc(x)); });
   if(!M.vm.length) aviso.push('Não há cargas na <b>1 · Lista de Carga</b>. Consolide os arquivos e rode a alocação primeiro.');
   if(!M.ts.length) aviso.push('Sem base TS carregada: o quadro TS não aparece.');
   $('pdKpis').innerHTML =
