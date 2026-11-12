@@ -569,6 +569,7 @@
   <button class="subtab-btn" data-sub="cadastro" onclick="switchTab('cadastro')">Cadastro de Placas</button>
   <button class="subtab-btn" data-sub="backup" onclick="switchTab('backup')">Backup &amp; Upload</button>
   <button class="subtab-btn" data-sub="abas" onclick="switchTab('abas')">Abas Visíveis</button>
+  <button class="subtab-btn" data-sub="trava" onclick="switchTab('trava')">Trava da operação</button>
 </div>
 </div><!-- /#navFixo -->
 
@@ -1291,6 +1292,22 @@
   </div>
 </div>
 
+<div class="view" id="view-trava">
+  <div class="panel">
+    <div class="panel-head"><div><h2>Trava da operação</h2>
+      <div class="desc">Na janela configurada (padrão: das 22:30 às 00:00, horário de Brasília), depois que a Lista de Carga foi rodada, nada do que já foi rodado pode ser alterado, editado ou excluído em nenhuma aba. Quem tentar vê a mensagem “procure o administrador”. Só o administrador (jeronimos@fastshop.com.br) continua com acesso total durante a trava e é o único que muda esta configuração. A configuração é salva no Firebase e vale para todos os computadores.</div></div>
+    </div>
+    <div id="tvStatus" style="padding:12px 14px;border-radius:8px;border:1px solid var(--line);background:var(--bg-2);margin-bottom:12px;"></div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
+      <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;font-size:13px;margin:0;"><input type="checkbox" id="tvAtivo"> Trava ativada</label>
+      <label style="display:inline-flex;gap:6px;align-items:center;font-size:13px;margin:0;">Início <input type="time" id="tvIni" value="22:30"></label>
+      <label style="display:inline-flex;gap:6px;align-items:center;font-size:13px;margin:0;">Fim <input type="time" id="tvFim" value="00:00"></label>
+      <button class="primary small" id="tvSalvar" onclick="gdnTravaSalvar()">Salvar</button>
+    </div>
+    <div id="tvInfo" style="margin-top:10px;font-size:12.5px;color:var(--text-2);"></div>
+  </div>
+</div>
+
 <div class="view" id="view-backup">
   <div class="panel">
     <div class="panel-head"><div><h2>Backup</h2><div class="desc">Baixe uma cópia dos dados da ferramenta. Eles já ficam salvos automaticamente no navegador, mas o backup é a cópia de segurança fora dele.</div></div></div>
@@ -1691,7 +1708,7 @@ function toast(msg, type){
 /* =========================================================
    NAVEGAÇÃO
    ========================================================= */
-const CFG_SUBS=['parametros','cadastro','backup','abas'];
+const CFG_SUBS=['parametros','cadastro','backup','abas','trava'];
 let _cfgSubAtual='parametros';
 function switchTab(tab){
   if(tab==='config') tab=_cfgSubAtual;
@@ -1713,6 +1730,7 @@ function switchTab(tab){
   if(tab==='iscas') renderIscas();
   if(tab==='folhas') renderFolhas();
   if(tab==='abas') renderAbasVisiveis();
+  if(tab==='trava' && typeof window.gdnTravaRender==='function') window.gdnTravaRender();
   if(tab==='protocolo') renderProtocolo();
   if(tab==='ondasfora') renderOndasFora();
   if(tab==='relentrega') renderRelEntrega();
@@ -8467,6 +8485,105 @@ function prodExcel(){
   var sw = window.switchTab;
   window.switchTab = function(){ fecharTodas(); return sw.apply(this, arguments); };
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
+})();
+</script>
+<script>
+/* =========================================================
+   TRAVA DA OPERAÇÃO (Configurações › Trava da operação)
+   Janela (padrão 22:30–00:00, horário de Brasília): depois que a Lista de Carga foi rodada, só o administrador
+   altera/edita/exclui algo. Os demais veem "procure o administrador". Config em STATE.config.travaOp
+   (sincroniza sozinha no Firebase junto com os demais parâmetros).
+   ========================================================= */
+(function(){
+  const ADMIN = 'jeronimos@fastshop.com.br';
+  const MSG = '🔒 Operação travada neste horário: não é possível alterar, editar ou excluir o que já foi rodado.\n\nProcure o administrador.';
+  function cfg(){ const c=(STATE.config&&STATE.config.travaOp)||{}; return {ativo:c.ativo!==false, ini:c.ini||'22:30', fim:c.fim||'00:00'}; }
+  function mins(s){ const m=/^(\d{1,2}):(\d{2})$/.exec(String(s||'').trim()); return m?(+m[1]%24)*60+(+m[2]):null; }
+  function agoraSeg(){
+    try{
+      const p=new Intl.DateTimeFormat('en-GB',{timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).formatToParts(new Date()), g=k=>+(p.find(x=>x.type===k)||{value:0}).value;
+      return (g('hour')%24)*3600+g('minute')*60+g('second');
+    }catch(e){ const d=new Date(); return d.getHours()*3600+d.getMinutes()*60+d.getSeconds(); }
+  }
+  function ehAdmin(){ const el=document.getElementById('userEmail'); return !!el && (el.textContent||'').trim().toLowerCase()===ADMIN; }
+  function rodada(){ return !!(STATE && ((STATE.cargas&&STATE.cargas.length)||(STATE.alocacao&&STATE.alocacao.length))); }
+  function janela(){
+    const c=cfg(), i=mins(c.ini), f=mins(c.fim), now=agoraSeg();
+    if(i==null||f==null||i===f) return {dentro:false,i,f,now,c};
+    const is=i*60, fs=f*60, dentro = is<fs ? (now>=is && now<fs) : (now>=is || now<fs);
+    return {dentro,i,f,now,c,is,fs};
+  }
+  function travada(){ const j=janela(); return j.c.ativo && j.dentro && rodada() && !ehAdmin(); }
+  let _ult=0;
+  function avisar(){ if(Date.now()-_ult<2000) return; _ult=Date.now(); try{ alert(MSG); }catch(e){} }
+  let _ref=false;
+  function refresh(){   /* devolve campos editados ao valor real */
+    if(_ref || !window.event) return; _ref=true;
+    try{ const v=document.querySelector('.view.active'); if(v) window.switchTab(v.id.replace('view-','')); }catch(e){}
+    _ref=false;
+  }
+  window.gdnTravaAtiva = travada;
+
+  /* funções que alteram, editam ou excluem dados (todas as abas) — bloqueadas enquanto a trava vale */
+  const LISTA = ('removeUnidade updateUnidade addUnidade toggleDoca addDocaExtra removeDocaExtra updateTransp removeTransp addTransportadora restaurarTransportadoras '
+   +'addCadastroRow updateCadastro removeCadastro processCadastroPaste cadastroUploadArquivo cadastroRemoverChave '
+   +'handleFiles handleFilesAuto handleDrop handleDropAuto limparUploadsPendentes removePending consolidarUploads fluxoConsolidar fluxoRun tsMudarColuna limparTS limparCargas rodarAlocacao otimizarOndas removerCargasOutraData resolverOrfao updateOrfaoPlaca updateOrfaoFilial '
+   +'pVincularTranspPlaca aplicarDoca removerAjusteDoca mxMoverCarga mxMoverReservaTS mxDesalocar '
+   +'adicionarIscas limparIscas removerIsca iscaEscolher iscaSalvarCfg iscaArquivos ilRedistribuir ilIncluirRegiao ilIncluirArea ilRemoverRegiao ilRemoverArea ilLimparTerritorios ilMudarRegiao ilMudarPlaca ilLimpar '
+   +'csLimpar csDrop csFiles csRegImportar csRegMudou csRegExemplo kcLimpar kcDrop kcFiles '
+   +'ffArquivos ffLimpar ffAssinNomeAplicar ffAssinRestaurar ffAssinTrocar relArquivos relLimpar relUsarListaAba1 '
+   +'prodAdd prodLimpar prodRemFile prEqAdd prEqDel prEqEdit prFaltLimpar prFaltRem pdLimpar pdDrop pdFiles pdPadrao '
+   +'bkRestaurarArquivos novaOperacao abasMarcarTodas abasRestaurarPadrao setAbaVisivel').split(/\s+/);
+  LISTA.forEach(function(n){
+    const f=window[n]; if(typeof f!=='function') return;
+    window[n]=function(){ if(travada()){ avisar(); refresh(); return false; } return f.apply(this,arguments); };
+  });
+  /* opções de alocação (checkboxes com saveState direto no HTML) */
+  document.addEventListener('change', function(ev){
+    const t=ev.target;
+    if(t && (t.id==='cfgDocaLivre'||t.id==='cfgCompactar') && travada()){ ev.stopImmediatePropagation(); ev.preventDefault(); t.checked=!t.checked; avisar(); }
+  }, true);
+
+  /* ---------- sub-aba: controle do temporizador ---------- */
+  function hms(s){ s=Math.max(0,Math.floor(s)); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0'); }
+  function pintar(){
+    const st=document.getElementById('tvStatus'), inf=document.getElementById('tvInfo'); if(!st) return;
+    const j=janela(), c=j.c, adm=ehAdmin(), run=rodada(), ativa=c.ativo&&j.dentro&&run;
+    const rel=hms(Math.floor(j.now/3600)*3600+Math.floor(j.now%3600/60)*60+j.now%60);
+    let txt, cor;
+    if(!c.ativo){ txt='🔓 <b>Trava desativada.</b>'; cor='var(--text-1)'; }
+    else if(j.i==null||j.f==null||j.i===j.f){ txt='⚠ <b>Horários inválidos.</b> Ajuste o início e o fim.'; cor='var(--amber)'; }
+    else if(j.dentro){
+      const falta=((j.fs-j.now)+86400)%86400;
+      if(!run){ txt='⏱ <b>Dentro da janela ('+c.ini+'–'+c.fim+'), mas a Lista de Carga ainda não foi rodada.</b> A trava passa a valer assim que ela for rodada. Termina em <b>'+hms(falta)+'</b>.'; cor='var(--amber)'; }
+      else { txt='🔒 <b>TRAVADA</b> até '+c.fim+' — faltam <b>'+hms(falta)+'</b>. '+(adm?'Você é o administrador: acesso total.':'Alterar, editar e excluir: somente o administrador.'); cor='var(--red)'; }
+    } else {
+      const falta=((j.is-j.now)+86400)%86400;
+      txt='🔓 <b>Liberada.</b> Próxima trava às '+c.ini+' — faltam <b>'+hms(falta)+'</b>.'; cor='var(--teal)';
+    }
+    st.innerHTML='<div style="color:'+cor+';font-size:14.5px;">'+txt+'</div><div style="margin-top:6px;font-size:12px;color:var(--text-2);">Hora agora (Brasília): '+rel+' · Lista de Carga rodada: '+(run?'sim':'não')+' · Usuário: '+(adm?'administrador':'operador')+'</div>';
+    if(inf) inf.textContent = adm ? 'Como administrador você pode ativar/desativar a trava e mudar os horários.' : 'Somente o administrador pode mudar esta configuração.';
+  }
+  let _tm=null;
+  window.gdnTravaRender=function(){
+    const c=cfg(), adm=ehAdmin();
+    const a=document.getElementById('tvAtivo'), i=document.getElementById('tvIni'), f=document.getElementById('tvFim'), b=document.getElementById('tvSalvar');
+    if(!a) return;
+    a.checked=c.ativo; i.value=c.ini; f.value=c.fim;
+    [a,i,f,b].forEach(function(x){ x.disabled=!adm; });
+    pintar();
+    if(!_tm) _tm=setInterval(function(){ const v=document.getElementById('view-trava'); if(v && v.classList.contains('active')) pintar(); },1000);
+  };
+  window.gdnTravaSalvar=function(){
+    if(!ehAdmin()){ alert('Somente o administrador pode alterar a trava da operação.'); return; }
+    const a=document.getElementById('tvAtivo'), i=document.getElementById('tvIni').value, f=document.getElementById('tvFim').value;
+    if(mins(i)==null||mins(f)==null||mins(i)===mins(f)){ alert('Informe horários válidos e diferentes para início e fim.'); return; }
+    STATE.config=STATE.config||{};
+    STATE.config.travaOp={ativo:a.checked, ini:i, fim:f};
+    saveState();
+    try{ toast('Trava da operação salva.','ok'); }catch(e){}
+    pintar();
+  };
 })();
 </script>
 </body>
