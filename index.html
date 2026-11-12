@@ -489,6 +489,13 @@
   .pr-warn.orange{background:rgba(255,140,60,.1);border-color:#7a3d13;border-left-color:#ff8c3c;color:#ffc9a3;}
   .pr-add{display:flex;gap:12px;flex-wrap:wrap;} .pr-add input{flex:1;min-width:200px;}
   th.pr-sort{cursor:pointer;} th.pr-sort:hover{color:var(--text-0);}
+
+  /* descrições das funções: ocultas por padrão; clique no título para abrir/fechar */
+  .desc-oculta{display:none !important;}
+  .desc-titulo{cursor:pointer;user-select:none;}
+  .desc-titulo::after{content:"  ⓘ";font-size:.8em;font-weight:400;opacity:.55;}
+  .desc-titulo:hover::after{opacity:1;}
+  .desc-titulo.desc-aberta::after{content:"  ⓘ ▴";opacity:1;}
 </style>
 </head>
 <body>
@@ -1257,10 +1264,9 @@
     </div>
     <input type="file" id="pdInp" accept=".xlsb,.xlsx,.xlsm,.xls" style="display:none" onchange="pdFiles(this.files); this.value=''">
     <div id="pdArqs" class="filelist"></div>
-    <details class="pd-ajustes"><summary>Ajustes da ordem e dos grupos</summary>
+    <details class="pd-ajustes"><summary>Ajustes da ordem das transportadoras</summary>
       <div class="pd-aj-grid">
         <label>Ordem das transportadoras no quadro VM (uma por linha; as que não estiverem aqui vêm depois, pela ordem das cargas)<textarea id="pdPrio" rows="10" onchange="pdOpt()"></textarea></label>
-        <label>Transportadoras do grupo TERCEIROS (resumo da direita)<textarea id="pdTerc" rows="10" onchange="pdOpt()"></textarea></label>
       </div>
       <button class="small" onclick="pdPadrao()">Voltar ao padrão</button>
     </details>
@@ -2235,6 +2241,13 @@ function revincularTransportadoras(){
    UPLOAD & PARSERS
    ========================================================= */
 let PENDING = { GAN: [], HEBLS: [], REGIAO: [], TS: [] };
+/* o que foi enviado e consolidado por último (PENDING é esvaziado após consolidar; isto mantém o registro visível no fluxo) */
+let ULTIMO_ENVIO = null;
+function registrarUltimoEnvio(){
+  ULTIMO_ENVIO = { GAN: PENDING.GAN.length, HEBLS: PENDING.HEBLS.length, REGIAO: PENDING.REGIAO.length, TS: PENDING.TS.length,
+    nomes: [].concat(PENDING.TS, PENDING.GAN, PENDING.HEBLS, PENDING.REGIAO).map(f=>f.nome),
+    hora: new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) };
+}
 
 function handleDrop(ev, tipo){ ev.preventDefault(); ev.currentTarget.classList.remove('drag'); handleFiles(Array.from(ev.dataTransfer.files), tipo); }
 
@@ -2528,6 +2541,19 @@ function renderFluxo(){
   let h = '';
   h += nPend ? '<div class="fitem"><span>Arquivos GAN / Log de NF / Região / TS aguardando consolidação</span><span><span class="badge alert">'+nPend+'</span> <button class="small primary" onclick="fluxoConsolidar()">Consolidar e alocar agora</button></span></div>'
              : fluxoLinha('Arquivos GAN / Log de NF / Região / TS aguardando consolidação', 'nenhum', 'neutral');
+  if(ULTIMO_ENVIO && !nPend){
+    const u = ULTIMO_ENVIO, pt = [];
+    if(u.TS) pt.push('TS '+u.TS); if(u.GAN) pt.push('GAN '+u.GAN); if(u.HEBLS) pt.push('Log de NF '+u.HEBLS); if(u.REGIAO) pt.push('Região '+u.REGIAO);
+    h += fluxoLinha('Último envio consolidado'+(u.hora?' ('+u.hora+')':''), pt.join(' · ')||'—', 'ok');
+  }
+  {
+    const tsL = STATE.ts||[], tsM = tsMapaPorPlaca(), tsP = Object.keys(tsM);
+    if(tsL.length){
+      const comDoca = tsP.filter(k=>tsM[k].doca!=null).length;
+      const nCargaTS = (STATE.alocacao||[]).filter(a=>a.ts).length;
+      h += fluxoLinha('Base TS São Paulo carregada (aba 1)', tsL.length+' linha(s) · '+tsP.length+' placa(s) · '+comDoca+' com doca'+(nAloc ? ' · '+nCargaTS+' carga(s) fixada(s) pela TS' : ''), (comDoca===tsP.length) ? 'ok' : 'alert');
+    } else h += fluxoLinha('Base TS São Paulo (aba 1)', 'não enviada', 'neutral');
+  }
   h += fluxoLinha('Cargas consolidadas · alocadas (aba 1)', nCargas+' · '+nAloc, (nCargas && nAloc) ? 'ok' : (nCargas ? 'alert' : 'neutral'));
   h += kc.length ? fluxoLinha('Coletas ligadas a placa e carga (aba 3)', kcOk+' / '+kc.length, kcOk===kc.length ? 'ok' : 'alert')
                  : fluxoLinha('Coletas (aba 3)', 'envie Coletas + Tipo de Residência', 'neutral');
@@ -2816,9 +2842,20 @@ function consolidarUploads(){
   }
 
   if(ganRecords.length === 0){
-    if(tsResumo && !PENDING.HEBLS.length && !PENDING.REGIAO.length){   // só a base TS foi enviada (primeiro passo)
+    if(tsResumo && !PENDING.HEBLS.length && !PENDING.REGIAO.length){   // só a base TS foi enviada
       renderTS();
-      toast(tsResumo.msg+' Agora carregue as demais bases e consolide de novo.', tsResumo.warn ? 'err' : 'ok');
+      let msgTS = tsResumo.msg, falhou = false;
+      if((STATE.cargas||[]).length){          // já há cargas no dia: a doca/onda da TS passa a valer na hora
+        const ma = rodarAlocacao(true);
+        if(ma) msgTS += ' '+ma; else { falhou = true; msgTS += ' Alocação não foi recalculada — use "Rodar alocação" no Painel quando quiser.'; }
+      } else msgTS += ' Quando enviar GAN / Log de NF / Região, a consolidação roda sozinha e já usa esta base.';
+      registrarUltimoEnvio();
+      PENDING = { GAN: [], HEBLS: [], REGIAO: [], TS: [] };
+      ['GAN','HEBLS','REGIAO'].forEach(renderFileList);
+      atualizarPreviaUpload();
+      const rsT = document.getElementById('autoResumo');
+      if(rsT) rsT.innerHTML = `<div style="border-left:3px solid var(${(tsResumo.warn||falhou)?'--amber':'--teal'});background:var(--bg-2);padding:8px 12px;border-radius:4px;margin-bottom:6px;font-size:12.5px;color:var(--text-1);">${escAuto(msgTS)}<br><span style="color:var(--text-2)">Base TS consolidada: ${escAuto(nomesArquivos.join(', '))}</span></div>`;
+      toast(msgTS, (tsResumo.warn||falhou) ? 'err' : 'ok');
       return;
     }
     if(!(STATE.cargas.length && (PENDING.HEBLS.length || PENDING.REGIAO.length))){
@@ -2902,6 +2939,7 @@ function consolidarUploads(){
   if(msgAloc){ msg += ' '+msgAloc; switchTab('painel'); }
   else msg += ' Alocação não foi recalculada — use "Rodar alocação" no Painel quando quiser.';
   // libera a lista de arquivos: o dia seguinte não reprocessa os arquivos de hoje (o resumo fica visível na aba)
+  registrarUltimoEnvio();
   PENDING = { GAN: [], HEBLS: [], REGIAO: [], TS: [] };
   ['GAN','HEBLS','REGIAO'].forEach(renderFileList);
   atualizarPreviaUpload();
@@ -7363,7 +7401,7 @@ window.kcImprimir = function(){
     'th{font-weight:700;background:#FABF8F}tr{page-break-inside:avoid}thead{display:table-header-group}tfoot{display:table-footer-group}'+
     'tr.sp td,tr.cb td{border:0;padding:0;background:transparent}tr.sp td{height:10mm}tr.cb td{text-align:left}</style></head><body>'+
     '<table><colgroup>'+
-    w.map(function(x){ return '<col style="width:'+x+'%">'; }).join('')+'</colgroup><thead><tr class="sp"><td colspan="'+w.length+'"></td></tr><tr class="cb"><td colspan="'+w.length+'"><div class="dt">'+esc(dataForm())+'</div></td></tr><tr>'
+    w.map(function(x){ return '<col style="width:'+x+'%">'; }).join('')+'</colgroup><thead><tr class="sp"><td colspan="'+w.length+'"></td></tr><tr class="cb"><td colspan="'+w.length+'"><div class="dt">'+esc(dataForm())+'</div></td></tr><tr>'+
     COLS.map(function(c){ return '<th>'+esc(c)+'</th>'; }).join('')+'</tr></thead><tbody>'+
     ROWS.map(function(r){ var a = linhaArr(r); return '<tr>'+a.map(function(v){ return '<td>'+esc(v)+'</td>'; }).join('')+'</tr>'; }).join('')+
     '</tbody><tfoot><tr class="sp"><td colspan="'+w.length+'"></td></tr></tfoot></table></body></html>';
@@ -7434,7 +7472,7 @@ restore();
   #view-paineldiario .pd-aviso{background:var(--red-dim);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:var(--text-1);}
   #view-paineldiario .pd-ajustes{margin-top:12px;font-size:12.5px;color:var(--text-1);}
   #view-paineldiario .pd-ajustes summary{cursor:pointer;color:var(--text-2);}
-  #view-paineldiario .pd-aj-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:10px 0;}
+  #view-paineldiario .pd-aj-grid{display:grid;grid-template-columns:1fr;gap:14px;margin:10px 0;}
   #view-paineldiario .pd-aj-grid label{display:grid;gap:4px;font-size:12px;color:var(--text-2);}
   #view-paineldiario .pd-aj-grid textarea{width:100%;font-family:var(--mono);font-size:12px;}
   #view-paineldiario .pd-folhawrap{overflow:auto;background:#3a4560;border:1px solid var(--line);border-radius:8px;padding:16px;}
@@ -7455,6 +7493,12 @@ var PD_TERC = ['L.COM', 'GOMES BRASIL', 'UP TIME', 'ECOTECH', 'VAN LOG', 'ALLIAN
 function pdN(s){ return String(s == null ? '' : s).normalize('NFKD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim(); }
 function pdBase(s){ return pdN(s).replace(/\s+\d+$/, ''); }                 /* 'FI.AGREGADO 1' -> 'FI.AGREGADO' */
 function pdLimpa(s){ return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
+function pdCanon(t){                                                          /* variações do mesmo tipo -> nome único: AGR. / AGR / AGREGADO -> AGREGADO · FI AGR. / FI. AGREGADO -> FI.AGREGADO (mantém " TS" e número final) */
+  var s = pdLimpa(t).toUpperCase(); if(!s) return '';
+  var m = /^(FI[\s.]*)?AGR[A-Z.]*\s*(TS)?\s*(\d+)?$/.exec(s);
+  if(!m) return pdLimpa(t);
+  return (m[1] ? 'FI.AGREGADO' : 'AGREGADO') + (m[2] ? ' TS' : '') + (m[3] ? ' ' + m[3] : '');
+}
 function pdNomeTS(t){                                                         /* AGREGADO -> AGREGADO TS · FI.AGREGADO 1 -> FI.AGREGADO TS 1 · sem cadastro -> Placa ñ cadastrada */
   var s = pdLimpa(t); if(!s) return 'Placa ñ cadastrada';
   if(/\sTS(\s\d+)?$/i.test(s)) return s;
@@ -7462,6 +7506,11 @@ function pdNomeTS(t){                                                         /*
   return m ? m[1] + ' TS ' + m[2] : s + ' TS';
 }
 function pdPad3(a){ var v = (a || []).map(String); while(v.length < 3) v.push(''); return v.join('/'); }   /* ['22481','22563'] -> '22481/22563/' · [] -> '//' */
+function pdJuntaPre(a){                                                      /* [33, 05, D0] -> '22900 / 5151 / 225' (só os que existem); um número só continua número */
+  var v = (a || []).filter(function(x){ return x !== '' && x != null; }).map(String);
+  if(!v.length) return '';
+  return (v.length === 1 && /^\d+$/.test(v[0])) ? Number(v[0]) : v.join(' / ');
+}
 function pdMed(a){ return a.length ? a.reduce(function(x, y){ return x + y; }, 0) / a.length : null; }
 function pdTime(f){                                                           /* fração do dia -> h:mm (Excel trunca os segundos) */
   if(f == null || f === '' || isNaN(f)) return '';
@@ -7521,17 +7570,17 @@ function pdParseLinha(rows){
   return {data: data, plates: out, n: tot, dup: dup};
 }
 
-/* inp = {cargas:[{n,key,placa,transp,doca,pre1,pre2,pend}], ts:[{seq,placa,doca,onda,pre33[],pre05[],transp}], linha:{PLACA:{e,nf,m,t,k}},
+/* inp = {cargas:[{n,key,placa,transp,doca,pre1,pre2,pre3,pend}], ts:[{seq,placa,doca,onda,pre33[],pre05[],transp}], linha:{PLACA:{e,nf,m,t,k}},
           filial1, filial2, unidade, prio[], terc[], dataSerial} */
 function pdBuild(inp){
-  var linha = inp.linha || {}, prio = (inp.prio || PD_PRIO).map(pdBase), terc = (inp.terc || PD_TERC).map(pdBase);
+  var linha = inp.linha || {}, prio = (inp.prio || PD_PRIO).map(pdBase);
   var chaveRank = function(nome){ return pdBase(pdN(nome).replace(/\sTS(\s\d+)?$/, '')); };
   var rank = function(nome){ var i = prio.indexOf(chaveRank(nome)); return i < 0 ? 999 : i; };
   var semLinha = [];
   var vm = (inp.cargas || []).map(function(c){
-    var L = linha[c.key], t = pdLimpa(c.transp) || 'Placa ñ cadastrada';
+    var L = linha[c.key], t = pdCanon(c.transp) || 'Placa ñ cadastrada';
     if(!L) semLinha.push(c.placa);
-    return {n: c.n, ent: L ? L.e : 0, nf: L ? L.nf : 0, tmp: L ? L.t : null, m3: L ? L.m : 0, km: L ? L.k : 0, tipo: 'VM', pre1: c.pre1, pre2: c.pre2, doca: c.doca || '', transp: t, placa: c.placa, pend: !!c.pend};
+    return {n: c.n, ent: L ? L.e : 0, nf: L ? L.nf : 0, tmp: L ? L.t : null, m3: L ? L.m : 0, km: L ? L.k : 0, tipo: 'VM', pre: pdJuntaPre([c.pre1, c.pre2, c.pre3]), doca: c.doca || '', transp: t, placa: c.placa, pend: !!c.pend};
   });
   var minN = {}; vm.forEach(function(r){ if(!(r.transp in minN) || r.n < minN[r.transp]) minN[r.transp] = r.n; });
   vm.sort(function(a, b){
@@ -7539,15 +7588,15 @@ function pdBuild(inp){
     return (a.pend - b.pend) || (ra - rb) || (ra === 999 ? minN[a.transp] - minN[b.transp] : 0) || (a.n - b.n);
   });
   var ts = (inp.ts || []).map(function(t, i){
-    var onda = t.doca != null ? (t.onda || 1) : 99, nome = t.transp ? pdNomeTS(t.transp) : 'Placa ñ cadastrada';
-    return {seq: t.seq != null ? t.seq : i + 1, onda: onda, pre1: pdPad3(t.pre33), pre2: pdPad3(t.pre05), doca: t.doca != null ? t.doca + ' (' + (t.onda || 1) + '° onda)' : '', transp: nome, placa: t.placa};
+    var onda = t.doca != null ? (t.onda || 1) : 99, nome = t.transp ? pdNomeTS(pdCanon(t.transp)) : 'Placa ñ cadastrada';
+    return {seq: t.seq != null ? t.seq : i + 1, onda: onda, pre: pdPad3((t.pre33 || []).concat(t.pre05 || [])), doca: t.doca != null ? t.doca + ' (' + (t.onda || 1) + '° onda)' : '', transp: nome, placa: t.placa};
   });
   ts.sort(function(a, b){ return (a.onda - b.onda) || (rank(a.transp) - rank(b.transp)) || (a.seq - b.seq); });
 
   var contar = function(lista){ var ordem = [], q = {}; lista.forEach(function(r){ if(!(r.transp in q)){ q[r.transp] = 0; ordem.push(r.transp); } q[r.transp]++; }); return ordem.map(function(t){ return [t, q[t]]; }); };
-  var grupos = [['FI.AGREGADO', function(b){ return b === 'FI.AGREGADO'; }], ['AGREGADO', function(b){ return b === 'AGREGADO'; }], ['TERCEIROS', function(b){ return terc.indexOf(b) >= 0; }]]
+  var grupos = [['FI.AGREGADO', function(b){ return b === 'FI.AGREGADO'; }], ['AGREGADO', function(b){ return b === 'AGREGADO'; }], ['TERCEIROS', function(b){ return b !== 'FI.AGREGADO' && b !== 'AGREGADO'; }]]
     .map(function(g){
-      var rs = vm.filter(function(r){ return g[1](pdBase(r.transp)); });
+      var rs = vm.filter(function(r){ return g[1](chaveRank(r.transp)); });
       if(!rs.length) return null;
       return {nome: g[0], ent: pdMed(rs.map(function(r){ return r.ent; })), tmp: pdMed(rs.filter(function(r){ return r.tmp != null; }).map(function(r){ return r.tmp; })),
         m3: pdMed(rs.map(function(r){ return r.m3; })), km: pdMed(rs.map(function(r){ return r.km; }))};
@@ -7556,25 +7605,25 @@ function pdBuild(inp){
   var tot = {cargas: vm.length, ent: soma('ent'), nf: soma('nf'), m3: soma('m3')};
   tot.razao = tot.nf ? Math.round(tot.m3 / tot.nf * 100) / 100 : null;
   return {vm: vm, ts: ts, resVM: contar(vm), resTS: contar(ts), grupos: grupos, tot: tot, semLinha: semLinha,
-    f1: inp.filial1 || '33', f2: inp.filial2 || '05', unidade: inp.unidade || 'CAJ-1', dataSerial: inp.dataSerial};
+    f1: inp.filial1 || '33', f2: inp.filial2 || '05', f3: inp.filial3 || '', unidade: inp.unidade || 'CAJ-1', dataSerial: inp.dataSerial};
 }
 
 /* Grade do relatório: colunas A:K, linhas com células {c, span, v, f(formato), s(estilo)} e blocos de tabela (para as bordas) */
 function pdGrade(M){
-  var R = [], B = [], H = ['Q. CARGAS', 'ENTREGAS', 'TEMPO', 'M³', 'KM', 'TIPO', 'PRÉ ' + M.f1, 'PRÉ ' + M.f2, 'DOCAS ' + M.f1, 'TRANSP.', 'PLACAS'];
+  var R = [], B = [], H = ['Q. CARGAS', 'ENTREGAS', 'TEMPO', 'M³', 'KM', 'TIPO', 'PRÉ ' + [M.f1, M.f2, M.f3].filter(Boolean).join(' / '), null, 'DOCAS ' + M.f1, 'TRANSP.', 'PLACAS'];
   var cel = function(c, v, s, f, span){ return {c: c, span: span || 1, v: v, s: s || 'b', f: f || 'gen'}; };
   var linha = function(h, cells){ R.push({h: h, cells: cells}); return R.length - 1; };
-  var cab = function(){ return linha(15, H.map(function(t, i){ return cel(i, t, 'h'); })); };
+  var cab = function(){ var cs = []; H.forEach(function(t, i){ if(t == null) return; cs.push(i === 6 ? cel(6, t, 'h', 'gen', 2) : cel(i, t, 'h')); }); return linha(15, cs); };   /* PRÉ 33 / 05 / D0 = uma coluna só (colunas G:H mescladas) */
   linha(24.45, [cel(5, 'PAINEL DIARIO', 'title'), cel(10, M.dataSerial, 'date', 'date')]);
   if(M.ts.length){
     var r0 = cab();
-    M.ts.forEach(function(t){ linha(15, [cel(0, t.seq), cel(1, '//'), cel(2, '//'), cel(3, '//'), cel(4, '//'), cel(5, 'TS'), cel(6, t.pre1), cel(7, t.pre2), cel(8, t.doca), cel(9, t.transp), cel(10, t.placa)]); });
+    M.ts.forEach(function(t){ linha(15, [cel(0, t.seq), cel(1, '//'), cel(2, '//'), cel(3, '//'), cel(4, '//'), cel(5, 'TS'), cel(6, t.pre, 'b', 'gen', 2), cel(8, t.doca), cel(9, t.transp), cel(10, t.placa)]); });
     B.push({r0: r0, r1: R.length - 1, c0: 0, c1: 10});
     linha(15, []);
   }
   var v0 = cab();
   M.vm.forEach(function(r){
-    linha(15, [cel(0, r.n), cel(1, r.ent), cel(2, r.tmp, 'b', 'time'), cel(3, r.m3, 'b', 'int'), cel(4, r.km, 'b', 'int'), cel(5, r.tipo), cel(6, r.pre1 === '' ? null : r.pre1), cel(7, r.pre2 === '' ? null : r.pre2), cel(8, r.doca), cel(9, r.transp), cel(10, r.placa)]);
+    linha(15, [cel(0, r.n), cel(1, r.ent), cel(2, r.tmp, 'b', 'time'), cel(3, r.m3, 'b', 'int'), cel(4, r.km, 'b', 'int'), cel(5, r.tipo), cel(6, r.pre === '' ? null : r.pre, 'b', 'gen', 2), cel(8, r.doca), cel(9, r.transp), cel(10, r.placa)]);
   });
   if(M.vm.length) B.push({r0: v0, r1: R.length - 1, c0: 0, c1: 10});
   linha(15, []);
@@ -7710,7 +7759,11 @@ function pdSheetXml(G, reg){
       else cs += '<c r="' + ref + '" s="' + sid + '" t="inlineStr"><is><t xml:space="preserve">' + pdXml(v) + '</t></is></c>';
       if(c.span > 1){
         merges.push(ref + ':' + pdColL(c.c + c.span - 1) + rn);
-        for(var q = 1; q < c.span; q++){ /* cobertas: já existem como células vazias na grade (lb/lbb) */ }
+        for(var q = 1; q < c.span; q++){
+          if(row.cells.some(function(x){ return x.c === c.c + q; })) continue;      /* já existe na grade (lb/lbb) */
+          var bc = {r: q === c.span - 1 ? b.r : null, t: b.t, b: b.b};
+          cs += '<c r="' + pdColL(c.c + q) + rn + '" s="' + reg.id([c.s, c.f, '', rotulo(bc.r), rotulo(bc.t), rotulo(bc.b)].join('|'), {s: c.s, f: c.f, b: bc}) + '"/>';
+        }
       }
     });
     rowsXml += '<row r="' + rn + '" ht="' + row.h + '" customHeight="1">' + cs + '</row>';
@@ -7766,7 +7819,7 @@ function pdXlsxArquivos(G, nomeAba){
 (function(){
 'use strict';
 var KEY = 'pd_painel_v1';
-var S = { linha:null, data:'', prio:null, terc:null };
+var S = { linha:null, data:'', prio:null };
 var MODEL = null, GRADE = null;
 
 function $(id){ return document.getElementById(id); }
@@ -7784,7 +7837,7 @@ function restore(){
   try{
     var raw = localStorage.getItem(KEY); if(!raw) return;
     var p = JSON.parse(raw);
-    S.linha = p.linha||null; S.data = p.data||''; S.prio = p.prio||null; S.terc = p.terc||null;
+    S.linha = p.linha||null; S.data = p.data||''; S.prio = p.prio||null;
   }catch(e){ console.warn('Painel diário: estado salvo ilegível, ignorando', e); }
 }
 
@@ -7834,27 +7887,29 @@ window.pdLimpar = function(){
   S.linha = null; persist(); window.pdRender();
 };
 window.pdNovoDia = function(){ S.linha = null; S.data = ''; MODEL = null; GRADE = null; persist(); window.pdRender(); };
-window.pdOpt = function(){ S.data = $('pdData').value; S.prio = lista($('pdPrio').value); S.terc = lista($('pdTerc').value); persist(); window.pdRender(); };
-window.pdPadrao = function(){ S.prio = null; S.terc = null; persist(); window.pdRender(); };
+window.pdOpt = function(){ S.data = $('pdData').value; S.prio = lista($('pdPrio').value); persist(); window.pdRender(); };
+window.pdPadrao = function(){ S.prio = null; persist(); window.pdRender(); };
 
 /* ---------- dados da ferramenta ---------- */
 function filiais(){
   var fs = (STATE.config && STATE.config.filiais) || [];
   var f1 = (fs.filter(function(f){ return f.principal; })[0] || fs[0] || {codigo:'33'}).codigo;
   var f2 = (fs.filter(function(f){ return f.codigo==='05'; })[0] || fs.filter(function(f){ return f.codigo!==f1; })[0] || {codigo:'05'}).codigo;
-  return [String(f1), String(f2)];
+  var f3 = (fs.filter(function(f){ return /^d-?0$/i.test(String(f.codigo)); })[0] || fs.filter(function(f){ return f.codigo!==f1 && f.codigo!==f2; })[0] || {codigo:'D0'}).codigo;
+  f3 = String(f3); if(f3===String(f1) || f3===String(f2)) f3 = '';
+  return [String(f1), String(f2), f3];
 }
 function preDe(a, f){
   var v = []; (a.pres||[]).forEach(function(p){ if(String(p.filial)===f){ var x = String(p.preRomaneio); if(v.indexOf(x)<0) v.push(x); } });
   if(!v.length) return '';
   return (v.length===1 && /^\d+$/.test(v[0])) ? Number(v[0]) : v.join('/');
 }
-function cargasDaFerramenta(f1, f2){
+function cargasDaFerramenta(f1, f2, f3){
   if(typeof STATE==='undefined' || typeof pCargasNumeradas!=='function' || !(STATE.alocacao && STATE.alocacao.length)) return [];
   return pCargasNumeradas().map(function(it){
     var a = it.a;
     return {n:it.n, key:placaKey(a.placa), placa:String(a.placa||'').toUpperCase(), transp:a.transportadora||'', pend:it.pend,
-      doca: it.pend ? '' : pDoca(a)+' ('+a.onda+'ªONDA)', pre1:preDe(a,f1), pre2:preDe(a,f2)};
+      doca: it.pend ? '' : pDoca(a)+' ('+a.onda+'ªONDA)', pre1:preDe(a,f1), pre2:preDe(a,f2), pre3:(f3 ? preDe(a,f3) : '')};
   });
 }
 function tsDaFerramenta(){
@@ -7873,8 +7928,8 @@ function montar(){
   var fl = filiais();
   var linha = S.linha ? S.linha.plates : {};
   var serial = pdSerial(S.data) || (S.linha && S.linha.data) || pdSerial(hojeISO());
-  MODEL = pdBuild({cargas:cargasDaFerramenta(fl[0],fl[1]), ts:tsDaFerramenta(), linha:linha, filial1:fl[0], filial2:fl[1],
-    prio:S.prio&&S.prio.length?S.prio:null, terc:S.terc&&S.terc.length?S.terc:null, dataSerial:serial});
+  MODEL = pdBuild({cargas:cargasDaFerramenta(fl[0],fl[1],fl[2]), ts:tsDaFerramenta(), linha:linha, filial1:fl[0], filial2:fl[1], filial3:fl[2],
+    prio:S.prio&&S.prio.length?S.prio:null, dataSerial:serial});
   GRADE = pdGrade(MODEL);
 }
 
@@ -7928,7 +7983,6 @@ window.pdRender = function(){
   if(!S.data) S.data = (S.linha && S.linha.data) ? iso(S.linha.data) : hojeISO();
   $('pdData').value = S.data;
   $('pdPrio').value = (S.prio&&S.prio.length ? S.prio : PD_PRIO).join('\n');
-  $('pdTerc').value = (S.terc&&S.terc.length ? S.terc : PD_TERC).join('\n');
   $('pdArqs').innerHTML = S.linha ? '<div class="fitem"><span>Linha de Produto — '+esc(S.linha.nome)+(S.linha.data?' · '+esc(pdDataBR(S.linha.data)):'')+'</span><span class="badge ok">'+S.linha.n+' placa(s)</span></div>' : '';
   montar();
   var M = MODEL, aviso = [];
@@ -8374,6 +8428,46 @@ function prodExcel(){
   });
   XLSX.writeFile(wb,'produtividade_'+PROD_OPS[PROD.op].nome.toLowerCase().replace(/\s+/g,'_')+'.xlsx');
 }
+</script>
+
+<script>
+/* Descrições das funções ficam recolhidas. Clique no título para ver; ao trocar de aba, voltam a fechar. */
+(function(){
+  var TITULOS = [];
+  function iniciar(){
+    var nodes = document.querySelectorAll('h2, h3, h4, .desc'), atual = null;
+    nodes.forEach(function(n){
+      if(/^H[234]$/.test(n.tagName)){ atual = {h:n, descs:[]}; TITULOS.push(atual); return; }
+      /* só textos explicativos fixos: ignora avisos/logs dinâmicos (com id) e dicas em linha (span) */
+      if(!atual || n.id || n.tagName==='SPAN') return;
+      var painel = n.closest('.panel, .view, section') ;
+      if(painel && !painel.contains(atual.h)) return;
+      atual.descs.push(n);
+    });
+    TITULOS.forEach(function(t){
+      if(!t.descs.length) return;
+      t.descs.forEach(function(d){ d.classList.add('desc-oculta'); });
+      t.h.classList.add('desc-titulo');
+      t.h.title = 'Clique para ver / ocultar a descrição';
+      t.h.addEventListener('click', function(ev){
+        if(ev.target.closest('button, a, input, select')) return;
+        var abrir = !t.h.classList.contains('desc-aberta');
+        t.h.classList.toggle('desc-aberta', abrir);
+        t.descs.forEach(function(d){ d.classList.toggle('desc-oculta', !abrir); });
+      });
+    });
+  }
+  function fecharTodas(){
+    TITULOS.forEach(function(t){
+      if(!t.descs.length) return;
+      t.h.classList.remove('desc-aberta');
+      t.descs.forEach(function(d){ d.classList.add('desc-oculta'); });
+    });
+  }
+  var sw = window.switchTab;
+  window.switchTab = function(){ fecharTodas(); return sw.apply(this, arguments); };
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
+})();
 </script>
 </body>
 </html>
