@@ -653,7 +653,7 @@
 <div class="view" id="view-upload">
 
   <div class="panel">
-    <div class="panel-head"><div><h2>Carregar arquivos</h2><div class="desc">Solte todos os arquivos do dia de uma vez: GAN, Log de NF, Região (.txt ou .zip), base de TS São Paulo, Coletas, Tipo de Residência, Programação e iscas (.xlsx / .xlsm). A ferramenta identifica o tipo de cada um sozinha, pelo conteúdo, faz todos os passos e deixa só os botões de baixar/imprimir logo abaixo. A base de TS pode vir primeiro: ela define a doca/onda das placas que vão junto.</div></div></div>
+    <div class="panel-head"><div><h2>Carregar arquivos</h2><div class="desc">Solte todos os arquivos do dia de uma vez: GAN, Log de NF, Região (.txt ou .zip), base de TS São Paulo, Coletas, Tipo de Residência, Programação, iscas (.xlsx / .xlsm) e a Linha de Produto (.xlsb / .xlsx — alimenta a aba 10 · PAINEL DIARIO). A ferramenta identifica o tipo de cada um sozinha, pelo conteúdo, faz todos os passos e deixa só os botões de baixar/imprimir logo abaixo. A base de TS pode vir primeiro: ela define a doca/onda das placas que vão junto.</div></div></div>
     <div class="dropzone" onclick="document.getElementById('inpAUTO').click()"
          ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDropAuto(event)">
       <span class="k">Clique ou arraste todos os arquivos aqui</span>múltiplos arquivos misturados · arquivos .zip são extraídos automaticamente
@@ -1248,7 +1248,7 @@
     <div class="panel-head">
       <div>
         <h2>PAINEL DIARIO</h2>
-        <div class="desc">Relatório do dia: quadro <b>TS</b> (base TS carregada na aba 1), quadro <b>VM</b> (cargas da <b>1 · Lista de Carga</b>) e os resumos. Da <b>Linha de Produto</b>, cruzando pela placa: ENTREGAS (colunas J:P), M³ (colunas C:I) e TEMPO (coluna Roadshow) vêm da aba “Painel (Diário)”; o KM vem da aba “Base” (coluna R). Carregue a Linha de Produto (.xlsb, .xlsx ou .xls) e baixe o Excel, copie a imagem ou imprima.</div>
+        <div class="desc">Relatório do dia: quadro <b>TS</b> (base TS carregada na aba 1), quadro <b>VM</b> (cargas da <b>1 · Lista de Carga</b>) e os resumos. Da <b>Linha de Produto</b>, cruzando pela placa: ENTREGAS (colunas J:P), M³ (colunas C:I) e TEMPO (coluna Roadshow) vêm da aba “Painel (Diário)”; o KM vem da aba “Base” (coluna R). A Linha de Produto é carregada na aba <b>Upload</b> (início do processo); depois é só baixar o Excel, copie a imagem ou imprima.</div>
       </div>
       <div class="pd-acoes">
         <label>Data <input type="date" id="pdData" onchange="pdOpt()"></label>
@@ -1261,7 +1261,7 @@
     </div>
     <div class="dropzone" onclick="document.getElementById('pdInp').click()"
          ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="pdDrop(event)">
-      <span class="k">Clique ou arraste a Linha de Produto aqui</span>.xlsb / .xlsx / .xls — o arquivo é grande: a leitura pode levar alguns segundos
+      <span class="k">A Linha de Produto agora é enviada na aba Upload, junto com os demais arquivos do dia.</span>Aqui só se precisar enviar manualmente (clique ou arraste) — .xlsb / .xlsx / .xls; o arquivo é grande e a leitura pode levar alguns segundos
     </div>
     <input type="file" id="pdInp" accept=".xlsb,.xlsx,.xlsm,.xls" style="display:none" onchange="pdFiles(this.files); this.value=''">
     <div id="pdArqs" class="filelist"></div>
@@ -2353,6 +2353,10 @@ function renderArquivosCarregados(){
       linhas.push(`<div class="fitem"><span><b>${escAuto(ROTULO_TIPO[tipo])}</b> · ${escAuto(f.nome)} ${f.regiao?('<span class="mono" style="color:var(--text-2)">('+escAuto(f.regiao)+')</span>'):''}</span><span style="cursor:pointer;color:var(--red)" onclick="removePending('${tipo}',${idx})">remover</span></div>`);
     });
   });
+  try{
+    const pi = (typeof window.pdInfo==='function') ? window.pdInfo() : null;
+    if(pi) linhas.push(`<div class="fitem"><span><b>Linha de Produto</b> · ${escAuto(pi.nome)} <span class="mono" style="color:var(--text-2)">(${pi.n} placa(s))</span></span><span style="cursor:pointer;color:var(--red)" onclick="window.pdRemover()">remover</span></div>`);
+  }catch(e){}
   el.innerHTML = linhas.length ? linhas.join('') : '<div class="empty">Nenhum arquivo carregado.</div>';
 }
 /* nome já carregado em qualquer tipo? (sem diferenciar maiúsculas/minúsculas) */
@@ -2361,7 +2365,7 @@ function arquivoJaCarregado(nome){
   return ['GAN','HEBLS','REGIAO','TS'].some(t=>PENDING[t].some(p=>String(p.nome).trim().toLowerCase()===k));
 }
 function removePending(tipo, idx){ PENDING[tipo].splice(idx,1); renderFileList(tipo); atualizarPreviaUpload(); }
-function limparUploadsPendentes(){ PENDING={GAN:[],HEBLS:[],REGIAO:[],TS:[]}; var rs=document.getElementById('autoResumo'); if(rs) rs.innerHTML=''; ['GAN','HEBLS','REGIAO'].forEach(renderFileList); atualizarPreviaUpload(); toast('Arquivos carregados limpos.', 'ok'); }
+function limparUploadsPendentes(){ PENDING={GAN:[],HEBLS:[],REGIAO:[],TS:[]}; try{ if(typeof window.pdRemover==='function') window.pdRemover(true); }catch(e){} var rs=document.getElementById('autoResumo'); if(rs) rs.innerHTML=''; ['GAN','HEBLS','REGIAO'].forEach(renderFileList); atualizarPreviaUpload(); toast('Arquivos carregados limpos.', 'ok'); }
 
 /* ---------- UPLOAD ÚNICO: identificação automática do tipo ---------- */
 function escAuto(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -2399,7 +2403,7 @@ async function extrairZipItens(file){
       try{
         const u8 = await entry.async('uint8array');
         const nomeBase = entry.name.split('/').pop();
-        if(tsEhPlanilha(nomeBase)) itens.push({nome: nomeBase, buf: u8.buffer.slice(u8.byteOffset, u8.byteOffset+u8.byteLength)});
+        if(tsEhPlanilha(nomeBase) || /\.xlsb$/i.test(nomeBase)) itens.push({nome: nomeBase, buf: u8.buffer.slice(u8.byteOffset, u8.byteOffset+u8.byteLength)});
         else itens.push({nome: nomeBase, texto: new TextDecoder('iso-8859-1').decode(u8)});
       }catch(err){ toast('Falha ao extrair '+entry.name+' do zip.', 'err'); }
     }
@@ -2430,7 +2434,7 @@ async function _handleFilesAutoInterno(arquivos){
       (await extrairZipItens(file)).forEach(i=>itens.push(i));
     } else {
       try{
-        if(tsEhPlanilha(file.name)) itens.push({nome:file.name, buf: await file.arrayBuffer()});   // planilha Excel = base TS São Paulo
+        if(tsEhPlanilha(file.name) || /\.xlsb$/i.test(file.name)) itens.push({nome:file.name, buf: await file.arrayBuffer()});   // planilha Excel = base TS São Paulo (ou Linha de Produto .xlsb)
         else itens.push({nome:file.name, texto: await lerArquivoComoTexto(file)});
       }
       catch(err){ toast('Falha ao ler '+file.name, 'err'); }
@@ -2439,6 +2443,13 @@ async function _handleFilesAutoInterno(arquivos){
   const res = {ok:{GAN:0, HEBLS:0, REGIAO:0, TS:0}, porNome:[], repetidos:[], naoReconhecidos:[], ts:[], extras:[]};
   const extras = [];   // planilhas de apoio (Coletas, Tipo de Residência, Programação, iscas...) — entregues às abas depois da consolidação
   itens.forEach(it=>{
+    if(it.buf && ehLinhaProduto(it.buf)){   // Linha de Produto (aba "Painel (Diário)"): alimenta a aba 10 · PAINEL DIARIO
+      const pi = (typeof window.pdInfo==='function') ? window.pdInfo() : null;
+      if(pi && String(pi.nome||'').trim().toLowerCase()===String(it.nome).trim().toLowerCase()){ res.repetidos.push(it.nome); return; }
+      res.extras.push({nome:it.nome, tipo:'linha'});
+      extras.push({nome:it.nome, buf:it.buf, tipo:'linha'});
+      return;
+    }
     if(it.buf){   // planilha Excel: base TS (PLACA + DOCA + LOJA/PRE-05) ou planilha de apoio reconhecida pelas colunas
       const linhas = parseTSPlanilha(it.buf);
       if(!linhas.length){
@@ -2478,9 +2489,17 @@ async function _handleFilesAutoInterno(arquivos){
    Travas: não apaga nada sozinho; se houver ajuste manual de doca, a própria alocação pergunta antes de recalcular;
    a data da operação continua sendo confirmada pela consolidação; os envios manuais das outras abas seguem funcionando.
    ========================================================= */
-const ROTULO_EXTRA = {coletas:'Coletas (aba 3)', tipo:'Tipo de Residência (aba 3)', lista_kc:'Lista de carga (reserva · aba 3)', lista_cs:'Lista de carga (reserva · aba 6)',
+const ROTULO_EXTRA = {linha:'Linha de Produto (aba 10 · PAINEL DIARIO)', coletas:'Coletas (aba 3)', tipo:'Tipo de Residência (aba 3)', lista_kc:'Lista de carga (reserva · aba 3)', lista_cs:'Lista de carga (reserva · aba 6)',
   kit:'Kit_Coletas (aba 6)', prog:'Programação (abas 5 e 6)', iscas:'Iscas — saída de inserção (aba 4)', territorios:'Lista de territórios (aba 4)'};
 
+/* A Linha de Produto é a planilha que tem a aba "Painel (Diário)". Olha só os nomes das abas (rápido, mesmo num .xlsb grande). */
+function ehLinhaProduto(buf){
+  if(typeof XLSX==='undefined') return false;
+  try{
+    const nomes = XLSX.read(buf, {type:'array', bookSheets:true}).SheetNames || [];
+    return nomes.some(n=>{ const k = String(n||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z]/g,''); return k==='PAINELDIARIO'; });
+  }catch(e){ return false; }
+}
 function classificarPlanilhaExtra(nome, buf){
   if(typeof XLSX==='undefined') return null;
   let wb; try{ wb = XLSX.read(buf, {type:'array'}); }catch(e){ return null; }
@@ -2510,7 +2529,7 @@ async function despacharExtras(extras){
   const por = {}; extras.forEach(x=>{ (por[x.tipo] = por[x.tipo] || []).push(x); });
   const grupos = [
     ['coletas','kcFiles'], ['tipo','kcFiles'], ['lista_kc','kcFiles'],
-    ['kit','csFiles'], ['lista_cs','csFiles'], ['prog','csFiles'], ['prog','ffArquivos'], ['iscas','iscaArquivos']
+    ['kit','csFiles'], ['lista_cs','csFiles'], ['prog','csFiles'], ['prog','ffArquivos'], ['iscas','iscaArquivos'], ['linha','pdFiles']
   ];
   for(const [tipo, fn] of grupos){
     const l = por[tipo]; if(!l || !l.length) continue;
@@ -2520,6 +2539,7 @@ async function despacharExtras(extras){
       else if(fn==='csFiles' && typeof window.csFiles==='function') await window.csFiles(files);
       else if(fn==='ffArquivos') await ffArquivos(files, {semBaixar:true});
       else if(fn==='iscaArquivos') await iscaArquivos(files);
+      else if(fn==='pdFiles' && typeof window.pdFiles==='function') await window.pdFiles(files.slice(0,1));   // só uma Linha de Produto por dia
     }catch(e){ console.error(e); toast('Não consegui processar '+l.map(x=>x.nome).join(', ')+': '+(e&&e.message||e), 'err'); }
   }
 }
@@ -2578,6 +2598,8 @@ function renderFluxo(){
   h += cs && cs.veiculos ? fluxoLinha('Saída de Veículos CD (aba 6)', cs.veiculos+' formulário(s) · '+cs.ligadas+'/'+cs.coletas+' coletas ligadas'+(cs.semNfdv ? ' · '+cs.semNfdv+' sem NFDV' : ''), (cs.sem||cs.semNfdv) ? 'alert' : 'ok')
                          : fluxoLinha('Saída de Veículos CD (aba 6)', 'aguardando consolidação / Programação', 'neutral');
   h += F && F.rows && F.rows.length ? fluxoLinha('Folhas de Entrada (aba 5)', F.rows.length+' placa(s)', 'ok') : fluxoLinha('Folhas de Entrada (aba 5)', 'envie a Programação', 'neutral');
+  { const pi = (typeof window.pdInfo==='function') ? window.pdInfo() : null;
+    h += pi ? fluxoLinha('Linha de Produto (aba 10 · PAINEL DIARIO)', pi.n+' placa(s)', 'ok') : fluxoLinha('Linha de Produto (aba 10 · PAINEL DIARIO)', 'não enviada', 'neutral'); }
   h += L && L.rows ? fluxoLinha('Iscas (aba 4)', L.rows.length+' linha(s) · '+L.rows.filter(r=>r.placa).length+' com placa', L.rows.every(r=>r.placa) ? 'ok' : 'alert') : fluxoLinha('Iscas (aba 4)', 'não enviadas', 'neutral');
   st.innerHTML = h;
   const b = (rot, fn, ok, dica) => '<button class="small'+(ok?' primary':'')+'" '+(ok?'':'disabled ')+'onclick="fluxoRun(\''+fn+'\')" title="'+(dica||'')+'">'+rot+'</button>';
@@ -7957,14 +7979,16 @@ window.pdFiles = async function(fileList){
     var r = await lerLinha(f);
     S.linha = {nome:f.name, data:r.data, n:r.n, plates:r.plates, diag:r.diag||'', avisos:r.avisos||[]};
     if(r.data) S.data = iso(r.data);
-    persist(); window.pdRender();
+    persist(); window.pdRender(); try{ renderArquivosCarregados(); renderFluxo(); }catch(e){}
     say('Linha de Produto lida: '+r.n+' placa(s)'+(r.data?' · data '+pdDataBR(r.data):'')+'.','ok');
   }catch(e){ console.error(e); say('Erro ao ler "'+f.name+'": '+(e.message||e),'err'); }
 };
 window.pdDrop = function(ev){ ev.preventDefault(); ev.currentTarget.classList.remove('drag'); window.pdFiles(ev.dataTransfer.files); };
+window.pdInfo = function(){ return S.linha ? {nome:S.linha.nome, n:S.linha.n, data:S.linha.data} : null; };
+window.pdRemover = function(silencio){ if(!S.linha) return; S.linha = null; persist(); try{ window.pdRender(); }catch(e){} try{ renderArquivosCarregados(); }catch(e){} if(silencio!==true) say('Linha de Produto removida.','ok'); };
 window.pdLimpar = function(){
   if(!confirm('Remover a Linha de Produto carregada nesta aba?')) return;
-  S.linha = null; persist(); window.pdRender();
+  S.linha = null; persist(); window.pdRender(); try{ renderArquivosCarregados(); }catch(e){}
 };
 window.pdNovoDia = function(){ S.linha = null; S.data = ''; MODEL = null; GRADE = null; persist(); window.pdRender(); };
 window.pdOpt = function(){ S.data = $('pdData').value; S.prio = lista($('pdPrio').value); persist(); window.pdRender(); };
@@ -8066,7 +8090,7 @@ window.pdRender = function(){
   $('pdArqs').innerHTML = S.linha ? '<div class="fitem"><span>Linha de Produto — '+esc(S.linha.nome)+(S.linha.data?' · '+esc(pdDataBR(S.linha.data)):'')+'</span><span class="badge ok">'+S.linha.n+' placa(s)</span></div>'+(S.linha.diag?'<div class="fitem"><span style="color:var(--text-2);font-size:12px">Colunas usadas: '+esc(S.linha.diag)+'</span></div>':'') : '';
   montar();
   var M = MODEL, aviso = [];
-  if(!S.linha) aviso.push('Carregue a <b>Linha de Produto</b> para preencher ENTREGAS, TEMPO, M³ e KM.');
+  if(!S.linha) aviso.push('Envie a <b>Linha de Produto</b> na aba <b>Upload</b> para preencher ENTREGAS, TEMPO, M³ e KM.');
   else if(S.linha.data && pdSerial(S.data) && S.linha.data !== pdSerial(S.data)) aviso.push('A Linha de Produto é de <b>'+esc(pdDataBR(S.linha.data))+'</b>, diferente da data do painel ('+esc(pdDataBR(pdSerial(S.data)))+').');
   if(S.linha && M.semLinha.length) aviso.push('<b>'+M.semLinha.length+'</b> placa(s) da Lista de Carga não estão na Linha de Produto (ficam com 0): '+esc(M.semLinha.slice(0,12).join(', '))+(M.semLinha.length>12?'…':'')+'.');
   if(S.linha && S.linha.avisos) S.linha.avisos.forEach(function(x){ aviso.push(esc(x)); });
