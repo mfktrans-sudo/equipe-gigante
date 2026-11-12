@@ -553,7 +553,7 @@
   <button class="tab-btn" data-tab="relentrega" onclick="switchTab('relentrega')">7 · Relação de Entrega</button>
   <button class="tab-btn" data-tab="ondasfora" onclick="switchTab('ondasfora')">8 · Ondas Fora da doca</button>
   <button class="tab-btn" data-tab="produtividade" onclick="switchTab('produtividade')">9 · Produtividade</button>
-  <button class="tab-btn" data-tab="terceiros" onclick="switchTab('terceiros')">10 · Relação de Terceiros<span class="tab-mnt">em manutenção</span></button>
+  <button class="tab-btn" data-tab="paineldiario" onclick="switchTab('paineldiario')">10 · PAINEL DIARIO</button>
   <span class="tab-sep" aria-hidden="true"></span>
   <button class="tab-btn active" data-tab="config" onclick="switchTab('config')">Configurações</button>
 </div>
@@ -1235,13 +1235,40 @@
   </div>
 </div>
 
-<div class="view" id="view-terceiros">
-  <div class="panel mnt-box">
-    <div class="mnt-ico">🤝</div>
-    <h2>Relação de Terceiros</h2>
-    <span class="mnt-tag">🛠 Em manutenção</span>
-    <p>Esta aba ainda será criada. Assim que estiver pronta ela passa a funcionar aqui, na mesma posição da sequência da operação.</p>
+<div class="view" id="view-paineldiario">
+  <div class="panel">
+    <div class="panel-head">
+      <div>
+        <h2>PAINEL DIARIO</h2>
+        <div class="desc">Relatório do dia: quadro <b>TS</b> (base TS carregada na aba 1), quadro <b>VM</b> (cargas da <b>1 · Lista de Carga</b>) e os resumos. ENTREGAS, TEMPO, M³ e KM vêm da <b>Linha de Produto</b> (aba “Painel (Diário)”), cruzada pela placa. Carregue a Linha de Produto (.xlsb, .xlsx ou .xls) e baixe o Excel, copie a imagem ou imprima.</div>
+      </div>
+      <div class="pd-acoes">
+        <label>Data <input type="date" id="pdData" onchange="pdOpt()"></label>
+        <button class="primary" onclick="pdBaixarExcel()">⬇ Baixar Excel</button>
+        <button onclick="pdBaixarPNG()">🖼 Baixar imagem</button>
+        <button onclick="pdCopiar()">📋 Copiar imagem</button>
+        <button onclick="pdImprimir()">🖨 Imprimir</button>
+        <button class="danger small" onclick="pdLimpar()">Limpar Linha</button>
+      </div>
+    </div>
+    <div class="dropzone" onclick="document.getElementById('pdInp').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="pdDrop(event)">
+      <span class="k">Clique ou arraste a Linha de Produto aqui</span>.xlsb / .xlsx / .xls — o arquivo é grande: a leitura pode levar alguns segundos
+    </div>
+    <input type="file" id="pdInp" accept=".xlsb,.xlsx,.xlsm,.xls" style="display:none" onchange="pdFiles(this.files); this.value=''">
+    <div id="pdArqs" class="filelist"></div>
+    <details class="pd-ajustes"><summary>Ajustes da ordem e dos grupos</summary>
+      <div class="pd-aj-grid">
+        <label>Ordem das transportadoras no quadro VM (uma por linha; as que não estiverem aqui vêm depois, pela ordem das cargas)<textarea id="pdPrio" rows="10" onchange="pdOpt()"></textarea></label>
+        <label>Transportadoras do grupo TERCEIROS (resumo da direita)<textarea id="pdTerc" rows="10" onchange="pdOpt()"></textarea></label>
+      </div>
+      <button class="small" onclick="pdPadrao()">Voltar ao padrão</button>
+    </details>
   </div>
+  <div class="pd-kpis" id="pdKpis"></div>
+  <div class="pd-aviso" id="pdAviso" style="display:none"></div>
+  <div class="empty" id="pdVazio" style="display:none">Nenhuma carga ainda. Gere a <b>Lista de Carga</b> na aba 1 (consolidar e rodar a alocação) e volte aqui.</div>
+  <div class="pd-folhawrap" id="pdFolhaWrap" style="display:none"><div class="pd-folha" id="pdFolha"></div></div>
 </div>
 
 <div class="view" id="view-abas">
@@ -1543,7 +1570,7 @@ function novaOperacao(){
   /* cada passo roda isolado: se um falhar, os demais continuam e a operação não fica "meio limpa" */
   /* bloqueia regravações vindas de leituras de arquivo que ainda estavam em andamento; só os passos abaixo podem gravar */
   window.__GDN_RESETANDO = true; window.__GDN_PERSIST_OK = true;
-  const CHAVES_DIA = ['kc_kit_v1','cs_saida_v1'];   // só dados do dia dos módulos; preferências (fluxo_auto_v1, relXlsxOpts) e Configurações NÃO são apagadas
+  const CHAVES_DIA = ['kc_kit_v1','cs_saida_v1','pd_painel_v1'];   // só dados do dia dos módulos; preferências (fluxo_auto_v1, relXlsxOpts) e Configurações NÃO são apagadas
   let salvou = false;
   const passo = (nome, fn)=>{ try{ fn(); }catch(e){ console.error('Novo dia · '+nome, e); } };
   const vazio = id=>{ const el=document.getElementById(id); if(el){ if('value' in el) el.value=''; } };
@@ -1570,6 +1597,7 @@ function novaOperacao(){
   /* 2) módulos isolados, com dados próprios no navegador (Saída de Veículos e Coleta) */
   passo('saída (aba 6)', ()=>{ if(typeof window.csNovoDia==='function') window.csNovoDia(); });
   passo('coleta (aba 3)',  ()=>{ if(typeof window.kcNovoDia==='function') window.kcNovoDia(); });
+  passo('painel diario (aba 10)',  ()=>{ if(typeof window.pdNovoDia==='function') window.pdNovoDia(); });
   passo('relação de entrega (aba 7)', ()=>{ REL.rows=[]; REL.lista=null; REL.arqs=[]; REL.sel=null; REL.off={}; });
   window.__GDN_PERSIST_OK = false;
   /* os módulos regravaram "vazio"; apaga de novo as chaves para não sobrar nem o esqueleto (e nada antigo para restaurar) */
@@ -1700,7 +1728,7 @@ const ABAS_DEF = [
   {id:'relentrega',    nome:'Relação de Entrega',      n:'7'},
   {id:'ondasfora',     nome:'Ondas Fora da doca',      n:'8'},
   {id:'produtividade', nome:'Produtividade',           n:'9'},
-  {id:'terceiros',     nome:'Relação de Terceiros',    n:'10', mnt:true}
+  {id:'paineldiario',  nome:'PAINEL DIARIO',           n:'10'}
 ];
 function abaVisivel(id){
   const m = (STATE && STATE.config && STATE.config.abasVisiveis) || {};
@@ -7392,6 +7420,535 @@ window.kcColetasDoDia = function(){
   try{ return calcular().map(function(r){ return {orm:r.orm, nfdv:r.nfdv, placa:r.placa, tipo:r.tipo, desc:r.desc, qtd:r.qtd, carga:r.carga, pre:r.pre, onda:r.onda, transp:r.transp, motivo:r.motivo}; }); }
   catch(e){ console.warn('Kit coletas: não consegui entregar as coletas à aba Saída', e); return []; }
 };
+restore();
+})();
+</script>
+
+<style>
+  #view-paineldiario .pd-acoes{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  #view-paineldiario .pd-acoes label{margin:0;font-size:12px;color:var(--text-2);display:inline-flex;gap:6px;align-items:center;}
+  #view-paineldiario .pd-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px;}
+  #view-paineldiario .pd-kpi{background:var(--bg-2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;}
+  #view-paineldiario .pd-kpi b{display:block;font-size:22px;color:var(--text-0);font-family:var(--mono);}
+  #view-paineldiario .pd-kpi span{font-size:11.5px;color:var(--text-2);}
+  #view-paineldiario .pd-aviso{background:var(--red-dim);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:var(--text-1);}
+  #view-paineldiario .pd-ajustes{margin-top:12px;font-size:12.5px;color:var(--text-1);}
+  #view-paineldiario .pd-ajustes summary{cursor:pointer;color:var(--text-2);}
+  #view-paineldiario .pd-aj-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:10px 0;}
+  #view-paineldiario .pd-aj-grid label{display:grid;gap:4px;font-size:12px;color:var(--text-2);}
+  #view-paineldiario .pd-aj-grid textarea{width:100%;font-family:var(--mono);font-size:12px;}
+  #view-paineldiario .pd-folhawrap{overflow:auto;background:#3a4560;border:1px solid var(--line);border-radius:8px;padding:16px;}
+  #view-paineldiario .pd-folha{background:#fff;color:#000;width:1239px;margin:0 auto;padding:0;box-shadow:0 4px 24px rgba(0,0,0,.5);}
+  .pd-tab{border-collapse:collapse;table-layout:fixed;width:100%;font:14.67px Calibri,Carlito,"Segoe UI",Arial,sans-serif;color:#000;}
+  .pd-tab td{padding:0 2px;text-align:center;white-space:nowrap;overflow:hidden;border:0;line-height:1.1;background:#fff;}
+  .pd-tab td.pdh{background:#000;color:#fff;font-weight:700;}
+  .pd-tab td.pdt{font-size:26.67px;font-weight:700;}
+  @media (max-width:900px){#view-paineldiario .pd-kpis{grid-template-columns:1fr 1fr;}#view-paineldiario .pd-aj-grid{grid-template-columns:1fr;}}
+</style>
+<script>
+/*PDCORE-START*/
+/* ---------- núcleo do PAINEL DIARIO (sem DOM, sem STATE): recebe dados, devolve modelo / grade / imagem / Excel ---------- */
+var PD_COLS = [14, 18.57, 9.14, 18.57, 14, 10.14, 16.71, 14, 14, 18.57, 22.29];   /* larguras (caracteres) das colunas A:K do modelo */
+var PD_PRIO = ['FASTSHOP', 'L.COM', 'GOMES BRASIL', 'UP TIME', 'ECOTECH', 'VAN LOG', 'AGREGADO', 'AGREGADO TS', 'FI.AGREGADO', 'ALLIANCE'];
+var PD_TERC = ['L.COM', 'GOMES BRASIL', 'UP TIME', 'ECOTECH', 'VAN LOG', 'ALLIANCE'];
+
+function pdN(s){ return String(s == null ? '' : s).normalize('NFKD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim(); }
+function pdBase(s){ return pdN(s).replace(/\s+\d+$/, ''); }                 /* 'FI.AGREGADO 1' -> 'FI.AGREGADO' */
+function pdLimpa(s){ return String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); }
+function pdNomeTS(t){                                                         /* AGREGADO -> AGREGADO TS · FI.AGREGADO 1 -> FI.AGREGADO TS 1 · sem cadastro -> Placa ñ cadastrada */
+  var s = pdLimpa(t); if(!s) return 'Placa ñ cadastrada';
+  if(/\sTS(\s\d+)?$/i.test(s)) return s;
+  var m = /^(.*\S)\s+(\d+)$/.exec(s);
+  return m ? m[1] + ' TS ' + m[2] : s + ' TS';
+}
+function pdPad3(a){ var v = (a || []).map(String); while(v.length < 3) v.push(''); return v.join('/'); }   /* ['22481','22563'] -> '22481/22563/' · [] -> '//' */
+function pdMed(a){ return a.length ? a.reduce(function(x, y){ return x + y; }, 0) / a.length : null; }
+function pdTime(f){                                                           /* fração do dia -> h:mm (Excel trunca os segundos) */
+  if(f == null || f === '' || isNaN(f)) return '';
+  var m = Math.floor(f * 1440 + 1e-4), h = Math.floor(m / 60), mm = m % 60;
+  return h + ':' + (mm < 10 ? '0' : '') + mm;
+}
+function pdSerial(iso){ var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); if(!m) return null; return Math.round((Date.UTC(+m[1], +m[2] - 1, +m[3]) - Date.UTC(1899, 11, 30)) / 864e5); }
+function pdDataBR(serial){ if(serial == null) return ''; var d = new Date(Date.UTC(1899, 11, 30) + serial * 864e5); return String(d.getUTCDate()).padStart(2, '0') + '/' + String(d.getUTCMonth() + 1).padStart(2, '0') + '/' + d.getUTCFullYear(); }
+function pdTxt(c){                                                            /* texto exibido numa célula (igual ao formato do Excel do modelo) */
+  var v = c.v; if(v == null || v === '') return '';
+  if(c.f === 'date') return pdDataBR(v);
+  if(c.f === 'time') return pdTime(v);
+  if(typeof v !== 'number') return String(v);
+  if(c.f === 'int') return String(Math.round(v));
+  return String(Math.round(v * 100) / 100).replace('.', ',');
+}
+
+/* Lê a aba "Painel (Diário)" da Linha de Produto (linhas = matriz da planilha). Devolve {data, plates:{PLACA:{e,nf,m,t,k}}} ou {erro}. */
+function pdParseLinha(rows){
+  var nm = function(s){ return String(s == null ? '' : s).normalize('NFKD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, ''); };
+  var hr = -1, pc = -1;
+  for(var i = 0; i < Math.min(rows.length, 40) && hr < 0; i++){
+    var r = rows[i] || [];
+    for(var j = 0; j < Math.min(r.length, 6); j++){ if(nm(r[j]) === 'PLACA'){ hr = i; pc = j; break; } }
+  }
+  if(hr < 0) return {erro: 'não achei a coluna PLACA'};
+  var top = rows[hr] || [], sub = rows[hr + 1] || [], n = Math.max(top.length, sub.length, 60);
+  var achar = function(topRx, subNames, depois){
+    var primeiro = -1;
+    for(var j = (depois == null ? pc + 1 : depois); j < n; j++){
+      if(subNames.indexOf(nm(sub[j])) < 0) continue;
+      if(topRx.test(nm(top[j]))) return j;
+      if(primeiro < 0) primeiro = j;
+    }
+    return primeiro;
+  };
+  var cE = achar(/^TOTAL/, ['CLIENTE']), cNF = achar(/^TOTAL/, ['NF'], cE >= 0 ? cE : null), cM = achar(/^TOTAL/, ['M3', 'M'], cE >= 0 ? cE : null);
+  var cT = achar(/^TEMPO/, ['ROADSHOW'], cE >= 0 ? cE : null), cK = achar(/^KM/, ['ROADSHOW'], cT >= 0 ? cT + 1 : null);
+  var falta = []; if(cE < 0) falta.push('Cliente (Total)'); if(cM < 0) falta.push('M³ (Total)'); if(cT < 0) falta.push('Tempo Roadshow'); if(cK < 0) falta.push('km Roadshow');
+  if(falta.length) return {erro: 'não achei as colunas: ' + falta.join(', ')};
+  var num = function(v){ if(typeof v === 'number') return isFinite(v) ? v : 0; var x = Number(String(v == null ? '' : v).replace(/\./g, '').replace(',', '.')); return isFinite(x) ? x : 0; };
+  var tempo = function(v){
+    if(typeof v === 'number') return v > 0 ? v : null;
+    var m = /^(\d{1,2}):(\d{2})/.exec(String(v == null ? '' : v).trim()); return m ? (+m[1] * 60 + +m[2]) / 1440 : null;
+  };
+  var out = {}, dup = 0, data = null;
+  for(var a = 0; a < hr + 1 && data == null; a++){ (rows[a] || []).forEach(function(v){ if(data == null && typeof v === 'number' && v > 40000 && v < 70000) data = Math.floor(v); }); }
+  for(var k = hr + 2; k < rows.length; k++){
+    var x = rows[k] || [], pl = String(x[pc] == null ? '' : x[pc]).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if(!/^[A-Z0-9]{7}$/.test(pl)) continue;
+    var o = {e: num(x[cE]), nf: cNF >= 0 ? num(x[cNF]) : 0, m: num(x[cM]), t: tempo(x[cT]), k: num(x[cK])};
+    if(out[pl]){ dup++; if(!(out[pl].e || out[pl].m) && (o.e || o.m)) out[pl] = o; continue; }
+    out[pl] = o;
+  }
+  var tot = Object.keys(out).length;
+  if(!tot) return {erro: 'nenhuma placa encontrada'};
+  return {data: data, plates: out, n: tot, dup: dup};
+}
+
+/* inp = {cargas:[{n,key,placa,transp,doca,pre1,pre2,pend}], ts:[{seq,placa,doca,onda,pre33[],pre05[],transp}], linha:{PLACA:{e,nf,m,t,k}},
+          filial1, filial2, unidade, prio[], terc[], dataSerial} */
+function pdBuild(inp){
+  var linha = inp.linha || {}, prio = (inp.prio || PD_PRIO).map(pdBase), terc = (inp.terc || PD_TERC).map(pdBase);
+  var chaveRank = function(nome){ return pdBase(pdN(nome).replace(/\sTS(\s\d+)?$/, '')); };
+  var rank = function(nome){ var i = prio.indexOf(chaveRank(nome)); return i < 0 ? 999 : i; };
+  var semLinha = [];
+  var vm = (inp.cargas || []).map(function(c){
+    var L = linha[c.key], t = pdLimpa(c.transp) || 'Placa ñ cadastrada';
+    if(!L) semLinha.push(c.placa);
+    return {n: c.n, ent: L ? L.e : 0, nf: L ? L.nf : 0, tmp: L ? L.t : null, m3: L ? L.m : 0, km: L ? L.k : 0, tipo: 'VM', pre1: c.pre1, pre2: c.pre2, doca: c.doca || '', transp: t, placa: c.placa, pend: !!c.pend};
+  });
+  var minN = {}; vm.forEach(function(r){ if(!(r.transp in minN) || r.n < minN[r.transp]) minN[r.transp] = r.n; });
+  vm.sort(function(a, b){
+    var ra = rank(a.transp), rb = rank(b.transp);
+    return (a.pend - b.pend) || (ra - rb) || (ra === 999 ? minN[a.transp] - minN[b.transp] : 0) || (a.n - b.n);
+  });
+  var ts = (inp.ts || []).map(function(t, i){
+    var onda = t.doca != null ? (t.onda || 1) : 99, nome = t.transp ? pdNomeTS(t.transp) : 'Placa ñ cadastrada';
+    return {seq: t.seq != null ? t.seq : i + 1, onda: onda, pre1: pdPad3(t.pre33), pre2: pdPad3(t.pre05), doca: t.doca != null ? t.doca + ' (' + (t.onda || 1) + '° onda)' : '', transp: nome, placa: t.placa};
+  });
+  ts.sort(function(a, b){ return (a.onda - b.onda) || (rank(a.transp) - rank(b.transp)) || (a.seq - b.seq); });
+
+  var contar = function(lista){ var ordem = [], q = {}; lista.forEach(function(r){ if(!(r.transp in q)){ q[r.transp] = 0; ordem.push(r.transp); } q[r.transp]++; }); return ordem.map(function(t){ return [t, q[t]]; }); };
+  var grupos = [['FI.AGREGADO', function(b){ return b === 'FI.AGREGADO'; }], ['AGREGADO', function(b){ return b === 'AGREGADO'; }], ['TERCEIROS', function(b){ return terc.indexOf(b) >= 0; }]]
+    .map(function(g){
+      var rs = vm.filter(function(r){ return g[1](pdBase(r.transp)); });
+      if(!rs.length) return null;
+      return {nome: g[0], ent: pdMed(rs.map(function(r){ return r.ent; })), tmp: pdMed(rs.filter(function(r){ return r.tmp != null; }).map(function(r){ return r.tmp; })),
+        m3: pdMed(rs.map(function(r){ return r.m3; })), km: pdMed(rs.map(function(r){ return r.km; }))};
+    }).filter(Boolean);
+  var soma = function(k){ return vm.reduce(function(s, r){ return s + (r[k] || 0); }, 0); };
+  var tot = {cargas: vm.length, ent: soma('ent'), nf: soma('nf'), m3: soma('m3')};
+  tot.razao = tot.nf ? Math.round(tot.m3 / tot.nf * 100) / 100 : null;
+  return {vm: vm, ts: ts, resVM: contar(vm), resTS: contar(ts), grupos: grupos, tot: tot, semLinha: semLinha,
+    f1: inp.filial1 || '33', f2: inp.filial2 || '05', unidade: inp.unidade || 'CAJ-1', dataSerial: inp.dataSerial};
+}
+
+/* Grade do relatório: colunas A:K, linhas com células {c, span, v, f(formato), s(estilo)} e blocos de tabela (para as bordas) */
+function pdGrade(M){
+  var R = [], B = [], H = ['Q. CARGAS', 'ENTREGAS', 'TEMPO', 'M³', 'KM', 'TIPO', 'PRÉ ' + M.f1, 'PRÉ ' + M.f2, 'DOCAS ' + M.f1, 'TRANSP.', 'PLACAS'];
+  var cel = function(c, v, s, f, span){ return {c: c, span: span || 1, v: v, s: s || 'b', f: f || 'gen'}; };
+  var linha = function(h, cells){ R.push({h: h, cells: cells}); return R.length - 1; };
+  var cab = function(){ return linha(15, H.map(function(t, i){ return cel(i, t, 'h'); })); };
+  linha(24.45, [cel(5, 'PAINEL DIARIO', 'title'), cel(10, M.dataSerial, 'date', 'date')]);
+  if(M.ts.length){
+    var r0 = cab();
+    M.ts.forEach(function(t){ linha(15, [cel(0, t.seq), cel(1, '//'), cel(2, '//'), cel(3, '//'), cel(4, '//'), cel(5, 'TS'), cel(6, t.pre1), cel(7, t.pre2), cel(8, t.doca), cel(9, t.transp), cel(10, t.placa)]); });
+    B.push({r0: r0, r1: R.length - 1, c0: 0, c1: 10});
+    linha(15, []);
+  }
+  var v0 = cab();
+  M.vm.forEach(function(r){
+    linha(15, [cel(0, r.n), cel(1, r.ent), cel(2, r.tmp, 'b', 'time'), cel(3, r.m3, 'b', 'int'), cel(4, r.km, 'b', 'int'), cel(5, r.tipo), cel(6, r.pre1 === '' ? null : r.pre1), cel(7, r.pre2 === '' ? null : r.pre2), cel(8, r.doca), cel(9, r.transp), cel(10, r.placa)]);
+  });
+  if(M.vm.length) B.push({r0: v0, r1: R.length - 1, c0: 0, c1: 10});
+  linha(15, []);
+
+  /* resumos: três quadros lado a lado, compartilhando as mesmas linhas */
+  var base = R.length, quadros = [], put = function(rel, cells){ while(R.length <= base + rel) linha(15, []); cells.forEach(function(c){ R[base + rel].cells.push(c); }); };
+  put(0, [cel(0, 'RESUMO VM', 'lb', 'gen', 2), cel(1, null, 'lb')]);
+  if(M.ts.length) put(0, [cel(3, 'TS', 'lbb', 'gen', 2), cel(4, null, 'lbb')]);
+  put(0, [cel(6, 'VM', 'lbb', 'gen', 5), cel(7, null, 'lbb'), cel(8, null, 'lbb'), cel(9, null, 'lbb'), cel(10, null, 'lbb')]);
+  put(1, [cel(0, 'CARGAS', 'h'), cel(1, M.unidade, 'h')]);
+  M.resVM.forEach(function(x, i){ put(2 + i, [cel(0, x[0]), cel(1, x[1], 'b', 'int')]); });
+  put(2 + M.resVM.length, [cel(0, 'TOTAL', 'h'), cel(1, M.tot.cargas, 'h')]);
+  quadros.push({r0: base + 1, r1: base + 2 + M.resVM.length, c0: 0, c1: 1});
+  if(M.ts.length){
+    put(1, [cel(3, 'CARGAS', 'h'), cel(4, M.unidade, 'h')]);
+    M.resTS.forEach(function(x, i){ put(2 + i, [cel(3, x[0]), cel(4, x[1], 'b', 'int')]); });
+    put(2 + M.resTS.length, [cel(3, 'TOTAL', 'h'), cel(4, M.ts.length, 'h')]);
+    quadros.push({r0: base + 1, r1: base + 2 + M.resTS.length, c0: 3, c1: 4});
+  }
+  put(1, ['TRANSP.', 'ENTREGAS', 'TEMPO', 'M³', 'KM'].map(function(t, i){ return cel(6 + i, t, 'h'); }));
+  M.grupos.forEach(function(g, i){ put(2 + i, [cel(6, g.nome), cel(7, g.ent, 'b', 'int'), cel(8, g.tmp, 'b', 'time'), cel(9, g.m3, 'b', 'int'), cel(10, g.km, 'b', 'int')]); });
+  quadros.push({r0: base + 1, r1: base + 1 + M.grupos.length, c0: 6, c1: 10});
+  var t0 = 3 + M.grupos.length;               /* uma linha em branco depois dos grupos */
+  put(t0, ['TOTAL', 'ENTREGAS', 'NFs', 'M³', 'M³ / NF'].map(function(t, i){ return cel(6 + i, t, 'h'); }));
+  put(t0 + 1, [cel(6, M.tot.cargas), cel(7, M.tot.ent), cel(8, M.tot.nf), cel(9, M.tot.m3, 'b', 'int'), cel(10, M.tot.razao)]);
+  quadros.push({r0: base + t0, r1: base + t0 + 1, c0: 6, c1: 10});
+  quadros.forEach(function(q){ B.push(q); });
+  R.forEach(function(r){ r.cells.sort(function(a, b){ return a.c - b.c; }); });
+  return {cols: PD_COLS, rows: R, blocks: B};
+}
+
+/* bordas por célula: bloco com contorno médio, linhas internas finas (brancas dentro do cabeçalho preto), como no modelo */
+function pdBordas(G){
+  var map = {}, K = function(r, c){ return r + '|' + c; }, W = {w: 1, k: '#ffffff'}, T = {w: 1, k: '#000000'}, Md = {w: 2, k: '#000000'};
+  G.rows.forEach(function(row, r){ row.cells.forEach(function(c){ if(c.s === 'lb' || c.s === 'lbb') map[K(r, c.c)] = {b: Md}; }); });
+  G.blocks.forEach(function(b){
+    for(var r = b.r0; r <= b.r1; r++){
+      G.rows[r].cells.forEach(function(c){
+        var fim = c.c + c.span - 1; if(c.c < b.c0 || fim > b.c1) return;
+        var hdr = c.s === 'h', acima = r > b.r0 && G.rows[r - 1].cells.some(function(x){ return x.c === c.c && x.s === 'h'; });
+        map[K(r, c.c)] = {
+          l: c.c === b.c0 ? Md : (hdr ? W : T), r: fim === b.c1 ? Md : (hdr ? W : T),
+          t: r === b.r0 ? Md : ((hdr || acima) ? Md : T), b: r === b.r1 ? Md : (hdr ? null : T)
+        };
+      });
+    }
+  });
+  return map;
+}
+
+function pdEscH(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
+/* HTML da folha (tabela) — usado na tela e como base da impressão */
+function pdHtml(G){
+  var bd = pdBordas(G), tot = G.cols.reduce(function(s, w){ return s + Math.trunc(w * 7 + 5); }, 0);
+  var cgr = '<colgroup>' + G.cols.map(function(w){ return '<col style="width:' + (Math.trunc(w * 7 + 5) / tot * 100).toFixed(3) + '%">'; }).join('') + '</colgroup>';
+  var css = function(k, e){ return e ? 'border-' + k + ':' + e.w + 'px solid ' + e.k + ';' : ''; };
+  var body = G.rows.map(function(row, r){
+    var cells = row.cells, h = '', col = 0, i = 0;
+    while(col < G.cols.length){
+      var c = cells.filter(function(x){ return x.c === col; })[0];
+      if(!c){ h += '<td></td>'; col++; continue; }
+      if(c.s === 'title'){
+        h += '<td class="pdt" style="position:relative;overflow:visible"><span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);white-space:nowrap">' + pdEscH(pdTxt(c)) + '</span></td>';
+        col++; continue;
+      }
+      var b = bd[r + '|' + c.c] || {};
+      var st = css('left', b.l) + css('right', b.r) + css('top', b.t) + css('bottom', b.b);
+      var cls = c.s === 'h' ? 'pdh' : (c.s === 'date' ? 'pdt' : (c.s === 'lbb' ? 'pdlb' : ''));
+      h += '<td' + (c.span > 1 ? ' colspan="' + c.span + '"' : '') + (cls ? ' class="' + cls + '"' : '') + (st ? ' style="' + st + '"' : '') + '>' + pdEscH(pdTxt(c)) + '</td>';
+      col += c.span;
+    }
+    return '<tr style="height:' + (row.h * 96 / 72).toFixed(1) + 'px">' + h + '</tr>';
+  }).join('');
+  return '<table class="pd-tab">' + cgr + '<tbody>' + body + '</tbody></table>';
+}
+
+/* Desenha a folha num canvas (mesma grade): PNG para copiar/baixar/imprimir. 1 unidade de largura = 7 px, como o Excel a 100%. */
+function pdTamanho(G, esc){
+  esc = esc || 1;
+  var cw = G.cols.map(function(w){ return Math.trunc(w * 7 + 5) * esc; }), rh = G.rows.map(function(r){ return Math.round(r.h * 96 / 72 * esc); });
+  return {cw: cw, rh: rh, W: cw.reduce(function(a, b){ return a + b; }, 0), H: rh.reduce(function(a, b){ return a + b; }, 0)};
+}
+function pdDesenhar(G, ctx, esc){
+  esc = esc || 1;
+  var S = pdTamanho(G, esc), bd = pdBordas(G), W = S.W, H = S.H;
+  var xs = [0]; S.cw.forEach(function(w){ xs.push(xs[xs.length - 1] + w); });
+  var ys = [0]; S.rh.forEach(function(h){ ys.push(ys[ys.length - 1] + h); });
+  var px = 96 / 72, fonte = function(pt, neg, fam){ return (neg ? 'bold ' : '') + (pt * px * esc).toFixed(2) + 'px ' + fam; };
+  var FAM = 'Calibri, Carlito, "Segoe UI", Arial, sans-serif', FAML = '"Calibri Light", Calibri, Carlito, "Segoe UI", Arial, sans-serif';
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+  var fil = [], linhas = [];
+  G.rows.forEach(function(row, r){
+    row.cells.forEach(function(c){
+      var x0 = xs[c.c], x1 = xs[c.c + c.span], y0 = ys[r], y1 = ys[r + 1], cx = (x0 + x1) / 2, cy = (y0 + y1) / 2 + 0.5 * esc, t = pdTxt(c);
+      if(c.s === 'h'){ ctx.fillStyle = '#000000'; ctx.fillRect(x0, y0, x1 - x0, y1 - y0); }
+      if(!t) return;
+      if(c.s === 'title' || c.s === 'date'){ ctx.fillStyle = '#000'; ctx.font = fonte(20, true, FAML); }
+      else { ctx.fillStyle = c.s === 'h' ? '#ffffff' : '#000000'; ctx.font = fonte(11, c.s === 'h', FAM); }
+      if(c.s === 'title') cx = xs[5] + S.cw[5] / 2;
+      ctx.fillText(t, cx, cy, c.s === 'title' ? undefined : (x1 - x0 - 2));
+    });
+  });
+  var tr = function(x0, y0, x1, y1, e){ if(!e) return; ctx.fillStyle = e.k; var w = e.w * esc; if(x0 === x1) ctx.fillRect(x0 - w / 2, y0 - w / 2, w, y1 - y0 + w); else ctx.fillRect(x0 - w / 2, y0 - w / 2, x1 - x0 + w, w); };
+  [0, 1, 2].forEach(function(passo){                                          /* 0: finas pretas · 1: brancas do cabeçalho · 2: contorno médio */
+    G.rows.forEach(function(row, r){
+      row.cells.forEach(function(c){
+        var b = bd[r + '|' + c.c]; if(!b) return;
+        var x0 = xs[c.c], x1 = xs[c.c + c.span], y0 = ys[r], y1 = ys[r + 1];
+        var sel = function(e){ if(!e) return null; var tipo = e.w === 2 ? 2 : (e.k === '#ffffff' ? 1 : 0); return tipo === passo ? e : null; };
+        tr(x0, y0, x0, y1, sel(b.l)); tr(x1, y0, x1, y1, sel(b.r)); tr(x0, y0, x1, y0, sel(b.t)); tr(x0, y1, x1, y1, sel(b.b));
+      });
+    });
+  });
+  return S;
+}
+
+/* Excel (.xlsx) com o mesmo layout, montado direto em XML (o SheetJS gratuito não grava estilos) */
+function pdXml(s){ return String(s == null ? '' : s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function pdColL(i){ return String.fromCharCode(65 + i); }
+function pdSheetXml(G, reg){
+  var bd = pdBordas(G), rowsXml = '', merges = [];
+  var rotulo = function(e){ return e ? (e.w === 2 ? 'medium' : 'thin') + (e.k === '#ffffff' ? 'W' : 'K') : ''; };
+  G.rows.forEach(function(row, r){
+    var rn = r + 1, cs = '';
+    row.cells.forEach(function(c){
+      var b = bd[r + '|' + c.c] || {}, chave = [c.s, c.f, rotulo(b.l), rotulo(b.r), rotulo(b.t), rotulo(b.b)].join('|'), ref = pdColL(c.c) + rn;
+      var sid = reg.id(chave, {s: c.s, f: c.f, b: b});
+      var v = c.v;
+      for(var k = 1; k < c.span; k++){ var bb = bd[r + '|' + (c.c + k)] || {}; /* células cobertas pela mesclagem também levam estilo/borda */ }
+      if(v == null || v === '') cs += '<c r="' + ref + '" s="' + sid + '"/>';
+      else if(typeof v === 'number') cs += '<c r="' + ref + '" s="' + sid + '"><v>' + v + '</v></c>';
+      else cs += '<c r="' + ref + '" s="' + sid + '" t="inlineStr"><is><t xml:space="preserve">' + pdXml(v) + '</t></is></c>';
+      if(c.span > 1){
+        merges.push(ref + ':' + pdColL(c.c + c.span - 1) + rn);
+        for(var q = 1; q < c.span; q++){ /* cobertas: já existem como células vazias na grade (lb/lbb) */ }
+      }
+    });
+    rowsXml += '<row r="' + rn + '" ht="' + row.h + '" customHeight="1">' + cs + '</row>';
+  });
+  var cols = '<cols>' + G.cols.map(function(w, i){ return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; }).join('') + '</cols>';
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>' +
+    '<dimension ref="A1:K' + G.rows.length + '"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews><sheetFormatPr defaultRowHeight="15"/>' + cols + '<sheetData>' + rowsXml + '</sheetData>' +
+    (merges.length ? '<mergeCells count="' + merges.length + '">' + merges.map(function(m){ return '<mergeCell ref="' + m + '"/>'; }).join('') + '</mergeCells>' : '') +
+    '<pageMargins left="0.3" right="0.3" top="0.4" bottom="0.4" header="0.2" footer="0.2"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="1"/></worksheet>';
+}
+function pdEstilos(){
+  var lista = [], idx = {};
+  return {
+    id: function(chave, d){ if(!(chave in idx)){ idx[chave] = lista.length + 1; lista.push(d); } return idx[chave]; },
+    xml: function(){
+      var brd = function(e, tag){ if(!e) return '<' + tag + '/>'; return '<' + tag + ' style="' + (e.w === 2 ? 'medium' : 'thin') + '"><color rgb="' + (e.k === '#ffffff' ? 'FFFFFFFF' : 'FF000000') + '"/></' + tag + '>'; };
+      var bordas = ['<border><left/><right/><top/><bottom/><diagonal/></border>'], bi = {};
+      var cx = lista.map(function(d){
+        var b = d.b || {}, sig = [b.l, b.r, b.t, b.b].map(function(e){ return e ? e.w + e.k : '-'; }).join(','), bid = 0;
+        if(sig !== '-,-,-,-'){ if(!(sig in bi)){ bi[sig] = bordas.length; bordas.push('<border>' + brd(b.l, 'left') + brd(b.r, 'right') + brd(b.t, 'top') + brd(b.b, 'bottom') + '<diagonal/></border>'); } bid = bi[sig]; }
+        var font = d.s === 'title' || d.s === 'date' ? 2 : (d.s === 'h' ? 3 : 0), fill = d.s === 'h' ? 2 : 0;
+        var nf = d.f === 'time' ? 165 : (d.f === 'int' ? 1 : (d.f === 'date' ? 164 : 0));
+        return '<xf numFmtId="' + nf + '" fontId="' + font + '" fillId="' + fill + '" borderId="' + bid + '" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>';
+      });
+      return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+        '<numFmts count="2"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/><numFmt numFmtId="165" formatCode="h:mm;@"/></numFmts>' +
+        '<fonts count="4"><font><sz val="11"/><color rgb="FF000000"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="11"/><color rgb="FF000000"/><name val="Calibri"/><family val="2"/></font>' +
+        '<font><b/><sz val="20"/><color rgb="FF000000"/><name val="Calibri Light"/><family val="2"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font></fonts>' +
+        '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF000000"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+        '<borders count="' + bordas.length + '">' + bordas.join('') + '</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+        '<cellXfs count="' + (lista.length + 1) + '"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' + cx.join('') + '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+    }
+  };
+}
+function pdXlsxArquivos(G, nomeAba){
+  var reg = pdEstilos(), sheet = pdSheetXml(G, reg), nome = pdXml(String(nomeAba || 'PAINEL DIARIO').slice(0, 31));
+  return {
+    '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>',
+    '_rels/.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+    'xl/workbook.xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets><sheet name="' + nome + '" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">\'' + nome + '\'!$A$1:$K$' + G.rows.length + '</definedName></definedNames></workbook>',
+    'xl/_rels/workbook.xml.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>',
+    'xl/styles.xml': reg.xml(),
+    'xl/worksheets/sheet1.xml': sheet
+  };
+}
+/*PDCORE-END*/
+
+/* =========================================================
+   PAINEL DIARIO (aba 10)
+   Monta o relatório "PAINEL DIARIO": quadro TS, quadro VM (cargas da Lista de Carga da aba 1 + dados da Linha de Produto)
+   e os resumos. Dados próprios em localStorage['pd_painel_v1'] (só a Linha de Produto e os ajustes). Não altera nenhuma outra aba.
+   ========================================================= */
+(function(){
+'use strict';
+var KEY = 'pd_painel_v1';
+var S = { linha:null, data:'', prio:null, terc:null };
+var MODEL = null, GRADE = null;
+
+function $(id){ return document.getElementById(id); }
+function say(m,t){ try{ toast(m,t); }catch(e){ console.log(m); } }
+function esc(s){ return pdEscH(s); }
+function hojeISO(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function iso(serial){ if(serial==null) return ''; var d=new Date(Date.UTC(1899,11,30)+serial*864e5); return d.getUTCFullYear()+'-'+String(d.getUTCMonth()+1).padStart(2,'0')+'-'+String(d.getUTCDate()).padStart(2,'0'); }
+function lista(txt){ return String(txt||'').split(/[\n;]+/).map(function(x){ return x.trim(); }).filter(Boolean); }
+
+function persist(){
+  if(window.__GDN_RESETANDO && !window.__GDN_PERSIST_OK) return;
+  try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){ console.warn('Painel diário: não consegui salvar no navegador', e); }
+}
+function restore(){
+  try{
+    var raw = localStorage.getItem(KEY); if(!raw) return;
+    var p = JSON.parse(raw);
+    S.linha = p.linha||null; S.data = p.data||''; S.prio = p.prio||null; S.terc = p.terc||null;
+  }catch(e){ console.warn('Painel diário: estado salvo ilegível, ignorando', e); }
+}
+
+/* ---------- leitura da Linha de Produto ---------- */
+function pegarAba(wb){
+  var nomes = wb.SheetNames, n = function(s){ return pdN(s).replace(/[^A-Z]/g,''); };
+  var alvo = nomes.filter(function(x){ return n(x)==='PAINELDIARIO'; })[0] || nomes.filter(function(x){ return n(x).indexOf('PAINEL')>=0 && n(x).indexOf('DIARIO')>=0; })[0];
+  return alvo || null;
+}
+function lerLinha(file){
+  return new Promise(function(res,rej){
+    var fr = new FileReader();
+    fr.onerror = function(){ rej(new Error('Não consegui ler '+file.name)); };
+    fr.onload = function(){
+      try{
+        var buf = new Uint8Array(fr.result);
+        var nomes = XLSX.read(buf,{type:'array',bookSheets:true}).SheetNames;
+        var n = function(s){ return pdN(s).replace(/[^A-Z]/g,''); };
+        var alvo = nomes.filter(function(x){ return n(x)==='PAINELDIARIO'; })[0] || nomes.filter(function(x){ return n(x).indexOf('PAINEL')>=0 && n(x).indexOf('DIARIO')>=0; })[0];
+        if(!alvo) throw new Error('não achei a aba "Painel (Diário)" neste arquivo');
+        var wb = XLSX.read(buf,{type:'array',sheets:alvo});
+        var ws = wb.Sheets[alvo], rg = XLSX.utils.decode_range(ws['!ref']);
+        rg.e.c = Math.min(rg.e.c, 59); rg.e.r = Math.min(rg.e.r, 6000); ws['!ref'] = XLSX.utils.encode_range(rg);   /* o arquivo declara A1:XFD — limita para não ler milhões de células vazias */
+        var rows = XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:''});
+        var r = pdParseLinha(rows); if(r.erro) throw new Error(r.erro);
+        res(r);
+      }catch(e){ rej(e); }
+    };
+    fr.readAsArrayBuffer(file);
+  });
+}
+window.pdFiles = async function(fileList){
+  if(typeof XLSX==='undefined'){ say('Biblioteca de planilhas (XLSX) não carregou. Confira a internet e recarregue a página.','err'); return; }
+  var f = Array.from(fileList||[])[0]; if(!f) return;
+  say('Lendo "'+f.name+'"…','ok');
+  try{
+    var r = await lerLinha(f);
+    S.linha = {nome:f.name, data:r.data, n:r.n, plates:r.plates};
+    if(r.data) S.data = iso(r.data);
+    persist(); window.pdRender();
+    say('Linha de Produto lida: '+r.n+' placa(s)'+(r.data?' · data '+pdDataBR(r.data):'')+'.','ok');
+  }catch(e){ console.error(e); say('Erro ao ler "'+f.name+'": '+(e.message||e),'err'); }
+};
+window.pdDrop = function(ev){ ev.preventDefault(); ev.currentTarget.classList.remove('drag'); window.pdFiles(ev.dataTransfer.files); };
+window.pdLimpar = function(){
+  if(!confirm('Remover a Linha de Produto carregada nesta aba?')) return;
+  S.linha = null; persist(); window.pdRender();
+};
+window.pdNovoDia = function(){ S.linha = null; S.data = ''; MODEL = null; GRADE = null; persist(); window.pdRender(); };
+window.pdOpt = function(){ S.data = $('pdData').value; S.prio = lista($('pdPrio').value); S.terc = lista($('pdTerc').value); persist(); window.pdRender(); };
+window.pdPadrao = function(){ S.prio = null; S.terc = null; persist(); window.pdRender(); };
+
+/* ---------- dados da ferramenta ---------- */
+function filiais(){
+  var fs = (STATE.config && STATE.config.filiais) || [];
+  var f1 = (fs.filter(function(f){ return f.principal; })[0] || fs[0] || {codigo:'33'}).codigo;
+  var f2 = (fs.filter(function(f){ return f.codigo==='05'; })[0] || fs.filter(function(f){ return f.codigo!==f1; })[0] || {codigo:'05'}).codigo;
+  return [String(f1), String(f2)];
+}
+function preDe(a, f){
+  var v = []; (a.pres||[]).forEach(function(p){ if(String(p.filial)===f){ var x = String(p.preRomaneio); if(v.indexOf(x)<0) v.push(x); } });
+  if(!v.length) return '';
+  return (v.length===1 && /^\d+$/.test(v[0])) ? Number(v[0]) : v.join('/');
+}
+function cargasDaFerramenta(f1, f2){
+  if(typeof STATE==='undefined' || typeof pCargasNumeradas!=='function' || !(STATE.alocacao && STATE.alocacao.length)) return [];
+  return pCargasNumeradas().map(function(it){
+    var a = it.a;
+    return {n:it.n, key:placaKey(a.placa), placa:String(a.placa||'').toUpperCase(), transp:a.transportadora||'', pend:it.pend,
+      doca: it.pend ? '' : pDoca(a)+' ('+a.onda+'ªONDA)', pre1:preDe(a,f1), pre2:preDe(a,f2)};
+  });
+}
+function tsDaFerramenta(){
+  if(typeof STATE==='undefined' || !(STATE.ts && STATE.ts.length) || typeof tsMapaPorPlaca!=='function') return [];
+  var m = tsMapaPorPlaca(), out = [];
+  Object.keys(m).forEach(function(k){
+    var e = m[k], seq = null;
+    e.linhas.forEach(function(l){ if(seq==null && l.seq!=='' && l.seq!=null && !isNaN(Number(l.seq))) seq = Number(l.seq); });
+    var transp = ''; try{ transp = findTransportadoraDaPlaca(k) || ''; }catch(x){}
+    out.push({seq:seq, placa:e.placa, doca:e.doca, onda:e.onda, pre33:e.presOutros, pre05:e.pre05, transp:transp});
+  });
+  out.forEach(function(r,i){ if(r.seq==null) r.seq = 1000+i; });
+  return out;
+}
+function montar(){
+  var fl = filiais();
+  var linha = S.linha ? S.linha.plates : {};
+  var serial = pdSerial(S.data) || (S.linha && S.linha.data) || pdSerial(hojeISO());
+  MODEL = pdBuild({cargas:cargasDaFerramenta(fl[0],fl[1]), ts:tsDaFerramenta(), linha:linha, filial1:fl[0], filial2:fl[1],
+    prio:S.prio&&S.prio.length?S.prio:null, terc:S.terc&&S.terc.length?S.terc:null, dataSerial:serial});
+  GRADE = pdGrade(MODEL);
+}
+
+/* ---------- saídas ---------- */
+function nomeBase(){ return 'PAINEL_DIARIO_'+pdDataBR(MODEL.dataSerial).replace(/\//g,'-'); }
+function baixar(blob, nome){
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome;
+  document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+}
+function temDados(){ return MODEL && (MODEL.vm.length || MODEL.ts.length); }
+window.pdBaixarExcel = async function(){
+  if(!temDados()){ say('Nada para baixar.','err'); return; }
+  if(typeof JSZip==='undefined'){ say('Biblioteca JSZip não carregou. Verifique a conexão e recarregue a página.','err'); return; }
+  try{
+    var arq = pdXlsxArquivos(GRADE,'PAINEL DIARIO'), z = new JSZip();
+    Object.keys(arq).forEach(function(k){ z.file(k, arq[k]); });
+    baixar(await z.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', compression:'DEFLATE'}), nomeBase()+'.xlsx');
+    say('Excel gerado: '+MODEL.vm.length+' carga(s) VM e '+MODEL.ts.length+' TS.','ok');
+  }catch(e){ console.error(e); say('Não consegui gerar o Excel: '+(e.message||e),'err'); }
+};
+function canvasPainel(){
+  var esc = 2, S2 = pdTamanho(GRADE, esc), cv = document.createElement('canvas'); cv.width = S2.W; cv.height = S2.H;
+  pdDesenhar(GRADE, cv.getContext('2d'), esc); return cv;
+}
+window.pdBaixarPNG = function(){
+  if(!temDados()){ say('Nada para baixar.','err'); return; }
+  canvasPainel().toBlob(function(b){ if(!b){ say('Não consegui gerar a imagem.','err'); return; } baixar(b, nomeBase()+'.png'); say('Imagem gerada.','ok'); }, 'image/png');
+};
+window.pdCopiar = function(){
+  if(!temDados()){ say('Nada para copiar.','err'); return; }
+  if(!(navigator.clipboard && window.ClipboardItem)){ say('Este navegador não permite copiar imagem. Use "Baixar imagem".','err'); return; }
+  canvasPainel().toBlob(function(b){
+    navigator.clipboard.write([new ClipboardItem({'image/png': b})]).then(function(){ say('Imagem copiada. É só colar (Ctrl+V) onde precisar.','ok'); },
+      function(){ say('Não consegui copiar. Use "Baixar imagem".','err'); });
+  }, 'image/png');
+};
+window.pdImprimir = function(){
+  if(!temDados()){ say('Nada para imprimir.','err'); return; }
+  var html = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>PAINEL DIARIO</title><style>@page{size:A4 portrait;margin:8mm}html,body{margin:0;background:#fff;color:#000;font-family:Calibri,Carlito,Arial,sans-serif}'+
+    '.pd-tab{border-collapse:collapse;table-layout:fixed;width:100%;font-size:11pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}.pd-tab td{padding:0 2px;text-align:center;white-space:nowrap;overflow:hidden;border:0;line-height:1.1}'+
+    '.pd-tab td.pdh{background:#000;color:#fff;font-weight:700}.pd-tab td.pdt{font-size:20pt;font-weight:700}.pd-tab tr{page-break-inside:avoid}</style></head><body>'+pdHtml(GRADE)+'</body></html>';
+  var fr = document.createElement('iframe'); fr.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  document.body.appendChild(fr);
+  var d = fr.contentWindow.document; d.open(); d.write(html); d.close();
+  setTimeout(function(){ fr.contentWindow.focus(); fr.contentWindow.print(); setTimeout(function(){ fr.remove(); }, 60000); }, 500);
+};
+
+/* ---------- tela ---------- */
+window.pdRender = function(){
+  if(!$('view-paineldiario')) return;
+  if(!S.data) S.data = (S.linha && S.linha.data) ? iso(S.linha.data) : hojeISO();
+  $('pdData').value = S.data;
+  $('pdPrio').value = (S.prio&&S.prio.length ? S.prio : PD_PRIO).join('\n');
+  $('pdTerc').value = (S.terc&&S.terc.length ? S.terc : PD_TERC).join('\n');
+  $('pdArqs').innerHTML = S.linha ? '<div class="fitem"><span>Linha de Produto — '+esc(S.linha.nome)+(S.linha.data?' · '+esc(pdDataBR(S.linha.data)):'')+'</span><span class="badge ok">'+S.linha.n+' placa(s)</span></div>' : '';
+  montar();
+  var M = MODEL, aviso = [];
+  if(!S.linha) aviso.push('Carregue a <b>Linha de Produto</b> para preencher ENTREGAS, TEMPO, M³ e KM.');
+  else if(S.linha.data && pdSerial(S.data) && S.linha.data !== pdSerial(S.data)) aviso.push('A Linha de Produto é de <b>'+esc(pdDataBR(S.linha.data))+'</b>, diferente da data do painel ('+esc(pdDataBR(pdSerial(S.data)))+').');
+  if(S.linha && M.semLinha.length) aviso.push('<b>'+M.semLinha.length+'</b> placa(s) da Lista de Carga não estão na Linha de Produto (ficam com 0): '+esc(M.semLinha.slice(0,12).join(', '))+(M.semLinha.length>12?'…':'')+'.');
+  if(!M.vm.length) aviso.push('Não há cargas na <b>1 · Lista de Carga</b>. Consolide os arquivos e rode a alocação primeiro.');
+  if(!M.ts.length) aviso.push('Sem base TS carregada: o quadro TS não aparece.');
+  $('pdKpis').innerHTML =
+    '<div class="pd-kpi"><b>'+M.vm.length+'</b><span>Cargas VM</span></div><div class="pd-kpi"><b>'+M.ts.length+'</b><span>Cargas TS</span></div>'+
+    '<div class="pd-kpi"><b>'+M.tot.ent+'</b><span>Entregas</span></div><div class="pd-kpi"><b>'+(Math.round(M.tot.m3))+'</b><span>M³</span></div>';
+  $('pdAviso').style.display = aviso.length ? 'block' : 'none';
+  $('pdAviso').innerHTML = aviso.map(function(x){ return '<div>• '+x+'</div>'; }).join('');
+  $('pdVazio').style.display = temDados() ? 'none' : 'block';
+  $('pdFolhaWrap').style.display = temDados() ? 'block' : 'none';
+  $('pdFolha').innerHTML = temDados() ? pdHtml(GRADE) : '';
+};
+
+var _sw = window.switchTab;
+window.switchTab = function(tab){ _sw.apply(this, arguments); if(tab==='paineldiario') window.pdRender(); };
 restore();
 })();
 </script>
