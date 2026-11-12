@@ -665,7 +665,10 @@
   <div class="panel" id="panelFluxo">
     <div class="panel-head">
       <div><h2>Fluxo automático e saídas prontas</h2><div class="desc">Depois do envio, a ferramenta consolida, aloca, liga as coletas às placas e monta as saídas. Se houver ajuste manual de doca ou a data da operação for diferente, ela pergunta antes de alterar.</div></div>
-      <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12.5px;color:var(--text-1);cursor:pointer;"><input type="checkbox" id="fluxoAuto" checked onchange="fluxoAutoMudou()"> Consolidar e alocar sozinho após o envio</label>
+      <div style="display:grid;gap:4px;">
+        <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12.5px;color:var(--text-1);cursor:pointer;"><input type="checkbox" id="fluxoAuto" checked onchange="fluxoAutoMudou()"> Consolidar e alocar sozinho após o envio</label>
+        <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12.5px;color:var(--text-1);cursor:pointer;" title="Ao atualizar a página (F5) ou quando uma nova versão for aplicada, apaga os arquivos e dados do dia em todas as abas. Configurações, cadastros e equipe são mantidos."><input type="checkbox" id="limparAoAtualizar" checked onchange="limparAoAtualizarMudou()"> Limpar a operação ao atualizar a ferramenta</label>
+      </div>
     </div>
     <div id="fluxoStatus"></div>
     <div id="fluxoSaidas" style="margin-top:8px;"></div>
@@ -1578,8 +1581,8 @@ function saveState(force){
   }
 }
 
-function novaOperacao(){
-  if(!confirm('Isso apaga TODOS os dados da operação em TODAS as abas:\n\n'+
+function novaOperacao(auto){
+  if(auto!==true && !confirm('Isso apaga TODOS os dados da operação em TODAS as abas:\n\n'+
     '• Upload & Consolidação: arquivos carregados, base TS, cargas e PRÉs pendentes\n'+
     '• Lista de Carga, Protocolo de Bancada e Ondas Fora da doca: alocação, ondas e status\n'+
     '• Coleta e Saída de Veículos: arquivos carregados, buscas e datas\n'+
@@ -1670,10 +1673,29 @@ function novaOperacao(){
       toast('A tela foi limpa, mas o navegador não apagou tudo ('+(sujoLocal?'estado ':'')+(sujoReserva?'reserva ':'')+(sobrouChave?'dados de módulo':'')+'). Faça um backup, limpe os dados do site (Configurações do navegador) e tente de novo.', 'err');
       return;
     }
+    if(auto===true){   /* limpeza automática ao atualizar a página: a página acabou de carregar, não precisa recarregar de novo */
+      window.__GDN_RESETANDO = false; window.__GDN_PERSIST_OK = false;
+      try{ switchTab('upload'); }catch(e){}
+      toast('Ferramenta atualizada: a operação anterior foi limpa em todas as abas, pronta para uma nova operação. Configurações, cadastros e equipe foram mantidos.', 'ok');
+      return;
+    }
     try{ sessionStorage.setItem('gdn_novodia_ok','1'); }catch(e){}
     location.reload();
   })();
 }
+/* ---------- limpa a operação sozinha quando a página é atualizada (F5 / nova versão publicada) ---------- */
+const _GDN_FLAG_NOVODIA = (()=>{ try{ return !!sessionStorage.getItem('gdn_novodia_ok'); }catch(e){ return false; } })();   /* lido antes de o aviso do \"Novo dia\" consumir a marca */
+const _GDN_VEIO_ATUALIZACAO = /[?&]_v=\d+/.test(location.search);                                                         /* lido antes de a barra de endereço ser limpa */
+function limparAoAtualizarLigado(){ try{ return localStorage.getItem('limpar_ao_atualizar_v1') !== '0'; }catch(e){ return true; } }
+function limparAoAtualizarMudou(){ const c = document.getElementById('limparAoAtualizar'); try{ localStorage.setItem('limpar_ao_atualizar_v1', c && c.checked ? '1' : '0'); }catch(e){} }
+window.addEventListener('load', ()=>{
+  try{
+    if(_GDN_FLAG_NOVODIA || !limparAoAtualizarLigado()) return;   /* acabou de rodar o \"Novo dia\" (ou outra aba o rodou) ou a opção está desligada */
+    let nav = null; try{ nav = performance.getEntriesByType('navigation')[0]; }catch(e){}
+    if(!(_GDN_VEIO_ATUALIZACAO || (nav && nav.type === 'reload'))) return;
+    novaOperacao(true);
+  }catch(e){ console.error('Limpeza ao atualizar', e); }
+});
 /* outra aba/janela desta ferramenta (mesmo navegador) rodou o "Novo dia": esta recarrega sem regravar nada antigo */
 window.addEventListener('storage', ev=>{
   if(ev.key==='gdn_reset_epoch' && ev.newValue){
@@ -2570,6 +2592,7 @@ function fluxoLinha(rot, val, cls){ return '<div class="fitem"><span>'+rot+'</sp
 function renderFluxo(){
   const st = document.getElementById('fluxoStatus'), sb = document.getElementById('fluxoSaidas'); if(!st || !sb) return;
   const cb = document.getElementById('fluxoAuto'); if(cb) cb.checked = fluxoAutoLigado();
+  const cl = document.getElementById('limparAoAtualizar'); if(cl) cl.checked = limparAoAtualizarLigado();
   const nPend = PENDING.GAN.length + PENDING.HEBLS.length + PENDING.REGIAO.length + PENDING.TS.length;
   const nCargas = (STATE.cargas||[]).length, nAloc = (STATE.alocacao||[]).length;
   let kc = []; try{ kc = (typeof window.kcColetasDoDia==='function') ? (window.kcColetasDoDia()||[]) : []; }catch(e){}
