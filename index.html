@@ -1623,7 +1623,8 @@ function novaOperacao(auto){
 
   /* 2) módulos isolados, com dados próprios no navegador (Saída de Veículos e Coleta) */
   passo('saída (aba 6)', ()=>{ if(typeof window.csNovoDia==='function') window.csNovoDia(); });
-  passo('coleta (aba 3)',  ()=>{ if(typeof window.kcNovoDia==='function') window.kcNovoDia(); });
+  let kcLimpo = null;
+  passo('coleta (aba 3)',  ()=>{ if(typeof window.kcNovoDia==='function') kcLimpo = window.kcNovoDia(); });
   passo('painel diario (aba 10)',  ()=>{ if(typeof window.pdNovoDia==='function') window.pdNovoDia(); });
   let prodLimpo = null;
   passo('produtividade (aba 9)',   ()=>{ if(typeof window.prodNovoDia==='function') prodLimpo = window.prodNovoDia(); });
@@ -1660,6 +1661,7 @@ function novaOperacao(auto){
     const zerado = p => !((p.cargas||[]).length || (p.alocacao||[]).length || (p.iscas||[]).length || (p.ts||[]).length ||
                           (p.presOrfaos||[]).length || p.iscaLote || p.folhas || (p.folhasArqs||[]).length);
     let sujoLocal = false, sujoReserva = false, sobrouChave = false;
+    try{ if(kcLimpo) await kcLimpo; }catch(e){ console.warn('Novo dia · coleta', e); }
     try{ if(prodLimpo) await prodLimpo; }catch(e){ console.warn('Novo dia · produtividade', e); }   /* o IndexedDB da Produtividade precisa estar apagado antes de recarregar */
     try{
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -7228,17 +7230,28 @@ function hojeISO(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMon
 function dataBR(iso){ var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||''); return m ? m[3]+'/'+m[2]+'/'+m[1] : ''; }
 function dataDoNome(nome){ var m=/(\d{2})[._-](\d{2})[._-](\d{4})/.exec(String(nome||'')); return m ? m[3]+'-'+m[2]+'-'+m[1] : ''; }
 
+/* O Tipo de Residência (ORM -> placa) é um mapa grande (arquivo do mês): vai para o IndexedDB, não para o localStorage (cota ~5 MB, estourava). */
+var TIPO_ROWS = null;   /* linhas do último Tipo de Residência lido (só em memória), para achar a coluna da ORM se a padrão não casar */
+function kcIdb(){ return new Promise(function(ok,er){ var q=indexedDB.open('gdn_kc_db',1); q.onupgradeneeded=function(){ q.result.createObjectStore('kv'); }; q.onsuccess=function(){ ok(q.result); }; q.onerror=function(){ er(q.error); }; }); }
+function kcIdbPut(k,v){ return kcIdb().then(function(db){ return new Promise(function(ok,er){ var t=db.transaction('kv','readwrite'); t.objectStore('kv').put(v,k); t.oncomplete=function(){ db.close(); ok(); }; t.onerror=function(){ er(t.error); }; }); }).catch(function(e){ console.warn('Kit coletas: não consegui salvar o Tipo de Residência', e); }); }
+function kcIdbDel(k){ return kcIdb().then(function(db){ return new Promise(function(ok,er){ var t=db.transaction('kv','readwrite'); t.objectStore('kv').delete(k); t.oncomplete=function(){ db.close(); ok(); }; t.onerror=function(){ er(t.error); }; }); }).catch(function(e){ console.warn('Kit coletas: não consegui apagar o Tipo de Residência', e); }); }
+function kcIdbGet(k){ return kcIdb().then(function(db){ return new Promise(function(ok,er){ var q=db.transaction('kv').objectStore('kv').get(k); q.onsuccess=function(){ db.close(); ok(q.result); }; q.onerror=function(){ er(q.error); }; }); }); }
 function persist(){
   if(window.__GDN_RESETANDO && !window.__GDN_PERSIST_OK) return;
-  try{ localStorage.setItem(KEY, JSON.stringify(S)); }
+  var leve = {coletas:S.coletas, tipo:{}, lista:S.lista, arqs:S.arqs, data:S.data};
+  try{ localStorage.setItem(KEY, JSON.stringify(leve)); }
   catch(e){ console.warn('Kit coletas: não consegui salvar no navegador', e); }
+  return kcIdbPut('tipo', S.tipo);
 }
 function restore(){
   try{
-    var raw = localStorage.getItem(KEY); if(!raw) return;
-    var p = JSON.parse(raw);
-    S.coletas = p.coletas||[]; S.tipo = p.tipo||{}; S.lista = p.lista||{}; S.arqs = p.arqs||[]; S.data = p.data||'';
+    var raw = localStorage.getItem(KEY);
+    if(raw){
+      var p = JSON.parse(raw);
+      S.coletas = p.coletas||[]; S.tipo = p.tipo||{}; S.lista = p.lista||{}; S.arqs = p.arqs||[]; S.data = p.data||'';
+    }
   }catch(e){ console.warn('Kit coletas: estado salvo ilegível, ignorando', e); }
+  kcIdbGet('tipo').then(function(t){ if(t && Object.keys(t).length){ S.tipo = t; if(typeof window.kcRender==='function') window.kcRender(); } }).catch(function(){});
 }
 
 /* ---------- leitura dos arquivos ---------- */
@@ -7311,6 +7324,26 @@ function parseTipo(rows){
   }
   return out;
 }
+function hitsTipo(){ var h = 0; S.coletas.forEach(function(c){ if(S.tipo[normOrm(c.orm)] || S.tipo[c.orm]) h++; }); return h; }
+function ajustarTipo(){
+  if(!S.coletas.length || !TIPO_ROWS || hitsTipo() > 0) return;
+  var h = findHeaderTipo(TIPO_ROWS); if(!h) return;
+  var want = {}; S.coletas.forEach(function(c){ want[normOrm(c.orm)] = 1; });
+  var rows = TIPO_ROWS, maxc = 0, i, col, best = -1, bc = 0;
+  for(i=h.row+1;i<rows.length;i++){ var l = (rows[i]||[]).length; if(l > maxc) maxc = l; }
+  for(col=0;col<maxc;col++){
+    if(col === h.map.PLACA) continue;
+    var cnt = 0;
+    for(i=h.row+1;i<rows.length;i++){ var r = rows[i]||[]; if(want[normOrm(r[col])] && tx(r[h.map.PLACA])) cnt++; }
+    if(cnt > bc){ bc = cnt; best = col; }
+  }
+  if(best < 0){ say('Tipo de Residência lido, mas nenhuma ORM da planilha de Coletas apareceu em nenhuma coluna. Confira se é o Tipo de Residência do mesmo dia das Coletas.','err'); return; }
+  var novo = {};
+  for(i=h.row+1;i<rows.length;i++){ var r2 = rows[i]||[]; var pl = tx(r2[h.map.PLACA]).toUpperCase().replace(/[^A-Z0-9]/g,''); var k = normOrm(r2[best]); if(pl && /^\d+$/.test(k)) novo[k] = pl; }
+  S.tipo = novo;
+  var nome = tx((rows[h.row]||[])[best]) || ('coluna '+(best+1));
+  say('A ORM não estava na coluna padrão: usei a coluna "'+nome+'" do Tipo de Residência ('+hitsTipo()+' de '+S.coletas.length+' coletas ligadas à placa).','ok');
+}
 function lerArquivo(file){
   return new Promise(function(res,rej){
     var fr = new FileReader();
@@ -7325,34 +7358,44 @@ window.kcFiles = async function(fileList){
   if(typeof XLSX==='undefined'){ say('Biblioteca de planilhas (XLSX) não carregou. Confira a internet e recarregue a página.','err'); return; }
   var files = Array.from(fileList||[]), ok = 0;
   for(var i=0;i<files.length;i++){
-    var f = files[i], achou = false;
+    var f = files[i], achou = false, accTipo = null, accRows = null;
     try{
       var wb = await lerArquivo(f);
       for(var s=0;s<wb.SheetNames.length && !achou;s++){
         var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[s]], {header:1, defval:null, raw:true});
         var tipo = detectar(rows); if(!tipo) continue;
         var n;
+        if(tipo==='tipo'){   /* o arquivo pode ter várias abas parecidas: junta as ORMs de todas */
+          var m1 = parseTipo(rows); accTipo = accTipo || {}; Object.keys(m1).forEach(function(k){ accTipo[k] = m1[k]; });
+          if(!accRows || rows.length > accRows.length) accRows = rows;
+          continue;
+        }
         if(tipo==='lista'){ S.lista = parseLista(rows); n = Object.keys(S.lista).length; }
-        else if(tipo==='tipo'){ S.tipo = parseTipo(rows); n = Object.keys(S.tipo).length; }
         else{ S.coletas = parseColetas(rows); n = S.coletas.length; var d = dataDoNome(f.name); if(d) S.data = d; }
         S.arqs = S.arqs.filter(function(a){ return a.tipo!==tipo; });
         S.arqs.push({tipo:tipo, nome:f.name, n:n});
         achou = true; ok++;
       }
+      if(!achou && accTipo){
+        S.tipo = accTipo; TIPO_ROWS = accRows; var nt = Object.keys(S.tipo).length;
+        S.arqs = S.arqs.filter(function(a){ return a.tipo!=='tipo'; });
+        S.arqs.push({tipo:'tipo', nome:f.name, n:nt}); achou = true; ok++;
+      }
       if(!achou) say('"'+f.name+'" não parece Coletas, Tipo de Residência nem Lista de carga (não achei as colunas esperadas).','err');
     }catch(e){ console.error(e); say('Erro ao ler "'+f.name+'": '+(e.message||e),'err'); }
   }
-  if(ok){ persist(); window.kcRender(); say(ok+' arquivo(s) reconhecido(s).','ok'); }
+  if(ok){ ajustarTipo(); persist(); window.kcRender(); say(ok+' arquivo(s) reconhecido(s).','ok'); }
 };
 window.kcDrop = function(ev){ ev.preventDefault(); ev.currentTarget.classList.remove('drag'); window.kcFiles(ev.dataTransfer.files); };
 window.kcLimpar = function(){
   if(!confirm('Remover Coletas, Tipo de Residência e Lista de carga carregados nesta aba?')) return;
-  S.coletas=[]; S.tipo={}; S.lista={}; S.arqs=[]; persist(); window.kcRender();
+  S.coletas=[]; S.tipo={}; S.lista={}; S.arqs=[]; TIPO_ROWS=null; persist(); window.kcRender();
 };
 /* Novo dia: limpa tudo da aba sem confirmação e volta a data para hoje. */
 window.kcNovoDia = function(){
-  S.coletas=[]; S.tipo={}; S.lista={}; S.arqs=[]; S.data=''; ROWS=[];
+  S.coletas=[]; S.tipo={}; S.lista={}; S.arqs=[]; S.data=''; ROWS=[]; TIPO_ROWS=null;
   persist(); window.kcRender();
+  return kcIdbDel('tipo');   /* quem chama (Novo dia) espera isto terminar antes de recarregar */
 };
 window.kcOpt = function(){ S.data = $('kcData').value; persist(); window.kcRender(); };
 
