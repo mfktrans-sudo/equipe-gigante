@@ -667,7 +667,9 @@
       <div><h2>Fluxo automático e saídas prontas</h2><div class="desc">Depois do envio, a ferramenta consolida, aloca, liga as coletas às placas e monta as saídas. Se houver ajuste manual de doca ou a data da operação for diferente, ela pergunta antes de alterar.</div></div>
       <div style="display:grid;gap:4px;">
         <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12.5px;color:var(--text-1);cursor:pointer;"><input type="checkbox" id="fluxoAuto" checked onchange="fluxoAutoMudou()"> Consolidar e alocar sozinho após o envio</label>
-        <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12.5px;color:var(--text-1);cursor:pointer;" title="Ao atualizar a página (F5) ou quando uma nova versão for aplicada, apaga os arquivos e dados do dia em todas as abas. Configurações, cadastros e equipe são mantidos."><input type="checkbox" id="limparAoAtualizar" checked onchange="limparAoAtualizarMudou()"> Limpar a operação ao atualizar a ferramenta</label>
+        <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12.5px;color:var(--text-1);cursor:pointer;" title="Quando uma nova versão da ferramenta for aplicada, apaga os arquivos e dados do dia em todas as abas (F5 não apaga: o dia fica salvo no Firebase). Configurações, cadastros e equipe são mantidos."><input type="checkbox" id="limparAoAtualizar" checked onchange="limparAoAtualizarMudou()"> Limpar a operação quando uma nova versão da ferramenta for aplicada</label>
+        <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12.5px;color:var(--text-1);" title="Na hora escolhida (horário de Brasília) a operação em andamento é encerrada: arquivos e dados do dia são apagados em todas as abas e computadores. Se alguém já tiver zerado há menos de 4 horas, não zera de novo."> Encerrar e limpar a operação sozinho às <input type="time" id="diaResetHora" value="06:00" onchange="gdnDia.setHora(this.value)" style="width:auto;padding:2px 6px"> (Brasília)</label>
+        <div id="diaNuvemStatus" style="font-size:12px;color:var(--text-2);">☁ Conectando ao Firebase…</div>
       </div>
     </div>
     <div id="fluxoStatus"></div>
@@ -1503,6 +1505,13 @@ function usoLocalStorageKB(){
   try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); t += (k.length + (localStorage.getItem(k)||'').length); } }catch(e){}
   return Math.round(t/1024);
 }
+/* diagnóstico: quais chaves do localStorage deste site ocupam o espaço (aparece no Console quando o armazenamento enche) */
+let _logChavesFeito = false;
+function gdnLogMaioresChaves(){
+  if(_logChavesFeito) return; _logChavesFeito = true;
+  const l = []; try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); l.push({chave:k, KB: Math.round((k.length+(localStorage.getItem(k)||'').length)/1024)}); } }catch(e){}
+  l.sort((x,y)=>y.KB-x.KB); console.warn('localStorage: maiores chaves deste site (total '+usoLocalStorageKB()+' KB de ~5.000 KB)'); try{ console.table(l.slice(0,10)); }catch(e){}
+}
 let _ultimoAvisoSalvar = 0;
 function avisarFalhaSalvar(e, ctx){
   console.error('Falha ao salvar estado ('+ctx+')', e);
@@ -1561,7 +1570,66 @@ async function gdnCarregarReserva(){
   }catch(e){ console.error('Reserva do estado indisponível', e); }
 }
 gdnCarregarReserva();
-function saveState(force){
+/* =========================================================
+   DIA (operação em andamento) NO FIREBASE
+   Os dados do dia ficam no Firestore (coleção gdn_docas, documentos dia_<operação>_<parte>_<n>), comprimidos e em pedaços:
+   o localStorage (~5 MB, dividido com outras páginas do mesmo site) deixa de ser o único lugar. A operação atual é o documento
+   gdn_docas/diaAtual {op, ciclo, resetHora}. "Novo dia" ou o horário configurado criam uma operação nova (id novo), apagam a antiga
+   e todos os computadores abertos limpam a tela e seguem a operação nova.
+   ========================================================= */
+const GDN_DIA_CAMPOS = ['cargas','presOrfaos','alocacao','ondaStatus','iscas','iscaLote','folhas','folhasArqs','ts'];
+const gdnDia = window.gdnDia = {
+  op:null, pronto:false, mods:{}, nuvem:null, _t:{}, _ult:{},
+  registrar(nome, api){ this.mods[nome] = api; if(this.pronto) this._aplicar(nome); },
+  status(txt, erro){ const el = document.getElementById('diaNuvemStatus'); if(el){ el.textContent = txt; el.style.color = erro ? 'var(--red,#c0392b)' : 'inherit'; } },
+  salvar(nome){   /* chamado pelos módulos a cada gravação local; envia ao Firebase 3 s depois da última mudança */
+    if(window.__GDN_RESETANDO || !this.pronto || !this.nuvem || !this.mods[nome]) return;
+    clearTimeout(this._t[nome]); this._t[nome] = setTimeout(()=>this._enviar(nome), 3000);
+  },
+  async _enviar(nome){
+    if(window.__GDN_RESETANDO || !this.pronto) return;
+    try{
+      const json = JSON.stringify(this.mods[nome].get());
+      if(json === this._ult[nome]) return;
+      await this.nuvem.gravar(this.op, nome, json);
+      this._ult[nome] = json;
+      this.status('☁ Dados do dia salvos no Firebase às '+new Date().toLocaleTimeString('pt-BR')+' (operação '+this.op+').');
+    }catch(e){
+      console.error('Dia no Firebase (gravar '+nome+')', e);
+      this.status('⚠ Não foi possível salvar o dia no Firebase ('+((e && (e.code||e.message))||e)+'). Os dados continuam neste navegador. Confira as regras do Firestore para a coleção gdn_docas.', true);
+    }
+  },
+  async _aplicar(nome){   /* o que está no Firebase vale; se ainda não há nada lá, sobe o que existe neste computador */
+    const api = this.mods[nome]; if(!api || !this.nuvem) return;
+    try{
+      const rec = await this.nuvem.ler(this.op, nome);
+      if(window.__GDN_RESETANDO) return;
+      if(rec && rec.json){ this._ult[nome] = rec.json; api.set(JSON.parse(rec.json)); }
+      else if(api.tem()){ this._ult[nome] = null; this.salvar(nome); }
+    }catch(e){
+      console.error('Dia no Firebase (ler '+nome+')', e);
+      this.status('⚠ Não consegui ler o dia no Firebase ('+((e && (e.code||e.message))||e)+'). Usando os dados deste navegador.', true);
+    }
+  },
+  async iniciar(op){ this.op = op; this.pronto = true; await Promise.all(Object.keys(this.mods).map(n=>this._aplicar(n))); },
+  parar(){ this.pronto = false; Object.keys(this._t).forEach(k=>clearTimeout(this._t[k])); },
+  novoEspaco(o){ return this.nuvem ? this.nuvem.novoEspaco(o||{}) : Promise.resolve(false); },
+  reiniciar(motivo, o){ if(window.__GDN_RESETANDO) return; try{ novaOperacao(true, Object.assign({recarregar:true, motivo:motivo}, o||{})); }catch(e){ console.error('Reiniciar operação', e); } },
+  setHora(h){ if(this.nuvem) this.nuvem.setHora(h); }
+};
+gdnDia.registrar('estado', {
+  get(){ const o = {}; GDN_DIA_CAMPOS.forEach(k=>{ o[k] = STATE[k]; }); return o; },
+  tem(){ return !!((STATE.cargas||[]).length || (STATE.alocacao||[]).length || (STATE.ts||[]).length || (STATE.iscas||[]).length || (STATE.presOrfaos||[]).length || STATE.iscaLote || STATE.folhas || (STATE.folhasArqs||[]).length); },
+  set(p){
+    GDN_DIA_CAMPOS.forEach(k=>{ if(p[k] !== undefined) STATE[k] = p[k]; });
+    try{ saveState(); }catch(e){}
+    try{ atualizarTodasAsAbas(); }catch(e){}
+    ['renderArquivosCarregados','atualizarPreviaUpload','renderAlocacao','renderOndasFora','renderIscas','renderFolhas','renderProtocolo','renderPainel','renderDashboard','renderConsolidado','renderOrfaos','renderTS']
+      .forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(e){} });
+  }
+});
+function saveState(force){ const r = _saveStateImpl(force); try{ gdnDia.salvar('estado'); }catch(e){} return r; }
+function _saveStateImpl(force){
   /* durante o "Novo dia", nada que ainda estava em andamento (leitura de arquivo, auto-atualização) pode regravar dados antigos */
   if(window.__GDN_RESETANDO && force!==true) return false;
   let json;
@@ -1577,11 +1645,12 @@ function saveState(force){
       localStorage.setItem(STORAGE_KEY, json); GDN_IDB.del('state');
       if(window.gdnCadastroSync) window.gdnCadastroSync(); if(window.gdnIscaSync) window.gdnIscaSync(); if(window.gdnParamSync) window.gdnParamSync();
       return true;
-    }catch(e2){ GDN_IDB.set('state',{json:json,t:Date.now()}); console.warn('localStorage cheio: estado salvo na reserva (IndexedDB).'); try{ localStorage.removeItem(STORAGE_KEY); }catch(_){} if(window.gdnCadastroSync) window.gdnCadastroSync(); if(window.gdnIscaSync) window.gdnIscaSync(); if(window.gdnParamSync) window.gdnParamSync(); return false; }
+    }catch(e2){ GDN_IDB.set('state',{json:json,t:Date.now()}); console.warn('localStorage cheio: estado salvo na reserva (IndexedDB).'); try{ gdnLogMaioresChaves(); }catch(_){} try{ localStorage.removeItem(STORAGE_KEY); }catch(_){} if(window.gdnCadastroSync) window.gdnCadastroSync(); if(window.gdnIscaSync) window.gdnIscaSync(); if(window.gdnParamSync) window.gdnParamSync(); return false; }
   }
 }
 
-function novaOperacao(auto){
+function novaOperacao(auto, opts){
+  opts = opts || {};
   if(auto!==true && !confirm('Isso apaga TODOS os dados da operação em TODAS as abas:\n\n'+
     '• Upload & Consolidação: arquivos carregados, base TS, cargas e PRÉs pendentes\n'+
     '• Lista de Carga, Protocolo de Bancada e Ondas Fora da doca: alocação, ondas e status\n'+
@@ -1592,6 +1661,7 @@ function novaOperacao(auto){
     '• Relação de Entrega: relatórios e Lista de Carga carregados\n'+
     '• Filtros e campos de busca\n\n'+
     'NÃO são apagados (ficam salvos no Firebase): tudo de Configurações — Parâmetros (unidades, docas bloqueadas/indisponíveis e extras, faixas de doca, transportadoras, filiais), Cadastro de Placas, tabelas das iscas e Abas Visíveis —, as opções salvas (Excel, fluxo automático), a equipe cadastrada na Produtividade e a assinatura.\n\n'+
+    '• Dados do dia salvos no Firebase: também são apagados (abre um espaço novo para a próxima operação)\n\n'+
     'Ao final a página é recarregada para zerar também tudo que estiver só em memória. Confirmar?')) return;
 
   /* cada passo roda isolado: se um falhar, os demais continuam e a operação não fica "meio limpa" */
@@ -1629,6 +1699,8 @@ function novaOperacao(auto){
   let prodLimpo = null;
   passo('produtividade (aba 9)',   ()=>{ if(typeof window.prodNovoDia==='function') prodLimpo = window.prodNovoDia(); });
   passo('relação de entrega (aba 7)', ()=>{ REL.rows=[]; REL.lista=null; REL.arqs=[]; REL.sel=null; REL.off={}; });
+  let nuvemLimpa = null;
+  passo('dia no Firebase', ()=>{ if(window.gdnDia) nuvemLimpa = window.gdnDia.novoEspaco({novoOp: opts.novoOp, ciclo: opts.ciclo, adotar: opts.adotar, motivo: opts.motivo}); });
   window.__GDN_PERSIST_OK = false;
   /* os módulos regravaram "vazio"; apaga de novo as chaves para não sobrar nem o esqueleto (e nada antigo para restaurar) */
   passo('apagar chaves dos módulos', ()=>{ CHAVES_DIA.forEach(k=>{ try{ localStorage.removeItem(k); }catch(e){} }); });
@@ -1661,6 +1733,7 @@ function novaOperacao(auto){
     const zerado = p => !((p.cargas||[]).length || (p.alocacao||[]).length || (p.iscas||[]).length || (p.ts||[]).length ||
                           (p.presOrfaos||[]).length || p.iscaLote || p.folhas || (p.folhasArqs||[]).length);
     let sujoLocal = false, sujoReserva = false, sobrouChave = false;
+    try{ if(nuvemLimpa) await Promise.race([nuvemLimpa, new Promise(r=>setTimeout(r, 15000))]); }catch(e){ console.warn('Novo dia · Firebase', e); }   /* a nuvem precisa estar limpa antes de recarregar */
     try{ if(kcLimpo) await kcLimpo; }catch(e){ console.warn('Novo dia · coleta', e); }
     try{ if(prodLimpo) await prodLimpo; }catch(e){ console.warn('Novo dia · produtividade', e); }   /* o IndexedDB da Produtividade precisa estar apagado antes de recarregar */
     try{
@@ -1679,29 +1752,21 @@ function novaOperacao(auto){
       toast('A tela foi limpa, mas o navegador não apagou tudo ('+(sujoLocal?'estado ':'')+(sujoReserva?'reserva ':'')+(sobrouChave?'dados de módulo':'')+'). Faça um backup, limpe os dados do site (Configurações do navegador) e tente de novo.', 'err');
       return;
     }
-    if(auto===true){   /* limpeza automática ao atualizar a página: a página acabou de carregar, não precisa recarregar de novo */
+    if(auto===true && opts.recarregar!==true){   /* limpeza automática sem recarregar */
       window.__GDN_RESETANDO = false; window.__GDN_PERSIST_OK = false;
       try{ switchTab('upload'); }catch(e){}
       toast('Ferramenta atualizada: a operação anterior foi limpa em todas as abas, pronta para uma nova operação. Configurações, cadastros e equipe foram mantidos.', 'ok');
       return;
     }
-    try{ sessionStorage.setItem('gdn_novodia_ok','1'); }catch(e){}
+    try{ sessionStorage.setItem('gdn_novodia_ok', opts.motivo || '1'); }catch(e){}
     location.reload();
   })();
 }
-/* ---------- limpa a operação sozinha quando a página é atualizada (F5 / nova versão publicada) ---------- */
+/* ---------- nova versão da ferramenta aplicada: a operação é limpa depois do login (ver módulo do Firebase). F5 NÃO limpa: o dia fica salvo no Firebase. ---------- */
 const _GDN_FLAG_NOVODIA = (()=>{ try{ return !!sessionStorage.getItem('gdn_novodia_ok'); }catch(e){ return false; } })();   /* lido antes de o aviso do \"Novo dia\" consumir a marca */
 const _GDN_VEIO_ATUALIZACAO = /[?&]_v=\d+/.test(location.search);                                                         /* lido antes de a barra de endereço ser limpa */
 function limparAoAtualizarLigado(){ try{ return localStorage.getItem('limpar_ao_atualizar_v1') !== '0'; }catch(e){ return true; } }
 function limparAoAtualizarMudou(){ const c = document.getElementById('limparAoAtualizar'); try{ localStorage.setItem('limpar_ao_atualizar_v1', c && c.checked ? '1' : '0'); }catch(e){} }
-window.addEventListener('load', ()=>{
-  try{
-    if(_GDN_FLAG_NOVODIA || !limparAoAtualizarLigado()) return;   /* acabou de rodar o \"Novo dia\" (ou outra aba o rodou) ou a opção está desligada */
-    let nav = null; try{ nav = performance.getEntriesByType('navigation')[0]; }catch(e){}
-    if(!(_GDN_VEIO_ATUALIZACAO || (nav && nav.type === 'reload'))) return;
-    novaOperacao(true);
-  }catch(e){ console.error('Limpeza ao atualizar', e); }
-});
 /* outra aba/janela desta ferramenta (mesmo navegador) rodou o "Novo dia": esta recarrega sem regravar nada antigo */
 window.addEventListener('storage', ev=>{
   if(ev.key==='gdn_reset_epoch' && ev.newValue){
@@ -1714,9 +1779,15 @@ window.addEventListener('storage', ev=>{
 document.addEventListener('DOMContentLoaded', ()=>{
   try{
     if(sessionStorage.getItem('gdn_novodia_ok')){
+      try{ sessionStorage.setItem('gdn_novodia_motivo', sessionStorage.getItem('gdn_novodia_ok')); }catch(e){}
       sessionStorage.removeItem('gdn_novodia_ok');
       switchTab('upload');
-      toast('Operação limpa em todas as abas. Configurações, cadastros e equipe da Produtividade foram mantidos.', 'ok');
+      const mot = sessionStorage.getItem('gdn_novodia_motivo') || '';
+      sessionStorage.removeItem('gdn_novodia_motivo');
+      toast(mot==='horario' ? 'Operação encerrada no horário configurado: tudo limpo e pronto para uma nova operação. Configurações, cadastros e equipe foram mantidos.'
+          : mot==='outro' ? 'Outro computador iniciou uma nova operação: esta tela foi limpa para acompanhar. Configurações, cadastros e equipe foram mantidos.'
+          : mot==='atualizacao' ? 'Ferramenta atualizada: a operação anterior foi limpa em todas as abas, pronta para uma nova operação. Configurações, cadastros e equipe foram mantidos.'
+          : 'Operação limpa em todas as abas. Configurações, cadastros e equipe da Produtividade foram mantidos.', 'ok');
     }
   }catch(e){}
 });
@@ -6073,7 +6144,7 @@ import {
   signOut,
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp }
+import { getFirestore, doc, setDoc, getDoc, deleteDoc, onSnapshot, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -6373,6 +6444,131 @@ function iniciarSyncEquipe(){
 }
 function pararSyncEquipe(){ if(eqUnsub){ eqUnsub(); eqUnsub = null; } eqPronto = false; eqUltimo = null; }
 
+/* ---------- Dia (operação em andamento) no Firestore: documentos gdn_docas/diaAtual e gdn_docas/dia_<op>_<parte>_<n|m> ---------- */
+const diaRef = doc(db, 'gdn_docas', 'diaAtual');
+const DIA_NOMES = ['estado','coleta','saida','painel'];
+const dId = (op, nome, i) => 'dia_' + op + '_' + nome + '_' + i;
+let diaUnsub = null, diaTimer = null, diaDados = null, diaOcupado = false;
+/* "ciclo" = a data de Brasília (UTC-3) deslocada pela hora de encerramento: antes da hora ainda vale o ciclo do dia anterior */
+function cicloDe(hora){
+  const p = String(hora || '06:00').split(':').map(Number);
+  return new Date(Date.now() - 3*3600e3 - (((p[0]||0)*60) + (p[1]||0))*60e3).toISOString().slice(0,10);
+}
+async function gz(str){
+  if(typeof CompressionStream === 'undefined') return {z:0, s:str};
+  const buf = await new Response(new Blob([str]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
+  const u = new Uint8Array(buf); let bin = '';
+  for(let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return {z:1, s:btoa(bin)};
+}
+async function ungz(s, z){
+  if(!z) return s;
+  const bin = atob(s), u = new Uint8Array(bin.length);
+  for(let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+}
+async function diaGravar(op, nome, json){
+  const g = await gz(json), ch = g.z ? 700000 : 300000, n = Math.max(1, Math.ceil(g.s.length / ch));   /* cada documento do Firestore aceita ~1 MiB */
+  let antes = 0;
+  try{ const m = await getDoc(doc(db, 'gdn_docas', dId(op, nome, 'm'))); if(m.exists()) antes = m.data().n || 0; }catch(e){}
+  await Promise.all(Array.from({length:n}, (_, i) => setDoc(doc(db, 'gdn_docas', dId(op, nome, i)), {s: g.s.slice(i*ch, (i+1)*ch)})));
+  await setDoc(doc(db, 'gdn_docas', dId(op, nome, 'm')), {n, z:g.z, t:Date.now(), len:json.length, por:(auth.currentUser && auth.currentUser.email) || ''});
+  for(let i = n; i < antes; i++){ try{ await deleteDoc(doc(db, 'gdn_docas', dId(op, nome, i))); }catch(e){} }
+}
+async function diaLer(op, nome){
+  const m = await getDoc(doc(db, 'gdn_docas', dId(op, nome, 'm'))); if(!m.exists()) return null;
+  const meta = m.data();
+  const partes = await Promise.all(Array.from({length:meta.n}, (_, i) => getDoc(doc(db, 'gdn_docas', dId(op, nome, i)))));
+  if(partes.some(x => !x.exists())) return null;
+  return {t: meta.t, json: await ungz(partes.map(x => x.data().s).join(''), meta.z)};
+}
+async function diaApagarOp(op){
+  if(!op) return;
+  for(const nome of DIA_NOMES){
+    try{
+      const mr = doc(db, 'gdn_docas', dId(op, nome, 'm')), m = await getDoc(mr), n = m.exists() ? (m.data().n || 0) : 0;
+      for(let i = 0; i < n; i++) await deleteDoc(doc(db, 'gdn_docas', dId(op, nome, i)));
+      if(m.exists()) await deleteDoc(mr);
+    }catch(e){ console.warn('Dia no Firebase (apagar)', e); }
+  }
+}
+/* abre uma operação nova (apaga a anterior no Firebase) ou, com "adotar", só passa a seguir a operação que outro computador abriu */
+async function diaNovoEspaco(o){
+  if(o.adotar){ gdnDia.op = o.adotar; try{ await GDN_IDB.set('dia_op', o.adotar); await GDN_IDB.del('dia_op_pend'); }catch(e){} return true; }
+  const velho = gdnDia.op, hora = (diaDados && diaDados.resetHora) || '06:00', novo = o.novoOp || ('m' + Date.now());
+  gdnDia.op = novo; gdnDia._ult = {};
+  try{ await GDN_IDB.set('dia_op', novo); }catch(e){}
+  if(!auth.currentUser){ try{ await GDN_IDB.set('dia_op_pend', novo); }catch(e){} return false; }
+  try{
+    await setDoc(diaRef, {op:novo, ciclo:o.ciclo || cicloDe(hora), resetHora:hora, criadoEm:serverTimestamp(), criadoPor:auth.currentUser.email || '', motivo:o.motivo || 'manual'});
+    try{ await GDN_IDB.del('dia_op_pend'); }catch(e){}
+    if(velho && velho !== novo) await diaApagarOp(velho);
+    return true;
+  }catch(e){
+    console.error('Dia no Firebase (nova operação)', e);
+    try{ await GDN_IDB.set('dia_op_pend', novo); }catch(_){}   /* tenta de novo no próximo login, sem ressuscitar o dia antigo */
+    return false;
+  }
+}
+async function diaSetHora(h){
+  if(!/^\d{1,2}:\d{2}$/.test(h || '') || !auth.currentUser) return;
+  try{ await setDoc(diaRef, {resetHora:h, ciclo:cicloDe(h)}, {merge:true}); gdnDia.status('☁ Encerramento automático da operação às '+h+' (Brasília).'); }
+  catch(e){ gdnDia.status('⚠ Não consegui salvar o horário no Firebase ('+(e.code||e.message)+').', true); }
+}
+async function diaVerificarCiclo(){
+  if(!diaDados || window.__GDN_RESETANDO) return;
+  const ciclo = cicloDe(diaDados.resetHora || '06:00');
+  if(diaDados.ciclo === ciclo) return;
+  const criado = diaDados.criadoEm && diaDados.criadoEm.toMillis ? diaDados.criadoEm.toMillis() : 0;
+  if(!criado || Date.now() - criado < 4*3600e3){   /* zerada há pouco (ou ainda sem hora do servidor): só acompanha o ciclo, sem zerar de novo */
+    try{ await setDoc(diaRef, {ciclo}, {merge:true}); diaDados.ciclo = ciclo; }catch(e){}
+    return;
+  }
+  gdnDia.reiniciar('horario', {novoOp:'c' + ciclo, ciclo});   /* id fixo por ciclo: dois computadores zerando juntos chegam à mesma operação */
+}
+function diaEscutar(){
+  diaUnsub = onSnapshot(diaRef, snap => {
+    if(snap.metadata.hasPendingWrites || !snap.exists()) return;
+    const d = snap.data(); diaDados = d;
+    const el = document.getElementById('diaResetHora'); if(el && d.resetHora && document.activeElement !== el) el.value = d.resetHora;
+    if(d.op && d.op !== gdnDia.op && !window.__GDN_RESETANDO) gdnDia.reiniciar('outro', {adotar:d.op});   /* outro computador abriu uma operação nova */
+  }, err => { console.error('Firestore (dia)', err); gdnDia.status('⚠ Sem acesso ao Firestore para o dia ('+(err.code||err.message)+'). Confira as regras para gdn_docas.', true); });
+}
+async function diaIniciar(){
+  if(diaUnsub || diaOcupado) return;
+  diaOcupado = true;
+  try{
+    gdnDia.status('☁ Conectando ao Firebase…');
+    let d = null; { const sn = await getDoc(diaRef); if(sn.exists()) d = sn.data(); }
+    const hora = (d && d.resetHora) || '06:00', ciclo = cicloDe(hora);
+    if(!d){ gdnDia.op = null; await diaNovoEspaco({novoOp:'c' + ciclo, ciclo, motivo:'inicial'}); const sn = await getDoc(diaRef); d = sn.exists() ? sn.data() : {op:gdnDia.op, ciclo, resetHora:hora}; }
+    let localOp = null, pend = null;
+    try{ localOp = await GDN_IDB.get('dia_op'); pend = await GDN_IDB.get('dia_op_pend'); }catch(e){}
+    if(pend && localOp && pend === localOp && d.op !== localOp){   /* a limpeza anterior não chegou ao Firebase: refaz agora */
+      gdnDia.op = d.op; await diaNovoEspaco({novoOp:localOp, ciclo, motivo:'pendente'});
+      const sn = await getDoc(diaRef); if(sn.exists()) d = sn.data();
+    }
+    diaDados = d;
+    if(_GDN_VEIO_ATUALIZACAO && !_GDN_FLAG_NOVODIA && limparAoAtualizarLigado()){   /* nova versão da ferramenta aplicada */
+      gdnDia.op = d.op; gdnDia.reiniciar('atualizacao', {novoOp:'m' + Date.now(), ciclo}); return;
+    }
+    if(localOp && localOp !== d.op){ gdnDia.op = d.op; gdnDia.reiniciar('outro', {adotar:d.op}); return; }   /* este computador ficou com uma operação antiga */
+    if(!localOp){ try{ await GDN_IDB.set('dia_op', d.op); }catch(e){} }
+    await diaVerificarCiclo();
+    if(window.__GDN_RESETANDO) return;
+    await gdnDia.iniciar(d.op);
+    diaEscutar();
+    diaTimer = setInterval(diaVerificarCiclo, 60000);
+    const el = document.getElementById('diaResetHora'); if(el && d.resetHora) el.value = d.resetHora;
+    gdnDia.status('☁ Dados do dia salvos no Firebase (operação '+d.op+'). A operação é encerrada sozinha às '+(d.resetHora || '06:00')+' (Brasília) ou ao clicar em "Novo dia / limpar operação".');
+  }catch(e){
+    console.error('Dia no Firebase (iniciar)', e);
+    gdnDia.status('⚠ Sem acesso ao Firebase para o dia ('+((e && (e.code||e.message))||e)+'). Os dados continuam só neste navegador. Confira as regras do Firestore para a coleção gdn_docas.', true);
+  }finally{ diaOcupado = false; }
+}
+function pararDia(){ if(diaUnsub){ diaUnsub(); diaUnsub = null; } clearInterval(diaTimer); diaTimer = null; diaDados = null; gdnDia.parar(); }
+gdnDia.nuvem = {gravar:diaGravar, ler:diaLer, novoEspaco:diaNovoEspaco, setHora:diaSetHora};
+
 onAuthStateChanged(auth, (user) => {
   splash.hidden = true;
   elPass.value = '';
@@ -6386,9 +6582,11 @@ onAuthStateChanged(auth, (user) => {
     iniciarSyncIscas();
     iniciarSyncParam();
     iniciarSyncEquipe();
+    diaIniciar();
   }else{
     elWho.textContent = '—';
     pararSyncCadastro();
+    pararDia();
     sairDaFerramenta();
     elEmail.focus();
   }
@@ -6760,6 +6958,7 @@ function persist(){
   if(window.__GDN_RESETANDO && !window.__GDN_PERSIST_OK) return;
   try{ localStorage.setItem(KEY, JSON.stringify({lista:S.lista, prog:S.prog, coletas:S.coletas, nfdv:S.nfdv, arqs:S.arqs, regTxt:S.regTxt, opts:{terceiros:S.opts.terceiros, juntar:S.opts.juntar}})); }
   catch(e){ console.warn('Controle de saída: não consegui salvar no navegador', e); }
+  try{ if(window.gdnDia) window.gdnDia.salvar('saida'); }catch(e){}
 }
 function restore(){
   try{
@@ -7205,6 +7404,11 @@ window.csResumo = function(){
 var _sw = window.switchTab;
 window.switchTab = function(tab){ _sw.apply(this, arguments); if(tab==='saida') window.csRender(); };
 restore();
+if(window.gdnDia) window.gdnDia.registrar('saida', {
+  get: function(){ return {lista:S.lista, prog:S.prog, coletas:S.coletas, nfdv:S.nfdv, arqs:S.arqs, regTxt:S.regTxt, opts:{terceiros:S.opts.terceiros, juntar:S.opts.juntar}}; },
+  tem: function(){ return !!((S.lista||[]).length || (S.prog||[]).length || (S.coletas||[]).length || (S.arqs||[]).length); },
+  set: function(p){ S.lista = p.lista||[]; S.prog = p.prog||[]; S.coletas = p.coletas||[]; S.nfdv = p.nfdv||{}; S.arqs = p.arqs||[]; S.regTxt = p.regTxt||''; if(p.opts){ S.opts.terceiros = !!p.opts.terceiros; S.opts.juntar = p.opts.juntar!==false; } persist(); window.csRender(); }
+});
 if(!S.opts.data) S.opts.data = hojeISO();
 })();
 </script>
@@ -7231,7 +7435,7 @@ function dataBR(iso){ var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||''); return m 
 function dataDoNome(nome){ var m=/(\d{2})[._-](\d{2})[._-](\d{4})/.exec(String(nome||'')); return m ? m[3]+'-'+m[2]+'-'+m[1] : ''; }
 
 /* O Tipo de Residência (ORM -> placa) é um mapa grande (arquivo do mês): vai para o IndexedDB, não para o localStorage (cota ~5 MB, estourava). */
-var TIPO_ROWS = null;   /* linhas do último Tipo de Residência lido (só em memória), para achar a coluna da ORM se a padrão não casar */
+var TIPO_WB = null, TIPO_DIAG = '';   /* planilha do último Tipo de Residência lido (só em memória), para achar a coluna da ORM se a padrão não casar */
 function kcIdb(){ return new Promise(function(ok,er){ var q=indexedDB.open('gdn_kc_db',1); q.onupgradeneeded=function(){ q.result.createObjectStore('kv'); }; q.onsuccess=function(){ ok(q.result); }; q.onerror=function(){ er(q.error); }; }); }
 function kcIdbPut(k,v){ return kcIdb().then(function(db){ return new Promise(function(ok,er){ var t=db.transaction('kv','readwrite'); t.objectStore('kv').put(v,k); t.oncomplete=function(){ db.close(); ok(); }; t.onerror=function(){ er(t.error); }; }); }).catch(function(e){ console.warn('Kit coletas: não consegui salvar o Tipo de Residência', e); }); }
 function kcIdbDel(k){ return kcIdb().then(function(db){ return new Promise(function(ok,er){ var t=db.transaction('kv','readwrite'); t.objectStore('kv').delete(k); t.oncomplete=function(){ db.close(); ok(); }; t.onerror=function(){ er(t.error); }; }); }).catch(function(e){ console.warn('Kit coletas: não consegui apagar o Tipo de Residência', e); }); }
@@ -7241,7 +7445,8 @@ function persist(){
   var leve = {coletas:S.coletas, tipo:{}, lista:S.lista, arqs:S.arqs, data:S.data};
   try{ localStorage.setItem(KEY, JSON.stringify(leve)); }
   catch(e){ console.warn('Kit coletas: não consegui salvar no navegador', e); }
-  return kcIdbPut('tipo', S.tipo);
+  try{ if(window.gdnDia) window.gdnDia.salvar('coleta'); }catch(e){}
+  return kcIdbPut('tudo', S);   /* cópia completa no IndexedDB: vale mesmo com o localStorage cheio */
 }
 function restore(){
   try{
@@ -7251,7 +7456,7 @@ function restore(){
       S.coletas = p.coletas||[]; S.tipo = p.tipo||{}; S.lista = p.lista||{}; S.arqs = p.arqs||[]; S.data = p.data||'';
     }
   }catch(e){ console.warn('Kit coletas: estado salvo ilegível, ignorando', e); }
-  kcIdbGet('tipo').then(function(t){ if(t && Object.keys(t).length){ S.tipo = t; if(typeof window.kcRender==='function') window.kcRender(); } }).catch(function(){});
+  kcIdbGet('tudo').then(function(t){ if(t && ((t.coletas||[]).length || Object.keys(t.tipo||{}).length)){ S.coletas = t.coletas||[]; S.tipo = t.tipo||{}; S.lista = t.lista||{}; S.arqs = t.arqs||[]; S.data = t.data||''; if(typeof window.kcRender==='function') window.kcRender(); } }).catch(function(){});
 }
 
 /* ---------- leitura dos arquivos ---------- */
@@ -7325,24 +7530,43 @@ function parseTipo(rows){
   return out;
 }
 function hitsTipo(){ var h = 0; S.coletas.forEach(function(c){ if(S.tipo[normOrm(c.orm)] || S.tipo[c.orm]) h++; }); return h; }
-function ajustarTipo(){
-  if(!S.coletas.length || !TIPO_ROWS || hitsTipo() > 0) return;
-  var h = findHeaderTipo(TIPO_ROWS); if(!h) return;
+function tokensOrm(v){
+  if(v==null || v==='') return [];
+  if(typeof v==='number') return [String(Math.round(v))];
+  return (String(v).match(/\d{5,}/g)||[]).map(function(x){ return x.replace(/^0+(?=\d)/,''); });
+}
+function placaDaLinha(r, pc){
+  var rx = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/;
+  if(pc != null){ var a = tx(r[pc]).toUpperCase().replace(/[^A-Z0-9]/g,''); if(rx.test(a)) return a; }
+  for(var c=0;c<r.length && c<60;c++){ var v = tx(r[c]).toUpperCase().replace(/[^A-Z0-9]/g,''); if(rx.test(v)) return v; }
+  return '';
+}
+/* Se as ORMs das Coletas não casam com o mapa lido do jeito padrão, procura em TODAS as abas e colunas do arquivo a que contém essas ORMs. */
+async function ajustarTipo(){
+  if(!S.coletas.length || !TIPO_WB || hitsTipo() > 0) return;
   var want = {}; S.coletas.forEach(function(c){ want[normOrm(c.orm)] = 1; });
-  var rows = TIPO_ROWS, maxc = 0, i, col, best = -1, bc = 0;
-  for(i=h.row+1;i<rows.length;i++){ var l = (rows[i]||[]).length; if(l > maxc) maxc = l; }
-  for(col=0;col<maxc;col++){
-    if(col === h.map.PLACA) continue;
-    var cnt = 0;
-    for(i=h.row+1;i<rows.length;i++){ var r = rows[i]||[]; if(want[normOrm(r[col])] && tx(r[h.map.PLACA])) cnt++; }
-    if(cnt > bc){ bc = cnt; best = col; }
+  var best = null;
+  TIPO_WB.SheetNames.forEach(function(sn){
+    var ws = TIPO_WB.Sheets[sn]; if(!ws || !ws['!ref']) return;
+    var rg; try{ rg = XLSX.utils.decode_range(ws['!ref']); rg.e.c = Math.min(rg.e.c, 80); rg.e.r = Math.min(rg.e.r, 400000); ws['!ref'] = XLSX.utils.encode_range(rg); }catch(e){ return; }
+    var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true}), cnt = [], visto = {};
+    rows.forEach(function(r){ (r||[]).forEach(function(v,c){ tokensOrm(v).forEach(function(t){ if(want[t]){ cnt[c] = (cnt[c]||0) + 1; visto[t] = 1; } }); }); });
+    var bc = -1, bn = 0; cnt.forEach(function(n,c){ if(n > bn){ bn = n; bc = c; } });
+    if(bc >= 0 && (!best || bn > best.n)) best = {sn:sn, col:bc, n:bn, rows:rows};
+  });
+  if(!best){
+    TIPO_DIAG += ' · nenhuma ORM das '+S.coletas.length+' Coletas (ex.: '+S.coletas.slice(0,3).map(function(c){ return c.orm; }).join(', ')+') foi encontrada em nenhuma coluna de nenhuma aba';
+    say('Tipo de Residência lido, mas nenhuma ORM das Coletas apareceu nele. Veja o diagnóstico na aba 3.','err'); return;
   }
-  if(best < 0){ say('Tipo de Residência lido, mas nenhuma ORM da planilha de Coletas apareceu em nenhuma coluna. Confira se é o Tipo de Residência do mesmo dia das Coletas.','err'); return; }
-  var novo = {};
-  for(i=h.row+1;i<rows.length;i++){ var r2 = rows[i]||[]; var pl = tx(r2[h.map.PLACA]).toUpperCase().replace(/[^A-Z0-9]/g,''); var k = normOrm(r2[best]); if(pl && /^\d+$/.test(k)) novo[k] = pl; }
+  var h = findHeaderTipo(best.rows), pc = h ? h.map.PLACA : null, novo = {};
+  best.rows.forEach(function(r){
+    r = r||[]; var pl = placaDaLinha(r, pc); if(!pl) return;
+    tokensOrm(r[best.col]).forEach(function(t){ novo[t] = pl; });
+  });
   S.tipo = novo;
-  var nome = tx((rows[h.row]||[])[best]) || ('coluna '+(best+1));
-  say('A ORM não estava na coluna padrão: usei a coluna "'+nome+'" do Tipo de Residência ('+hitsTipo()+' de '+S.coletas.length+' coletas ligadas à placa).','ok');
+  var nome = h && h.row < best.rows.length ? tx((best.rows[h.row]||[])[best.col]) : '';
+  TIPO_DIAG = 'ORM encontrada na aba "'+best.sn+'", coluna '+(nome ? '"'+nome+'"' : (best.col+1))+' · '+hitsTipo()+' de '+S.coletas.length+' coletas ligadas à placa';
+  say('Achei as ORMs na aba "'+best.sn+'" (coluna '+(nome||best.col+1)+'): '+hitsTipo()+' de '+S.coletas.length+' coletas ligadas à placa.','ok');
 }
 function lerArquivo(file){
   return new Promise(function(res,rej){
@@ -7361,9 +7585,12 @@ window.kcFiles = async function(fileList){
     var f = files[i], achou = false, accTipo = null, accRows = null;
     try{
       var wb = await lerArquivo(f);
+      var diag = [];
       for(var s=0;s<wb.SheetNames.length && !achou;s++){
         var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[s]], {header:1, defval:null, raw:true});
-        var tipo = detectar(rows); if(!tipo) continue;
+        var tipo = detectar(rows);
+        diag.push('aba "'+wb.SheetNames[s]+'": '+rows.length+' linhas'+(tipo ? ' ('+tipo+')' : ' (não reconhecida)'));
+        if(!tipo) continue;
         var n;
         if(tipo==='tipo'){   /* o arquivo pode ter várias abas parecidas: junta as ORMs de todas */
           var m1 = parseTipo(rows); accTipo = accTipo || {}; Object.keys(m1).forEach(function(k){ accTipo[k] = m1[k]; });
@@ -7377,25 +7604,25 @@ window.kcFiles = async function(fileList){
         achou = true; ok++;
       }
       if(!achou && accTipo){
-        S.tipo = accTipo; TIPO_ROWS = accRows; var nt = Object.keys(S.tipo).length;
+        S.tipo = accTipo; TIPO_WB = wb; TIPO_DIAG = diag.join(' · '); var nt = Object.keys(S.tipo).length;
         S.arqs = S.arqs.filter(function(a){ return a.tipo!=='tipo'; });
         S.arqs.push({tipo:'tipo', nome:f.name, n:nt}); achou = true; ok++;
       }
       if(!achou) say('"'+f.name+'" não parece Coletas, Tipo de Residência nem Lista de carga (não achei as colunas esperadas).','err');
     }catch(e){ console.error(e); say('Erro ao ler "'+f.name+'": '+(e.message||e),'err'); }
   }
-  if(ok){ ajustarTipo(); persist(); window.kcRender(); say(ok+' arquivo(s) reconhecido(s).','ok'); }
+  if(ok){ await ajustarTipo(); persist(); window.kcRender(); say(ok+' arquivo(s) reconhecido(s).','ok'); }
 };
 window.kcDrop = function(ev){ ev.preventDefault(); ev.currentTarget.classList.remove('drag'); window.kcFiles(ev.dataTransfer.files); };
 window.kcLimpar = function(){
   if(!confirm('Remover Coletas, Tipo de Residência e Lista de carga carregados nesta aba?')) return;
-  S.coletas=[]; S.tipo={}; S.lista={}; S.arqs=[]; TIPO_ROWS=null; persist(); window.kcRender();
+  S.coletas=[]; S.tipo={}; S.lista={}; S.arqs=[]; TIPO_WB=null; TIPO_DIAG=''; persist(); window.kcRender();
 };
 /* Novo dia: limpa tudo da aba sem confirmação e volta a data para hoje. */
 window.kcNovoDia = function(){
-  S.coletas=[]; S.tipo={}; S.lista={}; S.arqs=[]; S.data=''; ROWS=[]; TIPO_ROWS=null;
+  S.coletas=[]; S.tipo={}; S.lista={}; S.arqs=[]; S.data=''; ROWS=[]; TIPO_WB=null; TIPO_DIAG='';
   persist(); window.kcRender();
-  return kcIdbDel('tipo');   /* quem chama (Novo dia) espera isto terminar antes de recarregar */
+  return kcIdbDel('tudo');   /* quem chama (Novo dia) espera isto terminar antes de recarregar */
 };
 window.kcOpt = function(){ S.data = $('kcData').value; persist(); window.kcRender(); };
 
@@ -7548,7 +7775,7 @@ window.kcRender = function(){
   var nomes = {coletas:'Coletas', tipo:'Tipo de Residência', lista:'Lista de carga'}, un = {coletas:'coleta(s)', tipo:'ORM(s) com placa', lista:'placa(s)'};
   $('kcArqs').innerHTML = S.arqs.map(function(a){
     return '<div class="fitem"><span>'+esc(nomes[a.tipo])+' — '+esc(a.nome)+'</span><span class="badge ok">'+a.n+' '+un[a.tipo]+'</span></div>';
-  }).join('') + (listaViva().n ? '<div class="fitem"><span>Lista de carga — gerada na aba 1 · Lista de Carga (atualiza sozinha)</span><span class="badge ok">'+listaViva().n+' placa(s)</span></div>' : '');
+  }).join('') + ((TIPO_DIAG && S.coletas.length && hitsTipo() < S.coletas.length) ? '<div class="fitem"><span style="color:var(--amber,#e0a030);font-size:12px;">Diagnóstico do Tipo de Residência — '+esc(TIPO_DIAG)+'</span></div>' : '') + (listaViva().n ? '<div class="fitem"><span>Lista de carga — gerada na aba 1 · Lista de Carga (atualiza sozinha)</span><span class="badge ok">'+listaViva().n+' placa(s)</span></div>' : '');
   ROWS = calcular();
   var falta = ['coletas','tipo','lista'].filter(function(t){ return !temArq(t) && !(t==='lista' && listaViva().n); }).map(function(t){ return nomes[t]; });
   var sem = ROWS.filter(function(r){ return !r.ok; });
@@ -7584,6 +7811,11 @@ window.kcColetasDoDia = function(){
   catch(e){ console.warn('Kit coletas: não consegui entregar as coletas à aba Saída', e); return []; }
 };
 restore();
+if(window.gdnDia) window.gdnDia.registrar('coleta', {
+  get: function(){ return {coletas:S.coletas, tipo:S.tipo, lista:S.lista, arqs:S.arqs, data:S.data}; },
+  tem: function(){ return !!((S.coletas||[]).length || Object.keys(S.tipo||{}).length || (S.arqs||[]).length); },
+  set: function(p){ S.coletas = p.coletas||[]; S.tipo = p.tipo||{}; S.lista = p.lista||{}; S.arqs = p.arqs||[]; S.data = p.data||''; persist(); window.kcRender(); }
+});
 })();
 </script>
 
@@ -8035,6 +8267,7 @@ function lista(txt){ return String(txt||'').split(/[\n;]+/).map(function(x){ ret
 function persist(){
   if(window.__GDN_RESETANDO && !window.__GDN_PERSIST_OK) return;
   try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){ console.warn('Painel diário: não consegui salvar no navegador', e); }
+  try{ if(window.gdnDia) window.gdnDia.salvar('painel'); }catch(e){}
 }
 function restore(){
   try{
@@ -8197,6 +8430,11 @@ window.pdRender = function(){
 var _sw = window.switchTab;
 window.switchTab = function(tab){ _sw.apply(this, arguments); if(tab==='paineldiario') window.pdRender(); };
 restore();
+if(window.gdnDia) window.gdnDia.registrar('painel', {
+  get: function(){ return {linha:S.linha, data:S.data, prio:S.prio}; },
+  tem: function(){ return !!S.linha; },
+  set: function(p){ S.linha = p.linha||null; S.data = p.data||''; S.prio = p.prio||null; persist(); window.pdRender(); }
+});
 })();
 </script>
 
