@@ -2679,8 +2679,8 @@ function renderFluxo(){
   let cs = null; try{ cs = (typeof window.csResumo==='function') ? window.csResumo() : null; }catch(e){}
   const F = STATE.folhas, L = STATE.iscaLote;
   let h = '';
-  h += nPend ? '<div class="fitem"><span>Arquivos GAN / Log de NF / Região / TS aguardando consolidação</span><span><span class="badge alert">'+nPend+'</span> <button class="small primary" onclick="fluxoConsolidar()">Consolidar e alocar agora</button></span></div>'
-             : fluxoLinha('Arquivos GAN / Log de NF / Região / TS aguardando consolidação', 'nenhum', 'neutral');
+  h += nPend ? '<div class="fitem"><span>Arquivos GAN / Log de NF / Região / TS na fila, aguardando consolidação</span><span><span class="badge alert">'+nPend+'</span> <button class="small primary" onclick="fluxoConsolidar()">Consolidar e alocar agora</button></span></div>'
+             : fluxoLinha('Arquivos GAN / Log de NF / Região / TS', 'todos consolidados, nenhum na fila', 'ok');
   if(ULTIMO_ENVIO && !nPend){
     const u = ULTIMO_ENVIO, pt = [];
     if(u.TS) pt.push('TS '+u.TS); if(u.GAN) pt.push('GAN '+u.GAN); if(u.HEBLS) pt.push('Log de NF '+u.HEBLS); if(u.REGIAO) pt.push('Região '+u.REGIAO);
