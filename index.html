@@ -666,10 +666,12 @@
     <div class="panel-head">
       <div><h2>Fluxo automático e saídas prontas</h2><div class="desc">Depois do envio, a ferramenta consolida, aloca, liga as coletas às placas e monta as saídas. Se houver ajuste manual de doca ou a data da operação for diferente, ela pergunta antes de alterar.</div></div>
       <div style="display:grid;gap:4px;">
+        <div id="fluxoOpcoes" style="display:none;gap:4px;">
         <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12.5px;color:var(--text-1);cursor:pointer;"><input type="checkbox" id="fluxoAuto" checked onchange="fluxoAutoMudou()"> Consolidar e alocar sozinho após o envio</label>
         <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12.5px;color:var(--text-1);cursor:pointer;" title="Quando uma nova versão da ferramenta for aplicada, apaga os arquivos e dados do dia em todas as abas (F5 não apaga: o dia fica salvo no Firebase). Configurações, cadastros e equipe são mantidos."><input type="checkbox" id="limparAoAtualizar" checked onchange="limparAoAtualizarMudou()"> Limpar a operação quando uma nova versão da ferramenta for aplicada</label>
         <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12.5px;color:var(--text-1);" title="Na hora escolhida (horário de Brasília) a operação em andamento é encerrada: arquivos e dados do dia são apagados em todas as abas e computadores. Se alguém já tiver zerado há menos de 4 horas, não zera de novo."> Encerrar e limpar a operação sozinho às <input type="time" id="diaResetHora" value="06:00" onchange="gdnDia.setHora(this.value)" style="width:auto;padding:2px 6px"> (Brasília)</label>
-        <div id="diaNuvemStatus" style="font-size:12px;color:var(--text-2);">☁ Conectando ao Firebase…</div>
+        </div>
+        <div id="diaNuvemStatus" style="display:none;font-size:12px;color:var(--text-2);"></div>
       </div>
     </div>
     <div id="fluxoStatus"></div>
@@ -1581,7 +1583,7 @@ const GDN_DIA_CAMPOS = ['cargas','presOrfaos','alocacao','ondaStatus','iscas','i
 const gdnDia = window.gdnDia = {
   op:null, pronto:false, mods:{}, nuvem:null, _t:{}, _ult:{},
   registrar(nome, api){ this.mods[nome] = api; if(this.pronto) this._aplicar(nome); },
-  status(txt, erro){ const el = document.getElementById('diaNuvemStatus'); if(el){ el.textContent = txt; el.style.color = erro ? 'var(--red,#c0392b)' : 'inherit'; } },
+  status(txt, erro){ const el = document.getElementById('diaNuvemStatus'); if(el){ el.textContent = txt; el.style.color = erro ? 'var(--red,#c0392b)' : 'inherit'; el.style.display = erro ? 'block' : 'none'; } },   /* só aparece quando há problema */
   salvar(nome){   /* chamado pelos módulos a cada gravação local; envia ao Firebase 3 s depois da última mudança */
     if(window.__GDN_RESETANDO || !this.pronto || !this.nuvem || !this.mods[nome]) return;
     clearTimeout(this._t[nome]); this._t[nome] = setTimeout(()=>this._enviar(nome), 3000);
