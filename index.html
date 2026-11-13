@@ -1586,6 +1586,7 @@ function novaOperacao(auto){
     '• Upload & Consolidação: arquivos carregados, base TS, cargas e PRÉs pendentes\n'+
     '• Lista de Carga, Protocolo de Bancada e Ondas Fora da doca: alocação, ondas e status\n'+
     '• Coleta e Saída de Veículos: arquivos carregados, buscas e datas\n'+
+    '• Produtividade: arquivos carregados e filtros (a Minha Equipe cadastrada é mantida)\n'+
     '• Iscas: placas/docas de prioridade e arquivo de iscas\n'+
     '• Entrada de Veículos CD: programações carregadas\n'+
     '• Relação de Entrega: relatórios e Lista de Carga carregados\n'+
@@ -1624,6 +1625,8 @@ function novaOperacao(auto){
   passo('saída (aba 6)', ()=>{ if(typeof window.csNovoDia==='function') window.csNovoDia(); });
   passo('coleta (aba 3)',  ()=>{ if(typeof window.kcNovoDia==='function') window.kcNovoDia(); });
   passo('painel diario (aba 10)',  ()=>{ if(typeof window.pdNovoDia==='function') window.pdNovoDia(); });
+  let prodLimpo = null;
+  passo('produtividade (aba 9)',   ()=>{ if(typeof window.prodNovoDia==='function') prodLimpo = window.prodNovoDia(); });
   passo('relação de entrega (aba 7)', ()=>{ REL.rows=[]; REL.lista=null; REL.arqs=[]; REL.sel=null; REL.off={}; });
   window.__GDN_PERSIST_OK = false;
   /* os módulos regravaram "vazio"; apaga de novo as chaves para não sobrar nem o esqueleto (e nada antigo para restaurar) */
@@ -1635,7 +1638,7 @@ function novaOperacao(auto){
   passo('upload', ()=>{
     PENDING = { GAN: [], HEBLS: [], REGIAO: [], TS: [] };
     UPLOAD_OCUPADO = false;
-    ['inpAUTO','inpGAN','inpHEBLS','inpREGIAO','ffFile','ffAssinFile','bkInput','iscaFile','csInp','kcInp','csRegInp','relFile'].forEach(vazio);
+    ['inpAUTO','inpGAN','inpHEBLS','inpREGIAO','ffFile','ffAssinFile','bkInput','iscaFile','csInp','kcInp','csRegInp','relFile','prFile'].forEach(vazio);
   });
 
   /* 4) textos de resultado / logs e áreas geradas */
@@ -1657,6 +1660,7 @@ function novaOperacao(auto){
     const zerado = p => !((p.cargas||[]).length || (p.alocacao||[]).length || (p.iscas||[]).length || (p.ts||[]).length ||
                           (p.presOrfaos||[]).length || p.iscaLote || p.folhas || (p.folhasArqs||[]).length);
     let sujoLocal = false, sujoReserva = false, sobrouChave = false;
+    try{ if(prodLimpo) await prodLimpo; }catch(e){ console.warn('Novo dia · produtividade', e); }   /* o IndexedDB da Produtividade precisa estar apagado antes de recarregar */
     try{
       const raw = localStorage.getItem(STORAGE_KEY);
       if(raw){ try{ sujoLocal = !zerado(JSON.parse(raw)); }catch(e){ sujoLocal = true; } }
@@ -2537,7 +2541,7 @@ function classificarPlanilhaExtra(nome, buf){
     if(temPrefixo(['CARGA','PLACAS'],'PRE')) return {tipo:'lista_kc'};   /* PRÉ-CAJ-33 (atual) ou PRÉ-ROMANEIO CAJ-33 (arquivos antigos) */
     if(tem(['ORM','PLACA','TIPODECOLETA'])) return {tipo:'kit'};
     if(tem(['NFDV','ORM'])) return {tipo:'coletas'};
-    if(tem(['PLACA','CLIENTE','FILIAL','NF'])) return {tipo:'tipo'};
+    if(tem(['PLACA','CLIENTE','FILIAL']) || tem(['PLACA','CLIENTE','NF']) || tem(['PLACA','ORM','FILIAL']) || tem(['PLACA','ORM','NF'])) return {tipo:'tipo'};
     if(tem(['PLACA','MOTORISTA'])) return {tipo:'prog'};
   }
   /* último recurso: lista de territórios das iscas (só grava se tiver o formato esperado) */
@@ -7246,11 +7250,21 @@ function findHeader(rows, needs){
   }
   return null;
 }
+function normOrm(v){ var t = tx(v).replace(/\.0+$/,'').replace(/\s+/g,''); return /^\d+$/.test(t) ? t.replace(/^0+(?=\d)/,'') : t; }
+/* Tipo de Residência: cabeçalho com PLACA + CLIENTE (ou ORM) + FILIAL ou NF — aceita colunas extras/ordem diferente */
+function findHeaderTipo(rows){
+  for(var i=0;i<Math.min(rows.length,40);i++){
+    var m = {};
+    (rows[i]||[]).forEach(function(c,j){ var k=nm(c); if(k && !(k in m)) m[k]=j; });
+    if('PLACA' in m && ('CLIENTE' in m || 'ORM' in m) && ('FILIAL' in m || 'NF' in m)) return {row:i, map:m};
+  }
+  return null;
+}
 function detectar(rows){
   var h = findHeader(rows,['CARGA','PLACAS']);
   if(h && Object.keys(h.map).some(function(k){ return k.indexOf('PRE')===0; })) return 'lista';   /* PRÉ-CAJ-33 ou PRÉ-ROMANEIO CAJ-33 */
   if(findHeader(rows,['NFDV','ORM'])) return 'coletas';
-  if(findHeader(rows,['PLACA','CLIENTE','FILIAL','NF'])) return 'tipo';
+  if(findHeaderTipo(rows)) return 'tipo';
   return null;
 }
 function parseLista(rows){
@@ -7284,11 +7298,16 @@ function parseColetas(rows){
   return out;
 }
 function parseTipo(rows){
-  var h = findHeader(rows,['PLACA','CLIENTE','FILIAL','NF']);
+  var h = findHeaderTipo(rows);
   var out = {};
+  var cols = []; if(h.map.ORM!=null) cols.push(h.map.ORM); if(h.map.CLIENTE!=null) cols.push(h.map.CLIENTE);   /* a ORM vem na coluna Cliente (ou numa coluna ORM, se existir) */
   for(var i=h.row+1;i<rows.length;i++){
-    var r = rows[i]||[]; var c = tx(r[h.map.CLIENTE]), p = tx(r[h.map.PLACA]).toUpperCase();
-    if(p && /^\d+$/.test(c)) out[c] = p;   /* a ORM vem na coluna Cliente */
+    var r = rows[i]||[]; var p = tx(r[h.map.PLACA]).toUpperCase().replace(/[^A-Z0-9]/g,'');
+    if(!p) continue;
+    for(var q=0;q<cols.length;q++){
+      var c = normOrm(r[cols[q]]);
+      if(/^\d+$/.test(c)){ out[c] = p; break; }
+    }
   }
   return out;
 }
@@ -7366,7 +7385,7 @@ function listaViva(){
 function calcular(){
   var viva = listaViva();
   var rows = S.coletas.map(function(c){
-    var placa = S.tipo[c.orm] || '';
+    var placa = S.tipo[normOrm(c.orm)] || S.tipo[c.orm] || '';
     var L = placa ? (viva.mapa[nm(placa)] || S.lista[nm(placa)]) : null;
     var motivo = '';
     if(!placa) motivo = temArq('tipo') ? 'ORM não encontrada no Tipo de Residência' : 'Tipo de Residência não carregado';
@@ -7560,7 +7579,7 @@ function pdCanon(t){                                                          /*
   var s = pdLimpa(t).toUpperCase(); if(!s) return '';
   var m = /^(FI[\s.]*)?AGR[A-Z.]*\s*(TS)?\s*(\d+)?$/.exec(s);
   if(!m) return pdLimpa(t);
-  return (m[1] ? 'FI.AGREGADO' : 'AGREGADO') + (m[2] ? ' TS' : '') + (m[3] ? ' ' + m[3] : '');
+  return (m[1] ? 'FI.AGREGADO' : 'AGREGADO') + (m[3] ? ' ' + m[3] : '');   /* AGREGADO TS = AGREGADO (o " TS" do quadro TS é recolocado por pdNomeTS) */
 }
 function pdNomeTS(t){                                                         /* AGREGADO -> AGREGADO TS · FI.AGREGADO 1 -> FI.AGREGADO TS 1 · sem cadastro -> Placa ñ cadastrada */
   var s = pdLimpa(t); if(!s) return 'Placa ñ cadastrada';
@@ -7669,15 +7688,17 @@ function pdParseLinha(rows, rowsBase){
   var rs = pdColRoadshow(rows, hr), cT = rs.tempo, cNF = pdColNF(rows, hr);
   if(cT < 0) return {erro: 'não achei a coluna "Roadshow" (Tempo) na aba Painel (Diário)'};
   var base = null;
-  if(rowsBase){ base = pdParseBase(rowsBase); if(base.erro){ avisos.push(base.erro + ' — KM ficou 0.'); base = null; } }
-  else if(rs.km >= 0) avisos.push('Não achei a aba "Base" — KM veio da coluna Roadshow do KM na aba Painel (Diário).');
-  else avisos.push('Não achei a aba "Base" — KM ficou 0.');
+  if(rs.km < 0){
+    if(rowsBase){ base = pdParseBase(rowsBase); if(base.erro){ avisos.push(base.erro + ' — KM ficou 0.'); base = null; } }
+    else avisos.push('Não achei a coluna Roadshow do KM na aba Painel (Diário) nem a aba "Base" — KM ficou 0.');
+  }
   var out = {}, dup = 0, data = null, semKm = 0, k;
   for(var a = 0; a < Math.max(hr, 0) + 1 && data == null; a++){ (rows[a] || []).forEach(function(v){ if(data == null && typeof v === 'number' && v > 40000 && v < 70000) data = Math.floor(v); }); }
   for(k = hr + 1; k < rows.length; k++){
     var x = rows[k] || [], pl = pdPlacaTxt(x[pc]);
     if(!/^[A-Z0-9]{7}$/.test(pl)) continue;
-    var km = base ? (base.km[pl] || 0) : (rs.km >= 0 ? pdNum(x[rs.km]) : 0);
+    var km = rs.km >= 0 ? pdNum(x[rs.km]) : 0;                 /* KM = coluna Roadshow do grupo "km" (Painel Diário) */
+    if(!(km > 0) && base) km = base.km[pl] || 0;                /* reserva: aba Base, col. R */
     var o = {e: pdSomaCols(x, PD_ENT[0], PD_ENT[1]), nf: cNF >= 0 ? pdNum(x[cNF]) : 0, m: pdSomaCols(x, PD_M3[0], PD_M3[1]), t: pdTempoVal(x[cT]), k: km};
     if(out[pl]){ dup++; if(!(out[pl].e || out[pl].m) && (o.e || o.m)) out[pl] = o; continue; }
     out[pl] = o;
@@ -7685,10 +7706,10 @@ function pdParseLinha(rows, rowsBase){
   var tot = Object.keys(out).length;
   if(!tot) return {erro: 'nenhuma placa encontrada na aba Painel (Diário)'};
   if(base) Object.keys(out).forEach(function(p){ if(!out[p].k) semKm++; });
-  if(base && semKm) avisos.push(semKm + ' placa(s) sem KM na aba Base (ficam com 0).');
+  if(rs.km < 0 && base && semKm) avisos.push(semKm + ' placa(s) sem KM na aba Base (ficam com 0).');
   var L = function(i){ var s = '', n = i + 1; while(n > 0){ s = String.fromCharCode(65 + (n - 1) % 26) + s; n = Math.floor((n - 1) / 26); } return s; };
   return {data: data, plates: out, n: tot, dup: dup, avisos: avisos,
-    diag: 'M³ C:I · Entregas J:P · Tempo col. ' + L(cT) + ' · KM ' + (base ? 'Base col. R (placa em ' + L(base.colPlaca) + ')' : (rs.km >= 0 ? 'col. ' + L(rs.km) : 'não encontrado'))};
+    diag: 'M³ C:I · Entregas J:P · Tempo col. ' + L(cT) + ' · KM ' + (rs.km >= 0 ? 'Roadshow col. ' + L(rs.km) : (base ? 'Base col. R (placa em ' + L(base.colPlaca) + ')' : 'não encontrado'))};
 }
 /* lê o arquivo inteiro (xlsb/xlsx/xls): acha as abas "Painel (Diário)" e "Base" e devolve o resultado de pdParseLinha */
 function pdLerBuf(buf){
@@ -8035,7 +8056,8 @@ function cargasDaFerramenta(f1, f2, f3){
   if(typeof STATE==='undefined' || typeof pCargasNumeradas!=='function' || !(STATE.alocacao && STATE.alocacao.length)) return [];
   return pCargasNumeradas().map(function(it){
     var a = it.a;
-    return {n:it.n, key:placaKey(a.placa), placa:String(a.placa||'').toUpperCase(), transp:a.transportadora||'', pend:it.pend,
+    var tc = ''; try{ tc = findTransportadoraDaPlaca(a.placa) || ''; }catch(x){}   /* cadastro Placa→Transportadora = mesma fonte em todo o painel */
+    return {n:it.n, key:placaKey(a.placa), placa:String(a.placa||'').toUpperCase(), transp:tc || a.transportadora || '', pend:it.pend,
       doca: it.pend ? '' : pDoca(a)+' ('+a.onda+'ªONDA)', pre1:preDe(a,f1), pre2:preDe(a,f2), pre3:(f3 ? preDe(a,f3) : '')};
   });
 }
@@ -8383,10 +8405,22 @@ function prodRemFile(id){ PROD.files=PROD.files.filter(f=>f.id!==id); PROD.rows=
 function prodLimpar(){ if(!PROD.rows.length||!confirm('Remover todos os dados de produtividade carregados?')) return; PROD.rows=[]; PROD.files=[]; PROD.nomes={}; prodSalvar(); renderProd(); }
 /* persistência própria (IndexedDB), para não pesar no estado principal da ferramenta */
 function prodIdb(){ return new Promise((ok,er)=>{ const q=indexedDB.open('gdn_prod_db',1); q.onupgradeneeded=()=>q.result.createObjectStore('kv'); q.onsuccess=()=>ok(q.result); q.onerror=()=>er(q.error); }); }
-async function prodSalvar(){ try{ const db=await prodIdb(); db.transaction('kv','readwrite').objectStore('kv').put({rows:PROD.rows,files:PROD.files},'dados'); }catch(e){ console.warn('prod: não salvou',e); } }
+async function prodSalvar(){ if(window.__GDN_RESETANDO) return; try{ const db=await prodIdb(); db.transaction('kv','readwrite').objectStore('kv').put({rows:PROD.rows,files:PROD.files},'dados'); }catch(e){ console.warn('prod: não salvou',e); } }
 async function prodCarregar(){ try{ const db=await prodIdb(); const q=db.transaction('kv').objectStore('kv').get('dados');
   q.onsuccess=()=>{ if(q.result){ PROD.rows=q.result.rows||[]; PROD.files=q.result.files||[]; prodNomes(); renderProd(); } }; }catch(e){ console.warn(e); } }
 document.addEventListener('DOMContentLoaded', prodCarregar);
+/* Novo dia / Limpar operação: zera os dados e filtros da Produtividade e apaga a cópia do IndexedDB. A Minha Equipe (cadastro) NÃO é apagada. */
+window.prodNovoDia = async function(){
+  PROD.rows=[]; PROD.files=[]; PROD.hide=new Set(); PROD.from=''; PROD.to=''; PROD.tipo=''; PROD.q=''; PROD.blocos=[];
+  PROD.falt={ativo:false,ign:new Set()};
+  try{ prodNomes(); }catch(e){}
+  try{ renderProd(); }catch(e){}
+  try{
+    const db = await prodIdb();
+    await new Promise((ok,er)=>{ const tx=db.transaction('kv','readwrite'); tx.objectStore('kv').delete('dados'); tx.oncomplete=ok; tx.onerror=()=>er(tx.error); tx.onabort=()=>er(tx.error); });
+    db.close();
+  }catch(e){ console.warn('prod: não consegui apagar a cópia salva', e); }
+};
 
 /* nomes curtos: “SIZOEL PEREIRA” -> “Sizoel P.” (se repetir entre pessoas, usa o 2º nome por extenso) */
 function prodNomes(){
