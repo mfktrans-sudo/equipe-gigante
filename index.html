@@ -9527,7 +9527,6 @@ function valPlanilha(it){
     });
   });
   Object.keys(vaz).forEach(function(c){ add('aviso',nm(c),vaz[c].length+' linha(s) sem valor — a ferramenta ignora essas linhas',vaz[c].slice(0,8)); });
-  Object.keys(inv).forEach(function(c){ add('aviso',nm(c),inv[c].length+' valor(es) fora do padrão (ex.: “'+inv[c][0].v+'”)',inv[c].slice(0,8).map(function(x){ return x.ln; })); });
   /* comparação com a última versão aceita */
   var fr={}; Object.keys(pre).forEach(function(k){ fr[k]=nR?pre[k]/nR:0; });
   var nova={nome:it.nome,em:agora(),cab:hdr.filter(Boolean),preench:fr,n:nR};
@@ -9541,7 +9540,7 @@ function valPlanilha(it){
     if(novas.length) r.diff.push('Colunas novas: '+novas.join(', '));
     Object.keys(base.preench||{}).forEach(function(k){ var j=ks.indexOf(k); if(j>=0 && base.preench[k]>=0.9 && fr[k]<0.5) add('aviso',hdr[j],'veio quase vazia: preenchida em '+Math.round(fr[k]*100)+'% das linhas (na última versão: '+Math.round(base.preench[k]*100)+'%)'); });
   }
-  if(r.nivel==='ok') saveBase(best.t,nova); else { r._base=nova; if(!base) r.diff.push('Ainda não há versão anterior salva — comparei só com o padrão embutido.'); }
+  if(r.nivel==='ok') saveBase(best.t,nova); else r._base=nova;
   return r;
 }
 
@@ -9566,7 +9565,7 @@ function valTexto(it){
   var ruins=[], boa=null;
   linhas.forEach(function(l,i){ if(d.re.test(l)){ if(!boa) boa=l; } else if(d.cand.test(l)) ruins.push({ln:i+1,t:l.trim().slice(0,70)}); });
   var dica=(det.tipo==='REGIAO'&&ruins.length&&ruins[0].t.split(/\s+/).length===3)?' — provável SEQ e VALOR colados sem espaço; a ferramenta ignora essa linha':'';
-  if(ruins.length) add('aviso','(linhas)',ruins.length+' linha(s) parecem dados do '+d.rot+' mas estão fora do padrão ('+d.fmt+'). Ex.: “'+ruins[0].t+'”'+dica,ruins.slice(0,8).map(function(x){ return x.ln; }));
+  if(det.tipo==='GAN' && ruins.length) add('aviso','(linhas)',ruins.length+' linha(s) incompleta(s) — falta algum campo (PRÉ-ROMANEIO, FILIAL, DATA ou PLACA). Ex.: “'+ruins[0].t+'”',ruins.slice(0,8).map(function(x){ return x.ln; }));
   var nova={nome:it.nome,em:agora(),amostra:boa?amostraMasc(boa):''};
   var b=B[det.tipo];
   if(r.nivel!=='ok' && b){ r.base=b.nome+' · '+b.em; if(b.amostra) r.diff.push('Formato na última versão: '+b.amostra+(boa?' · agora: '+nova.amostra:'')); }
