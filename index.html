@@ -572,6 +572,7 @@
   <button class="subtab-btn" data-sub="backup" onclick="switchTab('backup')">Backup &amp; Upload</button>
   <button class="subtab-btn" data-sub="abas" onclick="switchTab('abas')">Abas Visíveis</button>
   <button class="subtab-btn" data-sub="trava" onclick="switchTab('trava')">Trava da operação</button>
+  <button class="subtab-btn" data-sub="admins" onclick="switchTab('admins')">Administradores</button>
 </div>
 </div><!-- /#navFixo -->
 
@@ -1428,6 +1429,14 @@
   </div>
 </div>
 
+<div class="view" id="view-admins">
+  <div class="panel">
+    <div class="panel-head"><div><h2>Administradores</h2>
+      <div class="desc">Só administradores podem aceitar um arquivo como novo padrão do validador de arquivos. Cadastre aqui o nome e a senha de cada um; a senha é definida por você e fica guardada apenas como código de verificação (hash), nunca em texto.</div></div></div>
+    <div id="admBody"></div>
+  </div>
+</div>
+
 <div class="view" id="view-backup">
   <div class="panel">
     <div class="panel-head"><div><h2>Backup</h2><div class="desc">Baixe uma cópia dos dados da ferramenta. Eles já ficam salvos automaticamente no navegador, mas o backup é a cópia de segurança fora dele.</div></div></div>
@@ -1923,7 +1932,7 @@ function toast(msg, type){
 /* =========================================================
    NAVEGAÇÃO
    ========================================================= */
-const CFG_SUBS=['parametros','cadastro','prioregiao','priorodizio','backup','abas','trava'];
+const CFG_SUBS=['parametros','cadastro','prioregiao','priorodizio','backup','abas','trava','admins'];
 let _cfgSubAtual='parametros';
 function switchTab(tab){
   if(tab==='config') tab=_cfgSubAtual;
@@ -1948,6 +1957,7 @@ function switchTab(tab){
   if(tab==='folhas') renderFolhas();
   if(tab==='abas') renderAbasVisiveis();
   if(tab==='trava' && typeof window.gdnTravaRender==='function') window.gdnTravaRender();
+  if(tab==='admins' && typeof window.valAdminRender==='function') window.valAdminRender();
   if(tab==='protocolo') renderProtocolo();
   if(tab==='ondasfora') renderOndasFora();
   if(tab==='relentrega') renderRelEntrega();
@@ -9583,7 +9593,79 @@ window.valAuditarItens=function(itens){
 };
 
 /* ---------- notificação na tela ---------- */
-window.valAceitar=function(ix){ var r=(window.VAL_REL||[])[ix]; if(r&&r.tipo&&r._base){ saveBase(r.tipo,r._base); r.nivel='ok'; try{ toast('Padrão atualizado com '+r.nome,'ok'); }catch(e){} } var c=document.getElementById('valCard'+ix); if(c) c.remove(); };
+/* ---------- administradores (Configurações › Administradores) ----------
+   Lista em STATE.config.valAdmins = [{id,nome,salt,hash,criado,por}] (sincroniza como os demais parâmetros). Só o hash SHA-256(salt:senha) é guardado.
+   Sem administrador cadastrado ninguém consegue aceitar padrão; o 1º cadastro não pede senha anterior; depois, tudo pede senha de um administrador. */
+function adms(){ var C=(typeof STATE!=='undefined'&&STATE.config)||{}; return Array.isArray(C.valAdmins)?C.valAdmins:[]; }
+function setAdms(a){ STATE.config=STATE.config||{}; STATE.config.valAdmins=a; try{ saveState(); }catch(e){} }
+function hex(u){ return Array.from(u).map(function(x){ return ('0'+x.toString(16)).slice(-2); }).join(''); }
+async function sha(t){ return hex(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)))); }
+function novoSalt(){ var a=new Uint8Array(12); crypto.getRandomValues(a); return hex(a); }
+async function confere(id,senha){ var a=adms().filter(function(x){ return x.id===id; })[0]; if(!a||!senha) return null; return (await sha(a.salt+':'+senha))===a.hash?a:null; }
+function dlg(titulo,campos,okTxt,valida){
+  return new Promise(function(res){
+    var o=document.createElement('div'); o.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(3,6,12,.78);display:flex;align-items:center;justify-content:center;padding:20px';
+    var h='<div style="background:var(--bg-1);border:1px solid var(--line);border-radius:10px;width:100%;max-width:400px;padding:18px"><div style="font-weight:700;font-size:15px;margin-bottom:12px">'+esc(titulo)+'</div>';
+    campos.forEach(function(c){ h+='<div style="margin-bottom:10px"><label>'+esc(c.l)+'</label>'+(c.opts?'<select id="dg_'+c.id+'" style="width:100%">'+c.opts.map(function(x){ return '<option value="'+esc(x.v)+'">'+esc(x.t)+'</option>'; }).join('')+'</select>':'<input id="dg_'+c.id+'" type="'+(c.t||'text')+'" style="width:100%" autocomplete="off">')+'</div>'; });
+    h+='<div id="dg_err" style="color:var(--red);font-size:12.5px;min-height:16px;margin-bottom:8px"></div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="ghost" id="dg_no">Cancelar</button><button class="primary" id="dg_ok">'+esc(okTxt||'Confirmar')+'</button></div></div>';
+    o.innerHTML=h; document.body.appendChild(o);
+    var fim=function(v){ o.remove(); res(v); };
+    var ok=async function(){ var v={}; campos.forEach(function(c){ v[c.id]=o.querySelector('#dg_'+c.id).value; }); var e=valida?await valida(v):''; if(e){ o.querySelector('#dg_err').textContent=e; return; } fim(v); };
+    o.querySelector('#dg_no').onclick=function(){ fim(null); }; o.querySelector('#dg_ok').onclick=ok;
+    o.addEventListener('keydown',function(ev){ if(ev.key==='Enter') ok(); else if(ev.key==='Escape') fim(null); });
+    var f=o.querySelector('input,select'); if(f) f.focus();
+  });
+}
+async function pedirAdmin(titulo){
+  var A=adms(); if(!A.length){ try{ toast('Nenhum administrador cadastrado. Cadastre em Configurações › Administradores.','err'); }catch(e){} return null; }
+  var v=await dlg(titulo,[{id:'id',l:'Administrador',opts:A.map(function(a){ return {v:a.id,t:a.nome}; })},{id:'s',l:'Senha de administrador',t:'password'}],'Confirmar',async function(v){
+    if(await confere(v.id,v.s)) return ''; await new Promise(function(r){ setTimeout(r,800); }); return 'Senha incorreta.'; });
+  return v?adms().filter(function(a){ return a.id===v.id; })[0]:null;
+}
+function senhaOk(s,s2){ if(!s||s.length<6) return 'A senha precisa ter pelo menos 6 caracteres.'; if(s!==s2) return 'A confirmação não confere com a senha.'; return ''; }
+window.valAdminRender=function(){
+  var el=document.getElementById('admBody'); if(!el) return; var A=adms(), L=((STATE.config||{}).valLog)||[];
+  var h='<div style="padding:12px 14px;border-radius:8px;border:1px solid var(--line);background:var(--bg-2);margin-bottom:14px;font-size:13px">'
+    +(A.length?'<b>'+A.length+'</b> administrador(es) cadastrado(s). Cadastrar, trocar senha, remover e aceitar padrões pedem senha de administrador.':'<b style="color:var(--amber)">Nenhum administrador cadastrado.</b> Enquanto não houver um, ninguém consegue aceitar um arquivo como novo padrão. O primeiro cadastro não pede senha anterior.')+'</div>';
+  if(A.length){ h+='<div style="margin-bottom:16px">'+A.map(function(a){ return '<div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px"><b style="min-width:160px">'+esc(a.nome)+'</b><span style="color:var(--text-2);flex:1">criado em '+esc(a.criado||'')+(a.por?' por '+esc(a.por):'')+'</span><button class="small" onclick="valAdmSenha(\''+a.id+'\')">Trocar senha</button><button class="small danger" onclick="valAdmRem(\''+a.id+'\')">Remover</button></div>'; }).join('')+'</div>'; }
+  h+='<div style="font-weight:600;margin-bottom:8px;font-size:13.5px">Cadastrar administrador</div><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"><div><label>Nome</label><input id="admNome" autocomplete="off"></div><div><label>Senha (mín. 6 caracteres)</label><input id="admS1" type="password" autocomplete="new-password"></div><div><label>Confirmar senha</label><input id="admS2" type="password" autocomplete="new-password"></div><button class="primary" onclick="valAdmAdd()">Cadastrar</button></div>';
+  h+='<div style="margin-top:18px;font-weight:600;font-size:13.5px">Padrões aceitos (últimos)</div><div style="font-size:12.5px;color:var(--text-2);margin-top:6px">'+(L.length?L.slice(-15).reverse().map(function(x){ return '<div>'+esc(x.em)+' — '+esc(x.quem)+' aceitou <span class="mono">'+esc(x.arquivo)+'</span> ('+esc(x.tipo)+')</div>'; }).join(''):'Nenhum ainda.')+'</div>';
+  h+='<div style="margin-top:16px;font-size:12px;color:var(--text-2);max-width:760px">Observação: a senha é conferida no próprio navegador (a ferramenta não tem servidor próprio). Ela impede o uso casual, mas quem tiver acesso técnico ao código ou ao banco pode contornar. Para bloqueio total, a regra precisa ser aplicada também no Firebase.</div>';
+  el.innerHTML=h;
+};
+window.valAdmAdd=async function(){
+  var nome=(document.getElementById('admNome').value||'').trim(), s1=document.getElementById('admS1').value, s2=document.getElementById('admS2').value, A=adms();
+  if(!nome){ toast('Informe o nome do administrador.','err'); return; }
+  if(A.some(function(a){ return a.nome.toLowerCase()===nome.toLowerCase(); })){ toast('Já existe um administrador com esse nome.','err'); return; }
+  var e=senhaOk(s1,s2); if(e){ toast(e,'err'); return; }
+  if(!(window.crypto&&crypto.subtle)){ toast('Este navegador não permite proteger a senha (abra a ferramenta por https).','err'); return; }
+  var quem=null; if(A.length){ quem=await pedirAdmin('Cadastrar administrador — confirme com um administrador'); if(!quem) return; }
+  var salt=novoSalt();
+  setAdms(A.concat([{id:'a'+Date.now().toString(36),nome:nome,salt:salt,hash:await sha(salt+':'+s1),criado:agora(),por:quem?quem.nome:''}]));
+  toast('Administrador cadastrado.','ok'); window.valAdminRender();
+};
+window.valAdmSenha=async function(id){
+  var a=adms().filter(function(x){ return x.id===id; })[0]; if(!a) return;
+  var v=await dlg('Trocar senha de '+a.nome,[{id:'at',l:'Senha atual',t:'password'},{id:'n1',l:'Nova senha (mín. 6 caracteres)',t:'password'},{id:'n2',l:'Confirmar nova senha',t:'password'}],'Trocar',async function(v){
+    if(!(await confere(id,v.at))){ await new Promise(function(r){ setTimeout(r,800); }); return 'Senha atual incorreta.'; } return senhaOk(v.n1,v.n2); });
+  if(!v) return; var salt=novoSalt(), h=await sha(salt+':'+v.n1);
+  setAdms(adms().map(function(x){ return x.id===id?Object.assign({},x,{salt:salt,hash:h}):x; })); toast('Senha alterada.','ok');
+};
+window.valAdmRem=async function(id){
+  var A=adms(), a=A.filter(function(x){ return x.id===id; })[0]; if(!a) return;
+  if(A.length<=1){ toast('Não é possível remover o único administrador.','err'); return; }
+  var q=await pedirAdmin('Remover '+a.nome+' — confirme com um administrador'); if(!q) return;
+  if(!confirm('Remover o administrador '+a.nome+'?')) return;
+  setAdms(A.filter(function(x){ return x.id!==id; })); toast('Administrador removido.','ok'); window.valAdminRender();
+};
+window.valAceitar=async function(ix){
+  var r=(window.VAL_REL||[])[ix]; if(!(r&&r.tipo&&r._base)) return;
+  var q=await pedirAdmin('Aceitar “'+r.nome+'” como novo padrão — senha de administrador'); if(!q) return;
+  saveBase(r.tipo,r._base); r.nivel='ok';
+  try{ STATE.config=STATE.config||{}; var lg=(STATE.config.valLog||[]).concat([{em:agora(),quem:q.nome,arquivo:r.nome,tipo:r.rot||r.tipo}]); STATE.config.valLog=lg.slice(-50); saveState(); }catch(e){}
+  try{ toast('Padrão atualizado por '+q.nome+'.','ok'); }catch(e){}
+  var c=document.getElementById('valCard'+ix); if(c) c.remove();
+};
 window.valCopiar=function(){ var t=(window.VAL_REL||[]).filter(function(r){ return r.nivel!=='ok'; }).map(function(r){
   return r.nome+' ['+(r.rot||'tipo não identificado')+']\n'+r.itens.map(function(i){ return ' - '+i.col+': '+i.msg+(i.linhas&&i.linhas.length?' (linhas '+i.linhas.join(', ')+')':''); }).join('\n')+(r.diff.length?'\n   Comparação com a última versão: '+r.diff.join(' | '):''); }).join('\n\n');
   try{ navigator.clipboard.writeText(t); toast('Relatório copiado.','ok'); }catch(e){} };
@@ -9598,7 +9680,7 @@ window.valMostrar=function(rel){
      +'<div style="font-weight:700;font-size:14px">'+(r.nivel==='erro'?'❌ ':'⚠️ ')+esc(r.nome)+' <span style="color:var(--text-2);font-weight:400;font-size:12px">· '+esc(r.rot||'tipo não identificado')+'</span></div>';
     r.itens.forEach(function(i){ h+='<div style="margin-top:8px;font-size:13px;line-height:1.5"><b>'+esc(i.col)+'</b> — '+esc(i.msg)+(i.linhas&&i.linhas.length?'<div style="color:var(--text-2);font-size:12px">Linhas: '+esc(i.linhas.join(', '))+'</div>':'')+'</div>'; });
     if(r.diff.length) h+='<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line);font-size:12px;color:var(--text-1);line-height:1.6"><b>Comparação com a última versão'+(r.base?' ('+esc(r.base)+')':'')+'</b><br>'+r.diff.map(esc).join('<br>')+'</div>';
-    if(r.nivel==='aviso' && r._base) h+='<div style="margin-top:10px"><button class="small" onclick="valAceitar('+ix+')">Aceitar como novo padrão</button></div>';
+    if(r.nivel==='aviso' && r._base) h+='<div style="margin-top:10px"><button class="small" onclick="valAceitar('+ix+')">🔒 Aceitar como novo padrão (administrador)</button></div>';
     h+='</div>';
   });
   var m=document.createElement('div'); m.id='valModal';
