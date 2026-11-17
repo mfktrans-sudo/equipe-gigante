@@ -6176,7 +6176,6 @@ function renderRelEntrega(){
   h+='<div class="grid cols-4" style="margin-bottom:14px;">'
     + stat(m.folhas.length,'folhas (uma por placa)') + stat(nEnt,'entregas nessas folhas','teal')
     + stat(semFora,'placas do relatório sem carga (não entram)','amber') + stat(m.faltam.length,'cargas da lista sem entregas no relatório') + '</div>';
-  if(semFora) h+=`<div class="desc" style="margin-bottom:8px;"><b>Fora da impressão (placa não está na Lista de Carga):</b> ${m.sem.map(f=>pEsc(f.placa)).join(' · ')}</div>`;
   if(m.faltam.length) h+=`<div class="desc" style="margin-bottom:8px;"><b>Cargas da Lista sem linhas no relatório:</b> ${m.faltam.map(it=>'carga '+it.n+' · '+pEsc(it.placa)).join(' · ')}</div>`;
   if(!m.folhas.length){ if(pr) pr.style.display='none'; box.innerHTML=h+'<div class="empty">Nenhuma placa do relatório tem carga na Lista de Carga.</div>'; return; }
   const sel=m.folhas.find(f=>f.pk===REL.sel)||m.folhas[0], dataPad=protoDataOperacao();
