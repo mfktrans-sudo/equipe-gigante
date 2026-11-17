@@ -1432,7 +1432,7 @@
 <div class="view" id="view-admins">
   <div class="panel">
     <div class="panel-head"><div><h2>Administradores</h2>
-      <div class="desc">Só administradores podem aceitar um arquivo como novo padrão do validador de arquivos. Cadastre aqui o nome e a senha de cada um; a senha é definida por você e fica guardada apenas como código de verificação (hash), nunca em texto.</div></div></div>
+      <div class="desc">Só administradores podem aceitar um arquivo como novo padrão do validador de arquivos. O administrador é identificado pelo e-mail do login no Firebase: cadastre aqui o e-mail de cada um (o mesmo e-mail que ele usa para entrar na ferramenta). Não há senha separada.</div></div></div>
     <div id="admBody"></div>
   </div>
 </div>
@@ -9594,14 +9594,13 @@ window.valAuditarItens=function(itens){
 
 /* ---------- notificação na tela ---------- */
 /* ---------- administradores (Configurações › Administradores) ----------
-   Lista em STATE.config.valAdmins = [{id,nome,salt,hash,criado,por}] (sincroniza como os demais parâmetros). Só o hash SHA-256(salt:senha) é guardado.
-   Sem administrador cadastrado ninguém consegue aceitar padrão; o 1º cadastro não pede senha anterior; depois, tudo pede senha de um administrador. */
+   Lista em STATE.config.valAdmins = [{id,nome,email,criado,por}] (sincroniza como os demais parâmetros). Admin = e-mail logado no Firebase Auth.
+   O administrador principal (jeronimos@fastshop.com.br) é sempre admin; só admins logados cadastram/removem/aceitam. */
 function adms(){ var C=(typeof STATE!=='undefined'&&STATE.config)||{}; return Array.isArray(C.valAdmins)?C.valAdmins:[]; }
 function setAdms(a){ STATE.config=STATE.config||{}; STATE.config.valAdmins=a; try{ saveState(); }catch(e){} }
 function hex(u){ return Array.from(u).map(function(x){ return ('0'+x.toString(16)).slice(-2); }).join(''); }
 async function sha(t){ return hex(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)))); }
 function novoSalt(){ var a=new Uint8Array(12); crypto.getRandomValues(a); return hex(a); }
-async function confere(id,senha){ var a=adms().filter(function(x){ return x.id===id; })[0]; if(!a||!senha) return null; return (await sha(a.salt+':'+senha))===a.hash?a:null; }
 function dlg(titulo,campos,okTxt,valida){
   return new Promise(function(res){
     var o=document.createElement('div'); o.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(3,6,12,.78);display:flex;align-items:center;justify-content:center;padding:20px';
@@ -9616,54 +9615,47 @@ function dlg(titulo,campos,okTxt,valida){
     var f=o.querySelector('input,select'); if(f) f.focus();
   });
 }
-async function pedirAdmin(titulo){
-  var A=adms(); if(!A.length){ try{ toast('Nenhum administrador cadastrado. Cadastre em Configurações › Administradores.','err'); }catch(e){} return null; }
-  var v=await dlg(titulo,[{id:'id',l:'Administrador',opts:A.map(function(a){ return {v:a.id,t:a.nome}; })},{id:'s',l:'Senha de administrador',t:'password'}],'Confirmar',async function(v){
-    if(await confere(v.id,v.s)) return ''; await new Promise(function(r){ setTimeout(r,800); }); return 'Senha incorreta.'; });
-  return v?adms().filter(function(a){ return a.id===v.id; })[0]:null;
+var ADMIN_MASTER='jeronimos@fastshop.com.br';
+function meuEmail(){ var el=document.getElementById('userEmail'); var t=el?(el.textContent||'').trim().toLowerCase():''; return t.indexOf('@')>0?t:''; }
+function emailOk(e){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
+function listaAdmins(){ var A=adms().filter(function(a){ return a&&a.email; }); if(!A.some(function(a){ return a.email===ADMIN_MASTER; })) A=[{id:'master',nome:'Administrador principal',email:ADMIN_MASTER,criado:'',por:'',fixo:true}].concat(A); return A; }
+function souAdmin(){ var m=meuEmail(); return !!m && listaAdmins().some(function(a){ return a.email===m; }); }
+function pedirAdmin(titulo){
+  var m=meuEmail();
+  if(!m){ try{ toast('Entre na ferramenta com seu e-mail do Firebase.','err'); }catch(e){} return null; }
+  if(!souAdmin()){ try{ toast('Somente administradores podem fazer isso. Seu e-mail ('+m+') não está na lista.','err'); }catch(e){} return null; }
+  if(!confirm(titulo+'\n\nConfirmar como '+m+'?')) return null;
+  var a=listaAdmins().filter(function(x){ return x.email===m; })[0]; return {nome:a.nome||m,email:m};
 }
-function senhaOk(s,s2){ if(!s||s.length<6) return 'A senha precisa ter pelo menos 6 caracteres.'; if(s!==s2) return 'A confirmação não confere com a senha.'; return ''; }
 window.valAdminRender=function(){
-  var el=document.getElementById('admBody'); if(!el) return; var A=adms(), L=((STATE.config||{}).valLog)||[];
+  var el=document.getElementById('admBody'); if(!el) return; var A=listaAdmins(), L=((STATE.config||{}).valLog)||[], m=meuEmail(), eu=souAdmin();
   var h='<div style="padding:12px 14px;border-radius:8px;border:1px solid var(--line);background:var(--bg-2);margin-bottom:14px;font-size:13px">'
-    +(A.length?'<b>'+A.length+'</b> administrador(es) cadastrado(s). Cadastrar, trocar senha, remover e aceitar padrões pedem senha de administrador.':'<b style="color:var(--amber)">Nenhum administrador cadastrado.</b> Enquanto não houver um, ninguém consegue aceitar um arquivo como novo padrão. O primeiro cadastro não pede senha anterior.')+'</div>';
-  if(A.length){ h+='<div style="margin-bottom:16px">'+A.map(function(a){ return '<div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px"><b style="min-width:160px">'+esc(a.nome)+'</b><span style="color:var(--text-2);flex:1">criado em '+esc(a.criado||'')+(a.por?' por '+esc(a.por):'')+'</span><button class="small" onclick="valAdmSenha(\''+a.id+'\')">Trocar senha</button><button class="small danger" onclick="valAdmRem(\''+a.id+'\')">Remover</button></div>'; }).join('')+'</div>'; }
-  h+='<div style="font-weight:600;margin-bottom:8px;font-size:13.5px">Cadastrar administrador</div><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"><div><label>Nome</label><input id="admNome" autocomplete="off"></div><div><label>Senha (mín. 6 caracteres)</label><input id="admS1" type="password" autocomplete="new-password"></div><div><label>Confirmar senha</label><input id="admS2" type="password" autocomplete="new-password"></div><button class="primary" onclick="valAdmAdd()">Cadastrar</button></div>';
+    +'<b>'+A.length+'</b> administrador(es). Você está logado como <b>'+esc(m||'—')+'</b> — '+(eu?'<b style="color:var(--green,#3ecf8e)">administrador</b>: pode cadastrar, remover e aceitar padrões.':'<b style="color:var(--amber)">sem permissão de administrador</b>. Só quem está na lista abaixo consegue cadastrar, remover e aceitar padrões.')+'</div>';
+  h+='<div style="margin-bottom:16px">'+A.map(function(a){ return '<div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px"><b style="min-width:200px">'+esc(a.nome||a.email)+'</b><span class="mono" style="min-width:230px">'+esc(a.email)+'</span><span style="color:var(--text-2);flex:1">'+(a.fixo?'principal (fixo)':'criado em '+esc(a.criado||'')+(a.por?' por '+esc(a.por):''))+'</span>'+(a.fixo?'':'<button class="small danger" onclick="valAdmRem(\''+a.id+'\')">Remover</button>')+'</div>'; }).join('')+'</div>';
+  h+='<div style="font-weight:600;margin-bottom:8px;font-size:13.5px">Cadastrar administrador</div><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"><div><label>Nome</label><input id="admNome" autocomplete="off"></div><div><label>E-mail cadastrado no Firebase</label><input id="admEmail" type="email" autocomplete="off" placeholder="nome@empresa.com.br" style="min-width:260px"></div><button class="primary" onclick="valAdmAdd()">Cadastrar</button></div>';
   h+='<div style="margin-top:18px;font-weight:600;font-size:13.5px">Padrões aceitos (últimos)</div><div style="font-size:12.5px;color:var(--text-2);margin-top:6px">'+(L.length?L.slice(-15).reverse().map(function(x){ return '<div>'+esc(x.em)+' — '+esc(x.quem)+' aceitou <span class="mono">'+esc(x.arquivo)+'</span> ('+esc(x.tipo)+')</div>'; }).join(''):'Nenhum ainda.')+'</div>';
-  h+='<div style="margin-top:16px;font-size:12px;color:var(--text-2);max-width:760px">Observação: a senha é conferida no próprio navegador (a ferramenta não tem servidor próprio). Ela impede o uso casual, mas quem tiver acesso técnico ao código ou ao banco pode contornar. Para bloqueio total, a regra precisa ser aplicada também no Firebase.</div>';
+  h+='<div style="margin-top:16px;font-size:12px;color:var(--text-2);max-width:760px">Observação: o administrador é reconhecido pelo e-mail com que fez login no Firebase Authentication, então só consegue agir quem realmente entrou com esse e-mail. A conferência da lista é feita na própria ferramenta; para bloqueio total, a mesma regra precisa ser aplicada também nas regras do Firebase.</div>';
   el.innerHTML=h;
 };
-window.valAdmAdd=async function(){
-  var nome=(document.getElementById('admNome').value||'').trim(), s1=document.getElementById('admS1').value, s2=document.getElementById('admS2').value, A=adms();
-  if(!nome){ toast('Informe o nome do administrador.','err'); return; }
-  if(A.some(function(a){ return a.nome.toLowerCase()===nome.toLowerCase(); })){ toast('Já existe um administrador com esse nome.','err'); return; }
-  var e=senhaOk(s1,s2); if(e){ toast(e,'err'); return; }
-  if(!(window.crypto&&crypto.subtle)){ toast('Este navegador não permite proteger a senha (abra a ferramenta por https).','err'); return; }
-  var quem=null; if(A.length){ quem=await pedirAdmin('Cadastrar administrador — confirme com um administrador'); if(!quem) return; }
-  var salt=novoSalt();
-  setAdms(A.concat([{id:'a'+Date.now().toString(36),nome:nome,salt:salt,hash:await sha(salt+':'+s1),criado:agora(),por:quem?quem.nome:''}]));
+window.valAdmAdd=function(){
+  var nome=(document.getElementById('admNome').value||'').trim(), em=(document.getElementById('admEmail').value||'').trim().toLowerCase(), A=listaAdmins();
+  var quem=pedirAdmin('Cadastrar administrador'); if(!quem) return;
+  if(!emailOk(em)){ toast('Informe um e-mail válido.','err'); return; }
+  if(A.some(function(a){ return a.email===em; })){ toast('Esse e-mail já é administrador.','err'); return; }
+  setAdms(adms().filter(function(a){ return a&&a.email; }).concat([{id:'a'+Date.now().toString(36),nome:nome||em,email:em,criado:agora(),por:quem.email}]));
   toast('Administrador cadastrado.','ok'); window.valAdminRender();
 };
-window.valAdmSenha=async function(id){
+window.valAdmRem=function(id){
   var a=adms().filter(function(x){ return x.id===id; })[0]; if(!a) return;
-  var v=await dlg('Trocar senha de '+a.nome,[{id:'at',l:'Senha atual',t:'password'},{id:'n1',l:'Nova senha (mín. 6 caracteres)',t:'password'},{id:'n2',l:'Confirmar nova senha',t:'password'}],'Trocar',async function(v){
-    if(!(await confere(id,v.at))){ await new Promise(function(r){ setTimeout(r,800); }); return 'Senha atual incorreta.'; } return senhaOk(v.n1,v.n2); });
-  if(!v) return; var salt=novoSalt(), h=await sha(salt+':'+v.n1);
-  setAdms(adms().map(function(x){ return x.id===id?Object.assign({},x,{salt:salt,hash:h}):x; })); toast('Senha alterada.','ok');
+  var q=pedirAdmin('Remover o administrador '+a.email); if(!q) return;
+  setAdms(adms().filter(function(x){ return x.id!==id && x.email; })); toast('Administrador removido.','ok'); window.valAdminRender();
 };
-window.valAdmRem=async function(id){
-  var A=adms(), a=A.filter(function(x){ return x.id===id; })[0]; if(!a) return;
-  if(A.length<=1){ toast('Não é possível remover o único administrador.','err'); return; }
-  var q=await pedirAdmin('Remover '+a.nome+' — confirme com um administrador'); if(!q) return;
-  if(!confirm('Remover o administrador '+a.nome+'?')) return;
-  setAdms(A.filter(function(x){ return x.id!==id; })); toast('Administrador removido.','ok'); window.valAdminRender();
-};
-window.valAceitar=async function(ix){
+window.valAceitar=function(ix){
   var r=(window.VAL_REL||[])[ix]; if(!(r&&r.tipo&&r._base)) return;
-  var q=await pedirAdmin('Aceitar “'+r.nome+'” como novo padrão — senha de administrador'); if(!q) return;
+  var q=pedirAdmin('Aceitar “'+r.nome+'” como novo padrão'); if(!q) return;
   saveBase(r.tipo,r._base); r.nivel='ok';
-  try{ STATE.config=STATE.config||{}; var lg=(STATE.config.valLog||[]).concat([{em:agora(),quem:q.nome,arquivo:r.nome,tipo:r.rot||r.tipo}]); STATE.config.valLog=lg.slice(-50); saveState(); }catch(e){}
-  try{ toast('Padrão atualizado por '+q.nome+'.','ok'); }catch(e){}
+  try{ STATE.config=STATE.config||{}; var lg=(STATE.config.valLog||[]).concat([{em:agora(),quem:q.email,arquivo:r.nome,tipo:r.rot||r.tipo}]); STATE.config.valLog=lg.slice(-50); saveState(); }catch(e){}
+  try{ toast('Padrão atualizado por '+q.email+'.','ok'); }catch(e){}
   var c=document.getElementById('valCard'+ix); if(c) c.remove();
 };
 window.valCopiar=function(){ var t=(window.VAL_REL||[]).filter(function(r){ return r.nivel!=='ok'; }).map(function(r){
