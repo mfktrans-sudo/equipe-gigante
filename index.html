@@ -9446,26 +9446,29 @@ function prodExcel(){
    Roda no Upload único (handleFilesAuto). Não bloqueia o processamento: avisa na tela qual arquivo, coluna e linhas estão fora do padrão.
    Para ajustar o padrão: edite SCHEMAS (colunas) e TXT (arquivos de texto). Última versão aceita fica no localStorage ('val_baseline_v1'). */
 (function(){
-var KEY='val_baseline_v1';
+var KEY='val_baseline_v2';
 var N=function(s){ return typeof tsNormHdr==='function' ? tsNormHdr(s) : String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''); };
 var CHK={
   placa:function(v){ return /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(String(v).toUpperCase().replace(/[^A-Z0-9]/g,'')); },
   doca:function(v){ return /\d/.test(String(v)); },
+  data:function(v){ if(typeof v==='number') return v>20000&&v<80000; var t=String(v).trim(), m=t.match(/^(\d{1,2})([\/.\-])(\d{1,2})\2(\d{4})$/); if(m) return +m[1]>=1&&+m[1]<=31&&+m[3]>=1&&+m[3]<=12; return /^\d{4}-\d{2}-\d{2}/.test(t); },
   num:function(v){ return typeof v==='number' || /^-?\d+([.,]\d+)?$/.test(String(v).trim()); }
 };
 /* Padrão embutido (extraído do que a ferramenta já exige). obrig = obrigatórias · umDe = pelo menos uma de cada grupo · opc = esperadas · fmt = formato dos valores */
 var SCHEMAS={
-  TS:      {rot:'Base TS São Paulo', obrig:['PLACA','DOCA'], umDe:[['LOJA','PRE05']], opc:['DATA','SEQ','PRE05','PREROMANEIO','DOCA05','VOLUMES','QTDNF','CUB','MOTORISTA'], fmt:{PLACA:'placa',DOCA:'doca',VOLUMES:'num',QTDNF:'num',CUB:'num'}},
+  TS:      {rot:'Base TS São Paulo', obrig:['PLACA','DOCA'], umDe:[['LOJA','PRE05']], opc:['DATA','SEQ','LOJA','PRE05','PREROMANEIO','LACRELV','LACREBAU','QTDNF','VOLUMES','DOCA05','CUB','TIPO','MOTORISTA','RG','CPF','TELEFONE'], fmt:{DATA:'data',PLACA:'placa',DOCA:'doca',DOCA05:'doca',VOLUMES:'num',QTDNF:'num'}},
   lista_cs:{rot:'Lista de carga (aba 6)', obrig:['SEQ','PLACA','QTDNF'], umDe:[], opc:[], fmt:{PLACA:'placa',QTDNF:'num'}},
   lista_kc:{rot:'Lista de carga (aba 3)', obrig:['CARGA','PLACAS','PRE*'], umDe:[], opc:[], fmt:{}},
   kit:     {rot:'Kit_Coletas (aba 6)', obrig:['ORM','PLACA','TIPODECOLETA'], umDe:[], opc:[], fmt:{PLACA:'placa'}},
-  coletas: {rot:'Coletas (aba 3)', obrig:['NFDV','ORM'], umDe:[], opc:[], fmt:{}},
-  tipo:    {rot:'Tipo de Residência (aba 3)', obrig:['PLACA'], umDe:[['CLIENTE','ORM'],['FILIAL','NF']], opc:[], fmt:{PLACA:'placa'}},
-  prog:    {rot:'Programação (abas 5 e 6)', obrig:['PLACA','MOTORISTA'], umDe:[], opc:[], fmt:{PLACA:'placa'}}
+  coletas: {rot:'Coletas (aba 3)', obrig:['NFDV','ORM'], umDe:[], opc:['FILIAL','NFVM','SERIE','KCLIENTE','CLIENTE','DESCRICAODOPRODUTO','QTD','TIPODECOLETA','NTP','CEP','ENDERECO','PLANOPRIME'], fmt:{NFDV:'num',ORM:'num'}},
+  tipo:    {rot:'Tipo de Residência (aba 3)', obrig:['PLACA'], umDe:[['CLIENTE','ORM'],['FILIAL','NF']], opc:['CLIENTE','FILIAL','NF','DATA','SERIE','SEQUENCIA','TERRITORIO','PERIODODEENTREGA','TIPODERESIDENCIA','DESCRTERRITORIO','DESCRPERIODO','DESCRRESIDENCIA','CEP'], fmt:{PLACA:'placa'}, nucleo:['PLACA','NF','CLIENTE','FILIAL']},
+  prog:    {rot:'Programação (abas 5 e 6)', obrig:['PLACA','MOTORISTA'], umDe:[], opc:['PESSOAS','CARROS','TRANSP','VEICULO','OBSERVACAO','TECNOLOGIA','SINALDORASTREADOR','SINAL','CONTATOEQUIPE','RG','CPF','BRUTA','LIQUIDA','REGIAO','RESIDENCIA','ZONA','RODIZIO','ENTRADA','REC'], fmt:{PLACA:'placa'}},
+  rota:    {rot:'Relatório Analítico de Rota/Pedidos (aba Relatório)', obrig:['PLACA','SEQUENCIAENTREGAPLANEJADO','IDPEDIDO'], umDe:[], opc:['NOMEDEPOSITO','DATAROTA','NOMETRANSPORTADORA','CODIGOCLIENTE','NOMECLIENTE','ENDERECO','BAIRRO','CIDADE','CEP','ESTADO','TELEFONE','NOMEROTA','STATUSROTA','TIPOATENDIMENTO'], fmt:{DATAROTA:'data'}},
+  iscas:   {rot:'Iscas — saída de inserção (aba 4)', obrig:['CLIENTE','CIDADE','EQUIP','PLACA'], umDe:[], opc:['DATA','SEQ','CEP','RUA','BAIRRO','UF','NF','STATUS'], fmt:{PLACA:'placa',NF:'num'}, vazioOk:['PLACA']}
 };
-var BONITO={TIPODECOLETA:'TIPO DE COLETA',DOCA05:'DOCA 05',PRE05:'PRÉ-05',PREROMANEIO:'PRÉ-ROMANEIO',QTDNF:'QTD NF','PRE*':'PRÉ-… (ex.: PRÉ-CAJ-33)'};
+var BONITO={LACRELV:'LACRE - LV',LACREBAU:'LACRE - BAÚ',SEQ:'SEQ.',SERIE:'Série',KCLIENTE:'K_Cliente',DESCRICAODOPRODUTO:'Descrição do Produto',QTD:'Qtd',NTP:'Nº TP',ENDERECO:'Endereço',PLANOPRIME:'Plano Prime',VEICULO:'VEÍCULO',OBSERVACAO:'OBSERVAÇÃO',SINALDORASTREADOR:'SINAL DO RASTREADOR',CONTATOEQUIPE:'CONTATO EQUIPE',REGIAO:'REGIÃO',RESIDENCIA:'RESIDÊNCIA',SEQUENCIA:'Sequência',TERRITORIO:'Território',PERIODODEENTREGA:'Período de entrega',TIPODERESIDENCIA:'Tipo de Residência',DESCRTERRITORIO:'DESCR/TERRITORIO',DESCRPERIODO:'DESCR/PERIODO',DESCRRESIDENCIA:'DESCR/RESIDENCIA',NOMEDEPOSITO:'Nome Depósito',DATAROTA:'Data Rota',NOMETRANSPORTADORA:'Nome Transportadora',CODIGOCLIENTE:'Código Cliente',NOMECLIENTE:'Nome Cliente',STATUSROTA:'Status Rota',TIPOATENDIMENTO:'Tipo Atendimento',NOMEROTA:'Nome Rota',SEQUENCIAENTREGAPLANEJADO:'Sequência Entrega Planejado',IDPEDIDO:'ID Pedido',TIPODECOLETA:'TIPO DE COLETA',DOCA05:'DOCA 05',PRE05:'PRÉ-05',PREROMANEIO:'PRÉ-ROMANEIO',QTDNF:'QTD NF','PRE*':'PRÉ-… (ex.: PRÉ-CAJ-33)'};
 var nm=function(c){ return BONITO[c]||c; };
-var colsDe=function(S){ var a=S.obrig.concat(S.opc); S.umDe.forEach(function(g){ a=a.concat(g); }); return a; };
+var colsDe=function(S){ var a=S.obrig.concat(S.opc); S.umDe.forEach(function(g){ a=a.concat(g); }); return a.filter(function(c,i){ return a.indexOf(c)===i; }); };
 var casa=function(k,c){ return c.slice(-1)==='*' ? k.indexOf(c.slice(0,-1))===0 : k===c; };
 var tem=function(ks,c){ return ks.some(function(k){ return casa(k,c); }); };
 function dist(a,b){ var m=a.length,n=b.length,d=[],i,j; for(i=0;i<=m;i++) d[i]=[i]; for(j=1;j<=n;j++) d[0][j]=j;
@@ -9481,7 +9484,10 @@ var amostraMasc=function(l){ return String(l).trim().replace(/[0-9]/g,'9').repla
 function valPlanilha(it){
   var r={nome:it.nome,rot:'',nivel:'ok',itens:[],diff:[],base:''};
   var add=function(nv,col,msg,linhas){ r.itens.push({nv:nv,col:col,msg:msg,linhas:linhas}); if(nv==='erro') r.nivel='erro'; else if(r.nivel==='ok') r.nivel='aviso'; };
-  var wb; try{ wb=XLSX.read(it.buf,{type:'array',sheetRows:3000}); }catch(e){ add('erro','(arquivo)','Não consegui abrir a planilha (corrompida, protegida por senha ou formato inválido).'); return r; }
+  var wb; try{ wb=XLSX.read(it.buf,{type:'array',sheetRows:50000}); }catch(e){ add('erro','(arquivo)','Não consegui abrir a planilha (corrompida, protegida por senha ou formato inválido).'); return r; }
+  var tApp=null;
+  try{ if(typeof parseTSPlanilha==='function' && parseTSPlanilha(it.buf).length) tApp='TS'; else if(typeof classificarPlanilhaExtra==='function'){ var cl=classificarPlanilhaExtra(it.nome,it.buf); tApp=cl&&cl.tipo||null; } }catch(e){}
+  if(tApp && !SCHEMAS[tApp]) return r;   /* tipo reconhecido pela ferramenta, sem padrão de colunas definido (ex.: iscas) */
   var best=null;
   wb.SheetNames.forEach(function(sn){
     var ws=wb.Sheets[sn]; if(!ws||!ws['!ref']) return;
@@ -9489,6 +9495,7 @@ function valPlanilha(it){
     for(var i=0;i<Math.min(aoa.length,40);i++){
       var ks=(aoa[i]||[]).map(N); if(ks.filter(Boolean).length<2) continue;
       Object.keys(SCHEMAS).forEach(function(t){
+        if(tApp && t!==tApp) return;
         var S=SCHEMAS[t], cols=colsDe(S), h=0, ob=0;
         cols.forEach(function(c){ if(tem(ks,c)){ h++; if(S.obrig.indexOf(c)>=0) ob++; } });
         var sc=h/cols.length;
@@ -9498,23 +9505,25 @@ function valPlanilha(it){
   });
   if(!best){ add('erro','(planilha)','A planilha está vazia ou não tem linha de cabeçalho nas 40 primeiras linhas.'); return r; }
   var S=SCHEMAS[best.t], ks=best.ks, hdr=best.aoa[best.row].map(function(v){ return String(v==null?'':v).trim(); });
-  r.tipo=best.t; r.rot=S.rot+(best.sc<0.34?' (provável)':'');
-  if(best.sc<0.34) add('erro','(cabeçalho)','Não reconheço as colunas de nenhum modelo. Colunas encontradas: '+hdr.filter(Boolean).join(' | ')+'. O mais parecido é “'+S.rot+'”.');
+  r.tipo=best.t; r.rot=S.rot+(best.sc<0.34&&!tApp?' (provável)':'');
+  if(best.sc<0.34&&!tApp) add('erro','(cabeçalho)','Não reconheço as colunas de nenhum modelo. Colunas encontradas: '+hdr.filter(Boolean).join(' | ')+'. O mais parecido é “'+S.rot+'”.');
   var nao=ks.filter(function(k){ return k && colsDe(S).every(function(c){ return !casa(k,c); }); });
   var sug=function(c){ var b=null,cc=c.replace('*',''); nao.forEach(function(k){ if(!b && k.length>=3 && cc.length>=3 && (k.indexOf(cc)>=0||cc.indexOf(k)>=0||dist(k,cc)<=2)) b=k; }); return b?hdr[ks.indexOf(b)]:null; };
   S.obrig.forEach(function(c){ if(!tem(ks,c)){ var s=sug(c); add('erro',nm(c),'coluna obrigatória ausente'+(s?' — encontrei “'+s+'” no lugar (foi renomeada?)':'')); } });
   S.umDe.forEach(function(g){ if(!g.some(function(c){ return tem(ks,c); })) add('erro',g.map(nm).join(' ou '),'nenhuma destas colunas foi encontrada (pelo menos uma é obrigatória)'); });
+  var faltam=S.opc.filter(function(c){ return !tem(ks,c); });
+  if(faltam.length) add('aviso',faltam.map(nm).join(', '),'coluna(s) esperada(s) que não vieram neste arquivo'+faltam.map(function(c){ var g=sug(c); return g?' · “'+g+'” pode ser '+nm(c):''; }).join(''));
   /* dados linha a linha */
-  var nR=0, vaz={}, inv={}, pre={}, ob=S.obrig;
+  var nR=0, vaz={}, inv={}, pre={}, ob=S.obrig, nuc=(S.nucleo||[]).map(function(c){ return ks.indexOf(c); }).filter(function(j){ return j>=0; });
   ks.forEach(function(k){ if(k) pre[k]=0; });
   best.aoa.slice(best.row+1).forEach(function(row,ix){
-    row=row||[]; if(row.filter(function(v){ return !vazioTxt(v); }).length<2) return; nR++;
+    row=row||[]; if(nuc.length ? !nuc.some(function(j){ return !vazioTxt(row[j]); }) : row.filter(function(v){ return !vazioTxt(v); }).length<2) return; nR++;
     var ln=best.row+2+ix;
     ks.forEach(function(k,j){ if(k && !vazioTxt(row[j])) pre[k]++; });
     Object.keys(S.fmt).forEach(function(c){
       var j=ks.indexOf(c); if(j<0) return; var v=row[j];
-      if(vazioTxt(v)){ if(ob.indexOf(c)>=0 && !(best.t==='TS'&&c==='DOCA')) (vaz[c]=vaz[c]||[]).push(ln); }
-      else if(!CHK[S.fmt[c]](v)) (inv[c]=inv[c]||[]).push({ln:ln,v:String(v).slice(0,25)});
+      if(vazioTxt(v)){ if(ob.indexOf(c)>=0 && !(best.t==='TS'&&c==='DOCA') && (S.vazioOk||[]).indexOf(c)<0) (vaz[c]=vaz[c]||[]).push(ln); }
+      else if(N(v)!==c && !CHK[S.fmt[c]](v)) (inv[c]=inv[c]||[]).push({ln:ln,v:String(v).slice(0,25)});
     });
   });
   Object.keys(vaz).forEach(function(c){ add('aviso',nm(c),vaz[c].length+' linha(s) sem valor — a ferramenta ignora essas linhas',vaz[c].slice(0,8)); });
@@ -9526,7 +9535,7 @@ function valPlanilha(it){
   if(base){
     r.base=base.nome+' · '+base.em;
     var bk=base.cab.map(N);
-    var rem=base.cab.filter(function(h){ return ks.indexOf(N(h))<0 && !ob.some(function(c){ return casa(N(h),c); }); });
+    var rem=base.cab.filter(function(h){ return ks.indexOf(N(h))<0 && !colsDe(S).some(function(c){ return casa(N(h),c); }); });
     var novas=hdr.filter(function(h,j){ return h && bk.indexOf(ks[j])<0; });
     if(rem.length){ add('aviso',rem.join(', '),'existia na última versão e não está neste arquivo'); r.diff.push('Colunas que sumiram: '+rem.join(', ')); }
     if(novas.length) r.diff.push('Colunas novas: '+novas.join(', '));
@@ -9538,8 +9547,8 @@ function valPlanilha(it){
 
 /* ---------- arquivos de texto: GAN / Log de NF (hebls) / Região ---------- */
 function txtDefs(){ return {
-  GAN:{rot:'GAN', re:/(\d{5,6})\s+(\d{2}|[Dd]-?0)\s+(\d{2}\/\d{2}\/\d{2,4})\s+([A-Za-z0-9]{3}-?[A-Za-z0-9]{3,5})\b/, cand:/\d{2}\/\d{2}\/\d{2,4}/, fmt:'PRÉ-ROMANEIO · FILIAL · DATA · PLACA'},
-  HEBLS:{rot:'Log de NF', re:HEBLS_RE_LINHA, cand:/Nota Fiscal/i, fmt:'FILIAL · NF · … Nota Fiscal … Pre-Romaneio: nº'},
+  GAN:{rot:'GAN', re:/(\d{5,6})\s+(\d{2}|[Dd]-?0)\s+(\d{2}\/\d{2}\/\d{2,4})\s+([A-Za-z0-9]{3}-?[A-Za-z0-9]{3,5})\b/, cand:/^\s*\d{4,7}\s+\S+\s+\d{2}\/\d{2}\/\d{2,4}/, fmt:'PRÉ-ROMANEIO · FILIAL · DATA · PLACA'},
+  HEBLS:{rot:'Log de NF', re:HEBLS_RE_LINHA, cand:/Nota Fiscal\s+incluida/i, fmt:'FILIAL · NF · … Nota Fiscal … Pre-Romaneio: nº'},
   REGIAO:{rot:'Região', re:/^\s*\S{5,9}\s+\S+\s+\d+\s+\d+\s*$/, cand:/^\s*[A-Za-z]{3}\d\S*\s+\S+\s+\S+/, fmt:'PLACA · CÓDIGO · SEQ · VALOR'}
 }; }
 function valTexto(it){
@@ -9556,7 +9565,8 @@ function valTexto(it){
   if(det.porNome) add('aviso','(conteúdo)','Tipo definido só pelo nome do arquivo — nenhuma linha reconhecida no conteúdo.');
   var ruins=[], boa=null;
   linhas.forEach(function(l,i){ if(d.re.test(l)){ if(!boa) boa=l; } else if(d.cand.test(l)) ruins.push({ln:i+1,t:l.trim().slice(0,70)}); });
-  if(ruins.length) add('aviso','(linhas)',ruins.length+' linha(s) parecem dados do '+d.rot+' mas estão fora do padrão ('+d.fmt+'). Ex.: “'+ruins[0].t+'”',ruins.slice(0,8).map(function(x){ return x.ln; }));
+  var dica=(det.tipo==='REGIAO'&&ruins.length&&ruins[0].t.split(/\s+/).length===3)?' — provável SEQ e VALOR colados sem espaço; a ferramenta ignora essa linha':'';
+  if(ruins.length) add('aviso','(linhas)',ruins.length+' linha(s) parecem dados do '+d.rot+' mas estão fora do padrão ('+d.fmt+'). Ex.: “'+ruins[0].t+'”'+dica,ruins.slice(0,8).map(function(x){ return x.ln; }));
   var nova={nome:it.nome,em:agora(),amostra:boa?amostraMasc(boa):''};
   var b=B[det.tipo];
   if(r.nivel!=='ok' && b){ r.base=b.nome+' · '+b.em; if(b.amostra) r.diff.push('Formato na última versão: '+b.amostra+(boa?' · agora: '+nova.amostra:'')); }
@@ -9600,6 +9610,21 @@ window.valMostrar=function(rel){
    +'<div style="padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end"><button class="ghost" onclick="valCopiar()">Copiar relatório</button><button class="primary" onclick="document.getElementById(\'valModal\').remove()">Entendi</button></div></div>';
   document.body.appendChild(m);
 };
+/* envios fora do Upload único (cada aba tem o seu botão): audita o conteúdo antes de a aba processar. Só olha dados/colunas, nunca o nome do arquivo. */
+window.valAuditarArquivos=async function(fs,textoOk){
+  var itens=[];
+  for(var i=0;i<fs.length;i++){ var f=fs[i]; try{
+    if(/\.zip$/i.test(f.name)){ if(typeof extrairZipItens==='function') (await extrairZipItens(f)).forEach(function(x){ itens.push(x); }); }
+    else if(/\.(xlsx|xlsm|xls|xlsb|ods)$/i.test(f.name)) itens.push({nome:f.name,buf:await f.arrayBuffer()});
+    else if(textoOk && /\.txt$/i.test(f.name)) itens.push({nome:f.name,texto:await lerArquivoComoTexto(f)});
+  }catch(e){ console.error(e); } }
+  try{ valMostrar(window.valAuditarItens(itens)); }catch(e){ console.error(e); }
+};
+var VAL_IDS=['kcInp','csInp','relFile','ffFile','iscaFile','inpGAN','inpHEBLS','inpREGIAO'];
+document.addEventListener('change',function(e){
+  var t=e.target; if(!t||t.type!=='file'||VAL_IDS.indexOf(t.id)<0) return;
+  var fs=Array.from(t.files||[]); if(fs.length) window.valAuditarArquivos(fs,/^inp(GAN|HEBLS|REGIAO)$/.test(t.id));
+},true);
 })();
 </script>
 
