@@ -567,6 +567,8 @@
 <div class="subtabs show" id="subtabsConfig">
   <button class="subtab-btn active" data-sub="parametros" onclick="switchTab('parametros')">Parâmetros</button>
   <button class="subtab-btn" data-sub="cadastro" onclick="switchTab('cadastro')">Cadastro de Placas</button>
+  <button class="subtab-btn" data-sub="prioregiao" onclick="switchTab('prioregiao')">Prioridade por região</button>
+  <button class="subtab-btn" data-sub="priorodizio" onclick="switchTab('priorodizio')">Prioridade por Rodizio</button>
   <button class="subtab-btn" data-sub="backup" onclick="switchTab('backup')">Backup &amp; Upload</button>
   <button class="subtab-btn" data-sub="abas" onclick="switchTab('abas')">Abas Visíveis</button>
   <button class="subtab-btn" data-sub="trava" onclick="switchTab('trava')">Trava da operação</button>
@@ -1299,6 +1301,117 @@
   </div>
 </div>
 
+<!-- ================= CONFIG: PRIORIDADE POR RODIZIO ================= -->
+<div class="view" id="view-priorodizio">
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>Prioridade por Rodizio</h2>
+        <div class="desc">Regra: a <b>placa que tiver carga em uma das regiões de rodízio marcadas abaixo e for a placa do dia</b> (final da placa conforme o calendário do rodízio de São Paulo) <b>assume a 1ª onda</b>, independente das outras regras (prioridade da transportadora, ordem da fila, otimização de ondas e Prioridade por região). A região de cada placa vem do <b>Tipo de Residência</b> (coluna <b>DESCR/TERRITORIO</b>). Placas fixadas pela base TS São Paulo continuam na doca/onda da base.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;font-size:12.5px;margin:0;"><input type="checkbox" id="rzAtivo" onchange="rzCfgMudou()"> Regra ativa</label>
+        <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;font-size:12.5px;margin:0;" title="Se todas as docas da faixa da transportadora já estão ocupadas na 1ª onda, usa uma doca livre da unidade (fora da faixa) para garantir a 1ª onda. Desmarcado: a carga respeita a faixa e pode ir para a 2ª onda."><input type="checkbox" id="rzOutraFaixa" onchange="rzCfgMudou()"> Garantir 1ª onda usando doca de outra faixa se a da transportadora estiver cheia</label>
+      </div>
+    </div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;margin-top:6px;">
+      <div class="table-wrap" style="min-width:300px;"><table><thead><tr><th>Dia da semana</th><th>Placas (final)</th></tr></thead><tbody id="rzCalTbody"></tbody></table></div>
+      <div style="flex:1;min-width:260px;">
+        <label style="font-size:12.5px;display:block;margin-bottom:4px;">Dia de referência do rodízio</label>
+        <select id="rzDiaRef" onchange="rzCfgMudou()" style="min-width:230px;">
+          <option value="auto">Automático (dia de hoje — horário de Brasília)</option>
+          <option value="1">Segunda-feira (finais 1 e 2)</option>
+          <option value="2">Terça-feira (finais 3 e 4)</option>
+          <option value="3">Quarta-feira (finais 5 e 6)</option>
+          <option value="4">Quinta-feira (finais 7 e 8)</option>
+          <option value="5">Sexta-feira (finais 9 e 0)</option>
+          <option value="nenhum">Sem rodízio hoje (feriado)</option>
+        </select>
+        <div class="desc" style="margin-top:6px;max-width:none;">Use outro dia quando a operação for montada na véspera para a saída do dia seguinte, ou “Sem rodízio” em feriado. Volte para “Automático” depois.</div>
+        <div id="rzHoje" style="margin-top:10px;font-size:13px;"></div>
+      </div>
+    </div>
+    <div class="dropzone" id="rzDrop" style="margin-top:12px;" onclick="document.getElementById('rzInp').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="rzDropArq(event)">
+      <span class="k">Clique ou arraste o Tipo de Residência aqui</span>.xlsx / .xlsm — precisa das colunas Placa e DESCR/TERRITORIO (é o mesmo arquivo da Prioridade por região; também é lido quando solto no Upload &amp; Consolidação)
+    </div>
+    <input type="file" id="rzInp" accept=".xlsx,.xlsm,.xls,.xlsb" style="display:none" onchange="rzInpArq(this)">
+    <div id="rzArq" class="desc" style="margin-top:8px;max-width:none;"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>Regiões de rodízio</h2>
+        <div class="desc">Já vem pré-definida com os <b>bairros abrangidos pelo rodízio</b> (lista abaixo): toda região do Tipo de Residência cujo nome contenha um desses bairros entra automaticamente. Você pode marcar ou desmarcar regiões à mão e incluir outras pelo nome; as escolhas ficam salvas nos Parâmetros e valem nos próximos dias. Alguns bairros só valem na parte interna da área (Lapa, Alto de Pinheiros, Campo Belo, Saúde, Tatuapé, Água Rasa): o arquivo não distingue isso, então desmarque a região se ela ficar fora.</div>
+        <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;font-size:12.5px;margin:8px 0 0;"><input type="checkbox" id="rzPadrao" onchange="rzCfgMudou()"> Usar a lista padrão de bairros do rodízio</label>
+        <div class="desc" style="max-width:none;margin-top:6px;" id="rzBairrosTxt"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input id="rzFiltro" placeholder="Buscar região..." style="width:180px;" oninput="rzRender()">
+        <input id="rzNova" placeholder="Incluir região pelo nome" style="width:210px;" onkeydown="if(event.key==='Enter')rzAddRegiao()">
+        <button class="small" onclick="rzAddRegiao()">+ Incluir</button>
+        <button class="small" onclick="rzLimparSel()">Desmarcar todas</button>
+      </div>
+    </div>
+    <div class="table-wrap" style="max-height:380px;overflow-y:auto;"><table><thead><tr><th style="width:90px">Rodízio</th><th>Região (DESCR/TERRITORIO)</th><th>Placas no arquivo</th><th>Placas com carga hoje</th></tr></thead><tbody id="rzRegTbody"></tbody></table></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>Placas do dia na 1ª onda por rodízio</h2>
+        <div class="desc" id="rzResDesc">Cargas do dia cuja placa é a do rodízio e está em região de rodízio, e como ficaram na alocação.</div>
+      </div>
+      <button class="primary" onclick="rzAplicar()" title="Recalcula a alocação do dia aplicando a regra">Aplicar na alocação do dia</button>
+    </div>
+    <div class="table-wrap" style="max-height:360px;overflow-y:auto;"><table><thead><tr><th>Placa</th><th>Final</th><th>Transportadora</th><th>Região(ões) de rodízio</th><th>Alocação atual</th></tr></thead><tbody id="rzResTbody"></tbody></table></div>
+  </div>
+</div>
+
+<!-- ================= CONFIG: PRIORIDADE POR REGIÃO ================= -->
+<div class="view" id="view-prioregiao">
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>Prioridade por região</h2>
+        <div class="desc">Regra: a <b>placa que tiver carga em uma das regiões marcadas abaixo assume a 1ª onda</b>, independente das outras regras (prioridade da transportadora, ordem da fila, otimização de ondas). A região de cada placa vem do <b>Tipo de Residência</b> (coluna <b>DESCR/TERRITORIO</b>). Placas fixadas pela base TS São Paulo continuam na doca/onda da base.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;font-size:12.5px;margin:0;"><input type="checkbox" id="prAtivo" onchange="prCfgMudou()"> Regra ativa</label>
+        <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;font-size:12.5px;margin:0;" title="Se todas as docas da faixa da transportadora já estão ocupadas na 1ª onda, usa uma doca livre da unidade (fora da faixa) para garantir a 1ª onda. Desmarcado: a carga respeita a faixa e pode ir para a 2ª onda."><input type="checkbox" id="prOutraFaixa" onchange="prCfgMudou()"> Garantir 1ª onda usando doca de outra faixa se a da transportadora estiver cheia</label>
+      </div>
+    </div>
+    <div class="dropzone" id="prDrop" onclick="document.getElementById('prInp').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="prDropArq(event)">
+      <span class="k">Clique ou arraste o Tipo de Residência aqui</span>.xlsx / .xlsm — precisa das colunas Placa e DESCR/TERRITORIO (também é lido quando o arquivo é solto no Upload &amp; Consolidação)
+    </div>
+    <input type="file" id="prInp" accept=".xlsx,.xlsm,.xls,.xlsb" style="display:none" onchange="prInpArq(this)">
+    <div id="prArq" class="desc" style="margin-top:8px;max-width:none;"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>Regiões prioritárias</h2>
+        <div class="desc">Marque as regiões que devem sair na 1ª onda. A lista vem do arquivo carregado; regiões que não aparecem nele podem ser incluídas pelo nome. As marcadas ficam salvas nos Parâmetros e valem nos próximos dias.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input id="prFiltro" placeholder="Buscar região..." style="width:180px;" oninput="prRender()">
+        <input id="prNova" placeholder="Incluir região pelo nome" style="width:210px;" onkeydown="if(event.key==='Enter')prAddRegiao()">
+        <button class="small" onclick="prAddRegiao()">+ Incluir</button>
+        <button class="small" onclick="prLimparSel()">Desmarcar todas</button>
+      </div>
+    </div>
+    <div class="table-wrap" style="max-height:380px;overflow-y:auto;"><table><thead><tr><th style="width:90px">Prioridade</th><th>Região (DESCR/TERRITORIO)</th><th>Placas no arquivo</th><th>Placas com carga hoje</th></tr></thead><tbody id="prRegTbody"></tbody></table></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>Placas na 1ª onda por região</h2>
+        <div class="desc" id="prResDesc">Cargas do dia cuja placa está em uma região prioritária e como ficaram na alocação.</div>
+      </div>
+      <button class="primary" onclick="prAplicar()" title="Recalcula a alocação do dia aplicando a regra">Aplicar na alocação do dia</button>
+    </div>
+    <div class="table-wrap" style="max-height:360px;overflow-y:auto;"><table><thead><tr><th>Placa</th><th>Transportadora</th><th>Região(ões) prioritária(s)</th><th>Alocação atual</th></tr></thead><tbody id="prResTbody"></tbody></table></div>
+  </div>
+</div>
+
 <div class="view" id="view-trava">
   <div class="panel">
     <div class="panel-head"><div><h2>Trava da operação</h2>
@@ -1579,7 +1692,7 @@ gdnCarregarReserva();
    gdn_docas/diaAtual {op, ciclo, resetHora}. "Novo dia" ou o horário configurado criam uma operação nova (id novo), apagam a antiga
    e todos os computadores abertos limpam a tela e seguem a operação nova.
    ========================================================= */
-const GDN_DIA_CAMPOS = ['cargas','presOrfaos','alocacao','ondaStatus','iscas','iscaLote','folhas','folhasArqs','ts'];
+const GDN_DIA_CAMPOS = ['cargas','presOrfaos','alocacao','ondaStatus','iscas','iscaLote','folhas','folhasArqs','ts','prioReg'];
 const gdnDia = window.gdnDia = {
   op:null, pronto:false, mods:{}, nuvem:null, _t:{}, _ult:{},
   registrar(nome, api){ this.mods[nome] = api; if(this.pronto) this._aplicar(nome); },
@@ -1688,6 +1801,7 @@ function novaOperacao(auto, opts){
     STATE.iscaLote = null;
     STATE.folhas = null; STATE.folhasArqs = [];
     STATE.ts = [];
+    STATE.prioReg = null;   /* mapa placa → regiões (Tipo de Residência) é do dia; as regiões marcadas ficam em STATE.config.prioRegiao */
     IL_MEM.buf = null; IL_MEM.nome = ''; IL_MEM.folha = '';
     /* Configurações (STATE.config: unidades, docas indisponíveis/extras, faixas, transportadoras, filiais, abas visíveis, cadastro de placas, iscas) NÃO são tocadas pelo Novo dia. */
     salvou = (saveState(true) === true);
@@ -1809,7 +1923,7 @@ function toast(msg, type){
 /* =========================================================
    NAVEGAÇÃO
    ========================================================= */
-const CFG_SUBS=['parametros','cadastro','backup','abas','trava'];
+const CFG_SUBS=['parametros','cadastro','prioregiao','priorodizio','backup','abas','trava'];
 let _cfgSubAtual='parametros';
 function switchTab(tab){
   if(tab==='config') tab=_cfgSubAtual;
@@ -1825,6 +1939,8 @@ function switchTab(tab){
   if(_mudou) window.scrollTo(0,0);   // abas ficam fixas: ao trocar de aba a nova começa do topo
   if(tab==='parametros') renderParametros();
   if(tab==='cadastro') renderCadastro();
+  if(tab==='prioregiao') prRender();
+  if(tab==='priorodizio') rzRender();
   if(tab==='upload') { renderConsolidado(); renderOrfaos(); try{ renderFluxo(); }catch(e){} }
   if(tab==='dashboard') renderDashboard();
   if(tab==='backup') renderBackup();
@@ -2628,6 +2744,7 @@ async function despacharExtras(extras){
   if(!extras || !extras.length) return;
   const arq = x => new File([x.buf], x.nome);
   const por = {}; extras.forEach(x=>{ (por[x.tipo] = por[x.tipo] || []).push(x); });
+  (por.tipo||[]).forEach(x=>{ try{ prCarregarBuf(x.buf, x.nome, true); }catch(e){ console.error(e); } });   /* Prioridade por região (Configurações) */
   const grupos = [
     ['coletas','kcFiles'], ['tipo','kcFiles'], ['lista_kc','kcFiles'],
     ['kit','csFiles'], ['lista_cs','csFiles'], ['prog','csFiles'], ['prog','ffArquivos'], ['iscas','iscaArquivos'], ['linha','pdFiles']
@@ -3357,6 +3474,303 @@ function prioridadeDaCarga(carga){
   const t = STATE.config.transportadoras.find(t=>t.nome===carga.transportadora);
   return t ? t.prioridade : 999;
 }
+
+/* =========================================================
+   PRIORIDADE POR REGIÃO (Configurações › Prioridade por região)
+   STATE.config.prioRegiao = {ativo, outraFaixa, regioes:[nome]}  → Parâmetros (Firebase, não apagado pelo Novo dia)
+   STATE.prioReg = {nome, placas:{PLACA:[região]}, regioes:{região: nº de placas}}  → do dia (Tipo de Residência)
+   Regra: placa com carga em região prioritária assume a 1ª onda, antes da fila normal (prioridade da transportadora,
+   otimização de ondas). Só a base TS São Paulo (doca/onda fixa) vem antes.
+   ========================================================= */
+function prCfg(){ const C = STATE.config; if(!C.prioRegiao || typeof C.prioRegiao!=='object') C.prioRegiao = {ativo:true, outraFaixa:true, regioes:[]}; if(!Array.isArray(C.prioRegiao.regioes)) C.prioRegiao.regioes = []; return C.prioRegiao; }
+function prNorm(s){ return String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
+function prLimpaNome(v){ return String(v==null?'':v).replace(/\s+/g,' ').trim(); }
+function prioRegiaoAtiva(){ const c = prCfg(); return c.ativo!==false && c.regioes.length>0; }
+/* regiões prioritárias (nome como marcado) em que a placa tem carga; [] se a regra está desligada ou a placa não está nelas */
+function prioRegiaoDaPlaca(placa){
+  if(!prioRegiaoAtiva() || !STATE.prioReg || !STATE.prioReg.placas) return [];
+  const lst = STATE.prioReg.placas[placaKey(placa)]; if(!lst || !lst.length) return [];
+  const alvo = new Set(prCfg().regioes.map(prNorm));
+  return lst.filter(r=>alvo.has(prNorm(r)));
+}
+/* Aloca uma lista de cargas na 1ª onda (usada pela Prioridade por Rodizio e pela Prioridade por região).
+   rotuloFn(carga) → texto do motivo; flag → campo marcado na linha da alocação (prioRodizio / prioRegiao). */
+function alocar1aOnda(cand, resultado, ocupado, outraFaixa, rotuloFn, flag, out){
+  cand.forEach(c=>{
+    const cfg = STATE.config.transportadoras.find(t=>t.nome===c.transportadora);
+    const un = STATE.config.unidades.find(u=>cfg && u.id===cfg.unidade) || STATE.config.unidades[0]; if(!un) return;
+    const disp = getDocasDisponiveisUnidade(un), dispSet = new Set(disp);
+    const faixa = []; if(cfg && cfg.docaIn>0 && cfg.docaFim>0){ for(let d=cfg.docaIn; d<=cfg.docaFim; d++) if(dispSet.has(d)) faixa.push(d); }
+    let docas = faixa.slice();
+    if(outraFaixa!==false || !faixa.length){
+      const emFaixa = new Set();
+      STATE.config.transportadoras.forEach(t=>{ if(t.unidade===un.id && t.docaIn>0 && t.docaFim>0) for(let d=t.docaIn; d<=t.docaFim; d++) emFaixa.add(d); });
+      docas = docas.concat(disp.filter(d=>!faixa.includes(d)).sort((a,b)=>(emFaixa.has(a)?1:0)-(emFaixa.has(b)?1:0)||a-b));
+    }
+    const doca = docas.find(d=>!ocupado.has(un.id+'|'+d+'|1'));
+    if(doca===undefined){ out.semOnda1++; return; }     // nenhuma doca livre na 1ª onda: segue na fila normal, com preferência
+    ocupado.add(un.id+'|'+doca+'|1');
+    const motivo = rotuloFn(c)+' — 1ª onda'+(faixa.includes(doca)?'':' em doca fora da faixa da transportadora');
+    const row = baseAlocRow(c, c.transportadora, 'OK', doca, motivo, 1); row[flag] = true;
+    resultado.push(row); out.ids.add(c.id); out.n++;
+  });
+}
+function aplicarPrioridadeRegiao(resultado, ocupado, jaIds){
+  const out = {ids:new Set(), n:0, semOnda1:0};
+  if(!prioRegiaoAtiva()) return out;
+  const P = prCfg();
+  const cand = STATE.cargas.filter(c=>!jaIds.has(c.id) && c.transportadora && prioRegiaoDaPlaca(c.placa).length)
+    .sort((x,y)=> prioridadeDaCarga(x)-prioridadeDaCarga(y) || menorPreRomaneio(x)-menorPreRomaneio(y));
+  alocar1aOnda(cand, resultado, ocupado, P.outraFaixa, c=>'Prioridade por região ('+prioRegiaoDaPlaca(c.placa).join(', ')+')', 'prioRegiao', out);
+  return out;
+}
+
+/* =========================================================
+   PRIORIDADE POR RODIZIO (Configurações › Prioridade por Rodizio)
+   STATE.config.prioRodizio = {ativo, outraFaixa, diaRef:'auto'|'1'..'5'|'nenhum', regioes:[nome]}  → Parâmetros (Firebase, não apagado pelo Novo dia)
+   Região de cada placa: STATE.prioReg (Tipo de Residência, DESCR/TERRITORIO) — o mesmo arquivo da Prioridade por região.
+   Placa do dia: último caractere da placa (dígito) conforme o calendário do rodízio de São Paulo
+     Seg 1 e 2 · Ter 3 e 4 · Qua 5 e 6 · Qui 7 e 8 · Sex 9 e 0 (sábado/domingo: sem rodízio).
+   Regra: placa do dia com carga em região de rodízio assume a 1ª onda, antes de qualquer outra regra
+   (só a base TS São Paulo vem antes; vem antes também da Prioridade por região).
+   ========================================================= */
+const RZ_DIAS = {1:{nome:'Segunda-feira', d:[1,2]}, 2:{nome:'Terça-feira', d:[3,4]}, 3:{nome:'Quarta-feira', d:[5,6]}, 4:{nome:'Quinta-feira', d:[7,8]}, 5:{nome:'Sexta-feira', d:[9,0]}};
+function rzCfg(){ const C = STATE.config; if(!C.prioRodizio || typeof C.prioRodizio!=='object') C.prioRodizio = {ativo:true, outraFaixa:true, diaRef:'auto', padrao:true, excluidas:[], regioes:[]}; const R = C.prioRodizio; if(!Array.isArray(R.regioes)) R.regioes = []; if(!Array.isArray(R.excluidas)) R.excluidas = []; if(R.padrao==null) R.padrao = true; if(R.diaRef==null) R.diaRef = 'auto'; return R; }
+/* Bairros abrangidos pelo rodízio (área de restrição de São Paulo). Parte dos bairros é só em parte interna da área;
+   o Tipo de Residência não distingue isso, então o bairro inteiro é considerado — desmarque na tabela o que não valer. */
+const RZ_BAIRROS = {
+  'Região Central': ['Sé','República','Bela Vista','Consolação','Liberdade','Santa Cecília','Higienópolis','Bom Retiro','Brás','Pari','Cambuci'],
+  'Zona Oeste': ['Pinheiros','Jardins','Itaim Bibi','Vila Olímpia','Perdizes','Pompeia','Barra Funda','Lapa','Alto de Pinheiros'],
+  'Zona Sul': ['Moema','Vila Mariana','Paraíso','Aclimação','Ipiranga','Vila Nova Conceição','Brooklin','Campo Belo','Saúde'],
+  'Zona Leste': ['Mooca','Belém','Tatuapé','Água Rasa']
+};
+function rzNormEsp(s){ return ' '+String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim()+' '; }
+const RZ_BAIRROS_N = [].concat.apply([], Object.keys(RZ_BAIRROS).map(g=>RZ_BAIRROS[g])).map(rzNormEsp);
+/* o nome da região do arquivo contém (como palavra inteira) um dos bairros da lista padrão? */
+function rzNaListaPadrao(nome){ const n = rzNormEsp(nome); return RZ_BAIRROS_N.some(b=>n.indexOf(b)>=0); }
+/* a região está no rodízio? (lista padrão ligada e não excluída) ou (marcada à mão) */
+function rzNoRodizio(nome){
+  const R = rzCfg(), k = prNorm(nome);
+  if(R.regioes.some(r=>prNorm(r)===k)) return true;
+  return R.padrao!==false && rzNaListaPadrao(nome) && !R.excluidas.some(r=>prNorm(r)===k);
+}
+function rzDiaSemanaBR(){
+  try{ const w = new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo', weekday:'short'}).format(new Date()); return {Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6}[w]; }
+  catch(e){ return new Date().getDay(); }
+}
+/* 1..5 = segunda a sexta; 0 = sem rodízio (fim de semana, feriado) */
+function rzDiaEfetivo(){
+  const ref = rzCfg().diaRef;
+  if(ref==='nenhum') return 0;
+  if(ref && ref!=='auto'){ const n = parseInt(ref,10); return RZ_DIAS[n] ? n : 0; }
+  const w = rzDiaSemanaBR(); return RZ_DIAS[w] ? w : 0;
+}
+function rzDigitosDoDia(){ const d = RZ_DIAS[rzDiaEfetivo()]; return d ? d.d.slice() : []; }
+function rzFinalPlaca(placa){ const k = placaKey(placa), ch = k.slice(-1); return /[0-9]/.test(ch) ? parseInt(ch,10) : null; }
+function rzPlacaDoDia(placa){ const f = rzFinalPlaca(placa); return f!=null && rzDigitosDoDia().indexOf(f)>=0; }
+function prioRodizioAtivo(){ const c = rzCfg(); return c.ativo!==false && (c.regioes.length>0 || c.padrao!==false) && rzDigitosDoDia().length>0; }
+/* regiões de rodízio (nome como marcado) em que a placa tem carga; [] se a regra está desligada, se não é a placa do dia ou se não está nessas regiões */
+function prioRodizioDaPlaca(placa){
+  if(!prioRodizioAtivo() || !STATE.prioReg || !STATE.prioReg.placas) return [];
+  if(!rzPlacaDoDia(placa)) return [];
+  const lst = STATE.prioReg.placas[placaKey(placa)]; if(!lst || !lst.length) return [];
+  return lst.filter(r=>rzNoRodizio(r));
+}
+function aplicarPrioridadeRodizio(resultado, ocupado, jaIds){
+  const out = {ids:new Set(), n:0, semOnda1:0};
+  if(!prioRodizioAtivo()) return out;
+  const R = rzCfg();
+  const cand = STATE.cargas.filter(c=>!jaIds.has(c.id) && c.transportadora && prioRodizioDaPlaca(c.placa).length)
+    .sort((x,y)=> prioridadeDaCarga(x)-prioridadeDaCarga(y) || menorPreRomaneio(x)-menorPreRomaneio(y));
+  alocar1aOnda(cand, resultado, ocupado, R.outraFaixa, c=>'Prioridade por Rodizio (final '+rzFinalPlaca(c.placa)+' · '+prioRodizioDaPlaca(c.placa).join(', ')+')', 'prioRodizio', out);
+  return out;
+}
+function rzCfgMudou(){
+  const R = rzCfg();
+  R.ativo = !!document.getElementById('rzAtivo').checked;
+  R.outraFaixa = !!document.getElementById('rzOutraFaixa').checked;
+  R.padrao = !!document.getElementById('rzPadrao').checked;
+  R.diaRef = document.getElementById('rzDiaRef').value || 'auto';
+  saveState(); rzRender();
+}
+function rzMarcar(nome, v){
+  const R = rzCfg(), k = prNorm(nome), pad = R.padrao!==false && rzNaListaPadrao(nome);
+  R.regioes = R.regioes.filter(r=>prNorm(r)!==k);
+  R.excluidas = R.excluidas.filter(r=>prNorm(r)!==k);
+  if(v){ if(!pad) R.regioes.push(nome); } else if(pad) R.excluidas.push(nome);
+  saveState(); rzRender();
+}
+function rzMarcarIdx(i, v){ const n = (window._rzLista||[])[i]; if(n!=null) rzMarcar(n, v); }
+function rzAddRegiao(){
+  const el = document.getElementById('rzNova'), n = prLimpaNome(el && el.value); if(!n) return;
+  rzMarcar(n, true); el.value = '';
+}
+function rzLimparSel(){ const R = rzCfg(); if(!R.regioes.length && R.padrao===false) return; if(!confirm('Desmarcar todas as regiões de rodízio (inclusive a lista padrão de bairros)?')) return; R.regioes = []; R.excluidas = []; R.padrao = false; saveState(); rzRender(); }
+async function rzInpArq(inp){
+  const f = inp.files && inp.files[0]; inp.value = ''; if(!f) return;
+  try{ prCarregarBuf(await f.arrayBuffer(), f.name); }catch(e){ console.error(e); toast('Não consegui ler "'+f.name+'": '+(e.message||e), 'err'); }
+}
+function rzDropArq(ev){
+  ev.preventDefault(); const z = document.getElementById('rzDrop'); if(z) z.classList.remove('drag');
+  const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0]; if(!f) return;
+  f.arrayBuffer().then(b=>prCarregarBuf(b, f.name)).catch(e=>{ console.error(e); toast('Não consegui ler "'+f.name+'": '+(e.message||e), 'err'); });
+}
+function rzAplicar(){
+  if(!(STATE.cargas||[]).length){ toast('Não há cargas consolidadas. Carregue os arquivos do dia e consolide antes.', 'err'); return; }
+  rodarAlocacao(); rzRender();
+}
+function rzRender(){
+  const tb = document.getElementById('rzRegTbody'); if(!tb) return;
+  const R = rzCfg();
+  const a = document.getElementById('rzAtivo'); if(a) a.checked = R.ativo!==false;
+  const o = document.getElementById('rzOutraFaixa'); if(o) o.checked = R.outraFaixa!==false;
+  const pd = document.getElementById('rzPadrao'); if(pd) pd.checked = R.padrao!==false;
+  const dr = document.getElementById('rzDiaRef'); if(dr) dr.value = (R.diaRef==null?'auto':String(R.diaRef));
+  /* calendário */
+  const ef = rzDiaEfetivo(), dig = rzDigitosDoDia();
+  const cal = document.getElementById('rzCalTbody');
+  if(cal) cal.innerHTML = [1,2,3,4,5].map(n=>{ const d = RZ_DIAS[n], hoje = n===ef;
+    return '<tr'+(hoje?' style="font-weight:700"':'')+'><td>'+d.nome+(hoje?' <span class="badge ok">dia do rodízio</span>':'')+'</td><td>'+d.d.join(' e ')+'</td></tr>'; }).join('');
+  const hj = document.getElementById('rzHoje');
+  if(hj){
+    const auto = (R.diaRef==null || R.diaRef==='auto');
+    hj.innerHTML = dig.length
+      ? 'Placas do dia: <b>final '+dig.join(' e ')+'</b> ('+RZ_DIAS[ef].nome+')'+(auto?'':' <span class="badge alert">dia de referência manual</span>')
+      : '<b>Hoje não há rodízio</b> ('+(R.diaRef==='nenhum'?'marcado como sem rodízio':'fim de semana')+') — a regra não prioriza nenhuma placa.'+(auto?'':' <span class="badge alert">dia de referência manual</span>');
+  }
+  const bt = document.getElementById('rzBairrosTxt');
+  if(bt) bt.innerHTML = Object.keys(RZ_BAIRROS).map(g=>'<b>'+g+':</b> '+RZ_BAIRROS[g].join(', ')+'.').join('<br>');
+  const D = STATE.prioReg, reg = (D && D.regioes) || {};
+  const info = document.getElementById('rzArq');
+  if(info) info.innerHTML = D ? 'Arquivo: <b>'+escAuto(D.nome)+'</b> — '+Object.keys(D.placas).length+' placa(s) em '+Object.keys(reg).length+' região(ões).' : 'Nenhum Tipo de Residência carregado hoje. Sem ele a regra não encontra placas.';
+  /* placas com carga hoje, por região (só as placas do dia entram em "do dia") */
+  const hoje = {}; const placasHoje = new Set((STATE.cargas||[]).map(c=>placaKey(c.placa)));
+  if(D) placasHoje.forEach(pk=>(D.placas[pk]||[]).forEach(r=>{ hoje[r] = (hoje[r]||0)+1; }));
+  const hojeDia = {}; if(D) placasHoje.forEach(pk=>{ if(rzPlacaDoDia(pk)) (D.placas[pk]||[]).forEach(r=>{ hojeDia[r] = (hojeDia[r]||0)+1; }); });
+  const nomes = {}; Object.keys(reg).forEach(r=>{ nomes[prNorm(r)] = r; }); R.regioes.forEach(r=>{ if(!nomes[prNorm(r)]) nomes[prNorm(r)] = r; });
+  const filtro = prNorm((document.getElementById('rzFiltro')||{}).value);
+  const lista = Object.values(nomes).filter(n=>!filtro || prNorm(n).indexOf(filtro)>=0)
+    .sort((x,y)=>(rzNoRodizio(y)?1:0)-(rzNoRodizio(x)?1:0) || x.localeCompare(y,'pt-BR'));
+  window._rzLista = lista;
+  const pega = (m,n)=> m[n]!=null ? m[n] : (Object.keys(m).find(r=>prNorm(r)===prNorm(n)) ? m[Object.keys(m).find(r=>prNorm(r)===prNorm(n))] : 0);
+  tb.innerHTML = lista.length ? lista.map((n,i)=>{
+    const on = rzNoRodizio(n), qa = pega(reg,n), h = pega(hoje,n), hd = pega(hojeDia,n);
+    return '<tr><td style="text-align:center"><input type="checkbox" '+(on?'checked':'')+' onchange="rzMarcarIdx('+i+', this.checked)"></td><td>'+escAuto(n)+(on?' <span class="badge ok">rodízio</span>'+(R.padrao!==false && rzNaListaPadrao(n)?' <span style="color:var(--text-2);font-size:11.5px">lista padrão</span>':''):'')+'</td><td>'+qa+'</td><td>'+h+(on && dig.length ? ' <span style="color:var(--text-2)">('+hd+' do dia)</span>' : '')+'</td></tr>';
+  }).join('') : '<tr><td colspan="4" style="color:var(--text-2)">'+(D||R.regioes.length ? 'Nenhuma região encontrada.' : 'Carregue o Tipo de Residência acima ou inclua uma região pelo nome.')+'</td></tr>';
+  /* resultado por placa */
+  const rt = document.getElementById('rzResTbody'), rd = document.getElementById('rzResDesc'); if(!rt) return;
+  const itens = (STATE.cargas||[]).map(c=>({c, regs:prioRodizioDaPlaca(c.placa)})).filter(x=>x.regs.length);
+  if(rd) rd.textContent = !(R.regioes.length || R.padrao!==false) ? 'Marque ao menos uma região de rodízio para a regra funcionar.' : (R.ativo===false ? 'Regra desligada: nenhuma placa é priorizada.' : (!dig.length ? 'Hoje não há rodízio: nenhuma placa é priorizada.' : ((STATE.cargas||[]).length ? itens.length+' carga(s) do dia com placa final '+dig.join(' ou ')+' em região de rodízio.' : 'Sem cargas no dia: consolide os arquivos para ver as placas.')));
+  rt.innerHTML = itens.length ? itens.map(x=>{
+    const al = (STATE.alocacao||[]).find(r=>r.cargaId===x.c.id);
+    const d = al ? pDoca(al) : null;
+    const st = !al ? '<span style="color:var(--text-2)">Alocação ainda não rodada</span>' : (al.onda===1 ? '<span class="badge ok">1ª onda'+(d!=null?' · doca '+d:'')+'</span>'+(al.prioRodizio?'':' <span style="color:var(--text-2)">(sem aplicar a regra — clique em “Aplicar”)</span>') : '<span class="badge alert">'+(al.onda||'—')+'ª onda'+(d!=null?' · doca '+d:'')+'</span> <span style="color:var(--text-2)">'+escAuto(al.motivo||'Clique em “Aplicar na alocação do dia”')+'</span>');
+    return '<tr><td class="mono">'+escAuto(x.c.placa)+'</td><td>'+rzFinalPlaca(x.c.placa)+'</td><td>'+escAuto(x.c.transportadora||'—')+'</td><td>'+escAuto(x.regs.join(' · '))+'</td><td>'+st+'</td></tr>';
+  }).join('') : '<tr><td colspan="5" style="color:var(--text-2)">Nenhuma placa do dia em região de rodízio.</td></tr>';
+}
+function prLerBuf(buf, nome){
+  if(typeof XLSX==='undefined') throw new Error('Leitor de Excel não carregou');
+  const wb = XLSX.read(buf, {type:'array'});
+  for(const sn of wb.SheetNames){
+    const ws = wb.Sheets[sn]; if(!ws || !ws['!ref']) continue;
+    try{ const r = XLSX.utils.decode_range(ws['!ref']); if(r.e.c>40){ r.e.c = 40; ws['!ref'] = XLSX.utils.encode_range(r); } }catch(e){}
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true});
+    for(let i=0;i<Math.min(rows.length,40);i++){
+      const ks = (rows[i]||[]).map(prNorm);
+      const cp = ks.indexOf('PLACA'); if(cp<0) continue;
+      let cr = ks.indexOf('DESCRTERRITORIO');
+      if(cr<0) cr = ks.findIndex(k=>k.indexOf('DESC')===0 && k.indexOf('TERRIT')>0);
+      if(cr<0) cr = ks.indexOf('REGIAO');
+      if(cr<0) continue;
+      const placas = {}, vis = {};
+      for(let j=i+1;j<rows.length;j++){
+        const r = rows[j]||[]; const pk = placaKey(r[cp]); if(pk.length<6) continue;
+        const reg = prLimpaNome(r[cr]); if(!reg) continue;
+        const kn = prNorm(reg); if(!kn) continue;
+        const l = placas[pk] || (placas[pk] = []);
+        if(!l.some(x=>prNorm(x)===kn)) l.push(vis[kn] || (vis[kn] = reg));
+      }
+      const regioes = {}; Object.keys(placas).forEach(pk=>placas[pk].forEach(rg=>{ regioes[rg] = (regioes[rg]||0)+1; }));
+      return {nome, placas, regioes, aba:sn};
+    }
+  }
+  return null;
+}
+function prCarregarBuf(buf, nome, silencioso){
+  const r = prLerBuf(buf, nome);
+  if(!r){ if(!silencioso) toast('Não achei as colunas Placa e DESCR/TERRITORIO em "'+nome+'".', 'err'); return false; }
+  STATE.prioReg = {nome:r.nome, placas:r.placas, regioes:r.regioes};
+  saveState();
+  if(!silencioso) toast('Tipo de Residência lido: '+Object.keys(r.placas).length+' placa(s) em '+Object.keys(r.regioes).length+' região(ões).', 'ok');
+  else toast('Prioridade por região: '+Object.keys(r.placas).length+' placa(s) e '+Object.keys(r.regioes).length+' região(ões) lidas do Tipo de Residência.', 'ok');
+  try{ prRender(); }catch(e){}
+  try{ rzRender(); }catch(e){}
+  return true;
+}
+async function prInpArq(inp){
+  const f = inp.files && inp.files[0]; inp.value = ''; if(!f) return;
+  try{ prCarregarBuf(await f.arrayBuffer(), f.name); }catch(e){ console.error(e); toast('Não consegui ler "'+f.name+'": '+(e.message||e), 'err'); }
+}
+function prDropArq(ev){
+  ev.preventDefault(); const z = document.getElementById('prDrop'); if(z) z.classList.remove('drag');
+  const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0]; if(!f) return;
+  f.arrayBuffer().then(b=>prCarregarBuf(b, f.name)).catch(e=>{ console.error(e); toast('Não consegui ler "'+f.name+'": '+(e.message||e), 'err'); });
+}
+function prCfgMudou(){
+  const P = prCfg();
+  P.ativo = !!document.getElementById('prAtivo').checked;
+  P.outraFaixa = !!document.getElementById('prOutraFaixa').checked;
+  saveState(); prRender();
+}
+function prMarcar(nome, v){
+  const P = prCfg(), k = prNorm(nome);
+  P.regioes = P.regioes.filter(r=>prNorm(r)!==k);
+  if(v) P.regioes.push(nome);
+  saveState(); prRender();
+}
+function prMarcarIdx(i, v){ const n = (window._prLista||[])[i]; if(n!=null) prMarcar(n, v); }
+function prAddRegiao(){
+  const el = document.getElementById('prNova'), n = prLimpaNome(el && el.value); if(!n) return;
+  prMarcar(n, true); el.value = '';
+}
+function prLimparSel(){ const P = prCfg(); if(!P.regioes.length) return; if(!confirm('Desmarcar todas as regiões prioritárias?')) return; P.regioes = []; saveState(); prRender(); }
+function prAplicar(){
+  if(!(STATE.cargas||[]).length){ toast('Não há cargas consolidadas. Carregue os arquivos do dia e consolide antes.', 'err'); return; }
+  rodarAlocacao(); prRender();
+}
+function prRender(){
+  const tb = document.getElementById('prRegTbody'); if(!tb) return;
+  const P = prCfg();
+  const a = document.getElementById('prAtivo'); if(a) a.checked = P.ativo!==false;
+  const o = document.getElementById('prOutraFaixa'); if(o) o.checked = P.outraFaixa!==false;
+  const D = STATE.prioReg, reg = (D && D.regioes) || {};
+  const info = document.getElementById('prArq');
+  if(info) info.innerHTML = D ? 'Arquivo: <b>'+escAuto(D.nome)+'</b> — '+Object.keys(D.placas).length+' placa(s) em '+Object.keys(reg).length+' região(ões).' : 'Nenhum Tipo de Residência carregado hoje. Sem ele a regra não encontra placas.';
+  /* placas com carga hoje, por região */
+  const hoje = {}; const placasHoje = new Set((STATE.cargas||[]).map(c=>placaKey(c.placa)));
+  if(D) placasHoje.forEach(pk=>(D.placas[pk]||[]).forEach(r=>{ hoje[r] = (hoje[r]||0)+1; }));
+  const nomes = {}; Object.keys(reg).forEach(r=>{ nomes[prNorm(r)] = r; }); P.regioes.forEach(r=>{ if(!nomes[prNorm(r)]) nomes[prNorm(r)] = r; });
+  const sel = new Set(P.regioes.map(prNorm));
+  const filtro = prNorm((document.getElementById('prFiltro')||{}).value);
+  const lista = Object.values(nomes).filter(n=>!filtro || prNorm(n).indexOf(filtro)>=0)
+    .sort((x,y)=>(sel.has(prNorm(y))?1:0)-(sel.has(prNorm(x))?1:0) || x.localeCompare(y,'pt-BR'));
+  window._prLista = lista;
+  tb.innerHTML = lista.length ? lista.map((n,i)=>{
+    const on = sel.has(prNorm(n)), qa = reg[n]!=null ? reg[n] : (Object.keys(reg).find(r=>prNorm(r)===prNorm(n)) ? reg[Object.keys(reg).find(r=>prNorm(r)===prNorm(n))] : 0);
+    const hj = hoje[n]!=null ? hoje[n] : (Object.keys(hoje).find(r=>prNorm(r)===prNorm(n)) ? hoje[Object.keys(hoje).find(r=>prNorm(r)===prNorm(n))] : 0);
+    return '<tr><td style="text-align:center"><input type="checkbox" '+(on?'checked':'')+' onchange="prMarcarIdx('+i+', this.checked)"></td><td>'+escAuto(n)+(on?' <span class="badge ok">1ª onda</span>':'')+'</td><td>'+qa+'</td><td>'+hj+'</td></tr>';
+  }).join('') : '<tr><td colspan="4" style="color:var(--text-2)">'+(D||P.regioes.length ? 'Nenhuma região encontrada.' : 'Carregue o Tipo de Residência acima ou inclua uma região pelo nome.')+'</td></tr>';
+  /* resultado por placa */
+  const rt = document.getElementById('prResTbody'), rd = document.getElementById('prResDesc'); if(!rt) return;
+  const itens = (STATE.cargas||[]).map(c=>({c, regs:prioRegiaoDaPlaca(c.placa)})).filter(x=>x.regs.length);
+  if(rd) rd.textContent = !P.regioes.length ? 'Marque ao menos uma região para a regra funcionar.' : (P.ativo===false ? 'Regra desligada: nenhuma placa é priorizada.' : ((STATE.cargas||[]).length ? itens.length+' carga(s) do dia em região prioritária.' : 'Sem cargas no dia: consolide os arquivos para ver as placas.'));
+  rt.innerHTML = itens.length ? itens.map(x=>{
+    const al = (STATE.alocacao||[]).find(r=>r.cargaId===x.c.id);
+    const d = al ? pDoca(al) : null;
+    const st = !al ? '<span style="color:var(--text-2)">Alocação ainda não rodada</span>' : (al.onda===1 ? '<span class="badge ok">1ª onda'+(d!=null?' · doca '+d:'')+'</span>'+(al.prioRegiao?'':' <span style="color:var(--text-2)">(sem aplicar a regra — clique em “Aplicar”)</span>') : '<span class="badge alert">'+(al.onda||'—')+'ª onda'+(d!=null?' · doca '+d:'')+'</span> <span style="color:var(--text-2)">'+escAuto(al.motivo||'Clique em “Aplicar na alocação do dia”')+'</span>');
+    return '<tr><td class="mono">'+escAuto(x.c.placa)+'</td><td>'+escAuto(x.c.transportadora||'—')+'</td><td>'+escAuto(x.regs.join(' · '))+'</td><td>'+st+'</td></tr>';
+  }).join('') : '<tr><td colspan="4" style="color:var(--text-2)">Nenhuma placa do dia em região prioritária.</td></tr>';
+}
 function menorPreRomaneio(carga){
   const nums = carga.pres.map(p=>parseInt(p.preRomaneio)||0);
   return nums.length ? Math.min(...nums) : 0;
@@ -3453,9 +3867,13 @@ function rodarAlocacao(silencioso){
   /* BASE TS SÃO PAULO: as placas que constam na base já têm doca/onda definidas (as TS são as primeiras a
      entrar na doca). Essas cargas ficam EXATAMENTE nessa doca/onda e o restante é alocado em volta. */
   const tsPlano = aplicarDocasTS(resultado, ocupado);
+  /* PRIORIDADE POR REGIÃO (Configurações): placas em região prioritária assumem a 1ª onda, antes de qualquer outra regra */
+  /* PRIORIDADE POR RODIZIO (Configurações): placa do dia do rodízio em região de rodízio assume a 1ª onda — vem antes da prioridade por região */
+  const rzPlano = aplicarPrioridadeRodizio(resultado, ocupado, tsPlano.ids);
+  const prioPlano = aplicarPrioridadeRegiao(resultado, ocupado, new Set([...tsPlano.ids, ...rzPlano.ids]));
   const porTransp = {};
   STATE.cargas.forEach(c=>{
-    if(tsPlano.ids.has(c.id)) return;
+    if(tsPlano.ids.has(c.id) || rzPlano.ids.has(c.id) || prioPlano.ids.has(c.id)) return;
     const key = c.transportadora || '__SEM_TRANSPORTADORA__';
     if(!porTransp[key]) porTransp[key] = [];
     porTransp[key].push(c);
@@ -3489,10 +3907,10 @@ function rodarAlocacao(silencioso){
       cargas.forEach(c=> resultado.push(baseAlocRow(c, nomeTransp, 'ALTERAR', null, semFaixa ? 'Transportadora sem faixa de doca — preencha a faixa em Configurações › Parâmetros e rode a alocação' : 'Nenhuma doca disponível na faixa parametrizada para essa transportadora')));
       return;
     }
-    cargas.forEach(c=> fila.push({c, nomeTransp, docasFaixa, un: cfg.unidade}));
+    cargas.forEach(c=> fila.push({c, nomeTransp, docasFaixa, un: cfg.unidade, prio: prioRodizioDaPlaca(c.placa).length ? 2 : (prioRegiaoDaPlaca(c.placa).length ? 1 : 0)}));
   });
 
-  fila.sort((x,y)=> prioridadeDaCarga(x.c)-prioridadeDaCarga(y.c) || x.nomeTransp.localeCompare(y.nomeTransp) || menorPreRomaneio(x.c)-menorPreRomaneio(y.c));
+  fila.sort((x,y)=> (y.prio||0)-(x.prio||0) || prioridadeDaCarga(x.c)-prioridadeDaCarga(y.c) || x.nomeTransp.localeCompare(y.nomeTransp) || menorPreRomaneio(x.c)-menorPreRomaneio(y.c));
   fila.forEach(it=>{
     for(let onda=1; onda<=500; onda++){
       const doca = it.docasFaixa.find(d=>!ocupado.has(it.un+'|'+d+'|'+onda));
@@ -3535,7 +3953,7 @@ function rodarAlocacao(silencioso){
   STATE.alocacao = resultado;
   saveState();
   atualizarTodasAsAbas();
-  const msgAloc = 'Alocação recalculada: '+resultado.length+' carga(s) processada(s)'+(tsPlano.n?' — '+tsPlano.n+' com doca/onda fixada pela base TS':'')+'.'
+  const msgAloc = 'Alocação recalculada: '+resultado.length+' carga(s) processada(s)'+(tsPlano.n?' — '+tsPlano.n+' com doca/onda fixada pela base TS':'')+(rzPlano.n?' — '+rzPlano.n+' placa(s) na 1ª onda por rodízio':'')+(prioPlano.n?' — '+prioPlano.n+' placa(s) na 1ª onda por prioridade de região':'')+'.'
     + (nCompactadas ? ' '+nCompactadas+' carga(s) subiram para ondas anteriores com doca livre (otimização de ondas).' : '')
     + (nDocaLivre ? ' '+nDocaLivre+' carga(s) de transportadora sem faixa foram alocadas em docas livres (confira; o ideal é preencher a faixa em Configurações › Parâmetros).' : '')
     + (transpCriadas.length ? ' Transportadora(s) sem faixa de docas: '+transpCriadas.join(', ')+'.' : '');
@@ -8395,13 +8813,22 @@ window.pdCopiar = function(){
 };
 window.pdImprimir = function(){
   if(!temDados()){ say('Nada para imprimir.','err'); return; }
-  var html = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>PAINEL DIARIO</title><style>@page{size:A4 portrait;margin:8mm}html,body{margin:0;background:#fff;color:#000;font-family:Calibri,Carlito,Arial,sans-serif}'+
+  /* Mesmo padrão da Saída de Veículos CD: página A4 retrato com margem 0 (o navegador não imprime URL/data/título)
+     e as margens "de verdade" dentro do conteúdo (linhas-espaçador no topo e no rodapé, repetidas em cada página). */
+  var n = GRADE.cols.length;
+  var tab = pdHtml(GRADE).replace('<tbody>', '<thead><tr class="sp"><td colspan="' + n + '"></td></tr></thead><tfoot><tr class="sp"><td colspan="' + n + '"></td></tr></tfoot><tbody>');
+  var html = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>PAINEL DIARIO</title><style>@page{size:A4 portrait;margin:0}html,body{margin:0;padding:0 8mm;background:#fff;color:#000;font-family:Calibri,Carlito,Arial,sans-serif}'+
     '.pd-tab{border-collapse:collapse;table-layout:fixed;width:100%;font-size:11pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}.pd-tab td{padding:0 2px;text-align:center;white-space:nowrap;overflow:hidden;border:0;line-height:1.1}'+
-    '.pd-tab td.pdh{background:#000;color:#fff;font-weight:700}.pd-tab td.pdt{font-size:20pt;font-weight:700}.pd-tab tr{page-break-inside:avoid}</style></head><body>'+pdHtml(GRADE)+'</body></html>';
-  var fr = document.createElement('iframe'); fr.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
-  document.body.appendChild(fr);
-  var d = fr.contentWindow.document; d.open(); d.write(html); d.close();
-  setTimeout(function(){ fr.contentWindow.focus(); fr.contentWindow.print(); setTimeout(function(){ fr.remove(); }, 60000); }, 500);
+    '.pd-tab td.pdh{background:#000;color:#fff;font-weight:700}.pd-tab td.pdt{font-size:20pt;font-weight:700}.pd-tab tr{page-break-inside:avoid}.pd-tab thead{display:table-header-group}.pd-tab tfoot{display:table-footer-group}'+
+    '.pd-tab tr.sp td{height:8mm;padding:0}</style></head><body>'+tab+'</body></html>';
+  var w = null; try{ w = window.open('','_blank'); }catch(e){}
+  if(w){ w.document.open(); w.document.write(html); w.document.close(); w.focus(); setTimeout(function(){ w.print(); }, 500); }
+  else{
+    var fr = document.createElement('iframe'); fr.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    document.body.appendChild(fr);
+    var d = fr.contentWindow.document; d.open(); d.write(html); d.close();
+    setTimeout(function(){ fr.contentWindow.focus(); fr.contentWindow.print(); setTimeout(function(){ fr.remove(); }, 60000); }, 500);
+  }
 };
 
 /* ---------- tela ---------- */
