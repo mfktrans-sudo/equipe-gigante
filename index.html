@@ -568,9 +568,11 @@
   <button class="subtab-btn active" data-sub="parametros" onclick="switchTab('parametros')">Parâmetros</button>
   <button class="subtab-btn" data-sub="cadastro" onclick="switchTab('cadastro')">Cadastro de Placas</button>
   <button class="subtab-btn" data-sub="prioregiao" onclick="switchTab('prioregiao')">Prioridade por região</button>
+  <button class="subtab-btn" data-sub="priorodizio" onclick="switchTab('priorodizio')">Prioridade por Rodizio</button>
   <button class="subtab-btn" data-sub="backup" onclick="switchTab('backup')">Backup &amp; Upload</button>
   <button class="subtab-btn" data-sub="abas" onclick="switchTab('abas')">Abas Visíveis</button>
   <button class="subtab-btn" data-sub="trava" onclick="switchTab('trava')">Trava da operação</button>
+  <button class="subtab-btn" data-sub="admins" onclick="switchTab('admins')">Administradores</button>
 </div>
 </div><!-- /#navFixo -->
 
@@ -830,9 +832,8 @@
         <select id="pOnda" onchange="renderPainel()"></select>
         <button class="primary" onclick="rodarAlocacao()">Rodar alocação ▶</button>
         <button class="primary" onclick="otimizarOndas()" title="Sobe para a onda anterior toda carga que tenha doca livre numa onda menor (ex.: 3ª onda → 2ª onda). Mantém ajustes manuais e cargas da base TS.">⚡ Otimizar ondas</button>
-        <button class="primary" onclick="exportarListaOndasExcel()">⬇ Gerar Excel da lista</button>
-        <select id="etqPorFolha" title="Quantas etiquetas por folha A4"><option value="2" selected>2 etiquetas por folha</option><option value="1">1 etiqueta por folha</option></select>
-        <button class="primary" onclick="etqBaixarWord()" title="Word A4 com PRÉ, ONDA (doca-onda) e PLACA das cargas da 3ª onda em diante, ordenado por doca">🖨 Etiquetas Word (3ª onda+)</button>
+        <button class="primary" onclick="exportarListaOndasExcel()">⬇ Baixar Excel</button>
+        <button class="primary" onclick="pImprimirLista(this)">Imprimir</button>
       </div>
     </div>
     <div class="grid cols-4" id="pStats"></div>
@@ -867,7 +868,8 @@
     <div class="panel-head"><div><h2>Entrada de Veículos CD</h2>
       <div class="desc">Suba a <b>PROGRAMAÇÃO</b> do dia. A ferramenta cria <b>uma folha por placa</b>, em ordem alfabética, já com transportador, motorista, RG, CPF, placa e data. O <b>nº da carga</b> (o mesmo da lista de carga) e a <b>doca</b> (campo 1°) são preenchidos com a alocação desta ferramenta quando a placa já tem doca. Mesma placa em mais de um bloco (ex.: TV CENTRO) gera uma folha só.</div></div>
       <div id="ffBotoes" style="display:none;gap:8px;flex-wrap:wrap;">
-        <button class="primary" onclick="ffBaixar()">⬇ Baixar folhas (.xlsx)</button>
+        <button class="primary" onclick="ffBaixar()">⬇ Baixar Excel</button>
+        <button class="primary" onclick="padImprimir('ffPanelLista','Entrada de Veículos CD',this)">Imprimir</button>
         <button class="primary" id="ffBtnZip" style="display:none" onclick="ffBaixarTodos()">⬇ Baixar todos (.zip)</button>
         <button class="danger" onclick="ffLimpar()">Remover arquivo</button>
         <button class="danger" id="ffBtnTodos" style="display:none" onclick="ffLimpar(true)">Remover todos</button>
@@ -910,6 +912,7 @@
         <textarea id="iscaTexto" rows="6" style="width:100%" placeholder="PRIORIDADE NA ROTEIRIZAÇÃO — o que for digitado aqui tem preferência sobre a distribuição automática do arquivo.&#10;&#10;TBA4J30&#10;EWJ6E19&#10;doca 129&#10;150 2   (= doca 150, 2ª onda)"></textarea>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
           <button class="primary" onclick="adicionarIscas()">Vincular iscas</button>
+          <button onclick="iscaAtualizar()" title="Refaz a distribuição das iscas do arquivo respeitando as prioridades (placas/docas) cadastradas e atualiza os vínculos com a alocação atual">↻ Atualizar</button>
           <button class="danger" onclick="limparIscas()">Limpar todas</button></div>
         <div id="iscaPrioBox" style="margin-top:12px;"></div>
         <label style="margin-top:14px;display:block;">Ou suba um arquivo com as placas / docas</label>
@@ -945,7 +948,7 @@
     <div class="panel-head"><div><h2>Etiqueta Zebra</h2><div class="desc">Cada etiqueta é dividida ao meio por uma linha de corte/dobra e leva <b>2 cargas diferentes</b> (metade de cima e de baixo), cada uma com <b>nome do cliente</b>, <b>PRÉ</b> e <b>DOCA - onda</b> (1ª, 2ª, 3ª, 4ª…). Padrão: 100 × 100 mm (10 × 10 cm), igual ao driver Zebra TP.</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <button class="primary" onclick="iscaBaixarWord()">⬇ Baixar Word (.docx) 10×10 cm</button>
-        <button class="primary" onclick="iscaImprimir()">🖨 Imprimir / salvar PDF</button></div></div>
+        <button class="primary" onclick="iscaImprimir()">Imprimir</button></div></div>
     <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
       <div><label>Largura (mm)</label><input id="iscaLarg" type="number" min="30" max="300" style="width:90px" onchange="iscaSalvarCfg()"></div>
       <div><label>Altura (mm)</label><input id="iscaAlt" type="number" min="30" max="400" style="width:90px" onchange="iscaSalvarCfg()"></div>
@@ -1019,6 +1022,7 @@
       <div><h2>Formulários de saída</h2><div class="desc">Um formulário por veículo. Clique numa linha para visualizar; imprima um ou todos (na janela de impressão do navegador também dá para salvar em PDF).</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <input id="csFiltro" placeholder="Buscar placa ou carga..." style="width:200px;" oninput="csRender()">
+        <button class="primary" onclick="padExcel('csTab','Saida de Veiculos')">⬇ Baixar Excel</button>
         <button class="primary" onclick="csImprimirTodos()">Imprimir todos</button>
       </div>
     </div>
@@ -1106,7 +1110,8 @@
       <div><h2>Protocolo de Bancada</h2>
         <div class="desc"><b>Histórico de Bancada LV</b> — usado na bancada para marcar onde cada carga foi embalada (linha vermelha). A ferramenta preenche <b>DOCA CAJ-1</b>, <b>PRÉ- CAJ-33</b>, <b>PRÉ- CAJ-05</b> e <b>PRÉ- CAJ-D0</b> com as mesmas cargas da <b>Lista de Carga</b> (ordem: onda &gt; doca). O relatório tem 50 cargas por bloco: da 1ª à 50ª ficam no bloco da esquerda e, a partir da 51ª, a ferramenta continua a sequência no bloco da direita (são duas páginas do mesmo relatório). Passou de 100 cargas, o Excel ganha uma nova aba com o mesmo layout. As colunas 33 / 05 / D0 saem em branco, para marcação à mão.</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        <button class="primary" onclick="protoBaixarHistorico()">📥 Gerar Histórico de Bancada (Excel)</button>
+        <button class="primary" onclick="protoBaixarHistorico()">⬇ Baixar Excel</button>
+        <button class="primary" onclick="protoImprimir(this)">Imprimir</button>
       </div>
     </div>
     <div id="protoConteudo"></div>
@@ -1163,7 +1168,7 @@
       </div>
     </details>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="primary" onclick="relImprimir()">🖨 Imprimir / salvar PDF</button>
+      <button class="primary" onclick="relImprimir()">Imprimir</button>
       <button class="primary" onclick="relBaixarWord()">⬇ Baixar Word (.docx)</button>
       <button class="primary" onclick="relBaixarExcel('abas')" title="Cada placa numa aba do Excel, pronta para imprimir individualmente">⬇ Excel — uma aba por placa</button>
       <button class="primary" onclick="relBaixarExcel('unica')" title="Todas as cargas numa planilha só, uma por página">⬇ Excel — planilha única</button>
@@ -1181,7 +1186,9 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <select id="ofdModo" onchange="renderOndasFora()" title="Quais ondas entram nas etiquetas"><option value="3+" selected>3ª onda em diante</option><option value="3">Somente a 3ª onda</option></select>
         <select id="ofdPorFolha" title="Quantas etiquetas por folha A4"><option value="2" selected>2 etiquetas por folha</option><option value="1">1 etiqueta por folha</option></select>
-        <button class="primary" onclick="ofdBaixarWord()" title="Baixa o Word A4 pronto para impressão">🖨 Baixar Word (A4)</button>
+        <button class="primary" onclick="ofdBaixarWord()" title="Baixa o Word A4 pronto para impressão">⬇ Baixar Word (A4)</button>
+        <button class="primary" onclick="padExcel('ofdTabela','Ondas Fora da doca')">⬇ Baixar Excel</button>
+        <button class="primary" onclick="padImprimir('ofdTabela','Ondas Fora da doca',this)">Imprimir</button>
       </div>
     </div>
     <div class="grid cols-4" id="ofdStats"></div>
@@ -1199,7 +1206,8 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <input type="file" id="prFile" accept=".xls,.xlsx,.txt,.csv,.tsv" multiple style="display:none" onchange="prodAdd(this.files);this.value='';">
         <button class="primary" onclick="document.getElementById('prFile').click()">⬆ Carregar relatório</button>
-        <button onclick="prodExcel()">⬇ Excel do ranking</button>
+        <button class="primary" onclick="prodExcel()">⬇ Baixar Excel</button>
+        <button class="primary" onclick="padImprimir('prBlocos','Produtividade',this)">Imprimir</button>
         <button class="danger" onclick="prodLimpar()">Limpar dados</button>
       </div>
     </div>
@@ -1263,7 +1271,7 @@
         <button class="primary" onclick="pdBaixarExcel()">⬇ Baixar Excel</button>
         <button onclick="pdBaixarPNG()">🖼 Baixar imagem</button>
         <button onclick="pdCopiar()">📋 Copiar imagem</button>
-        <button onclick="pdImprimir()">🖨 Imprimir</button>
+        <button class="primary" onclick="pdImprimir()">Imprimir</button>
         <button class="danger small" onclick="pdLimpar()">Limpar Linha</button>
       </div>
     </div>
@@ -1300,6 +1308,71 @@
   </div>
 </div>
 
+<!-- ================= CONFIG: PRIORIDADE POR RODIZIO ================= -->
+<div class="view" id="view-priorodizio">
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>Prioridade por Rodizio</h2>
+        <div class="desc">Regra: a <b>placa que tiver carga em uma das regiões de rodízio marcadas abaixo e for a placa do dia</b> (final da placa conforme o calendário do rodízio de São Paulo) <b>assume a 1ª onda</b>, independente das outras regras (prioridade da transportadora, ordem da fila, otimização de ondas e Prioridade por região). A região de cada placa vem do <b>Tipo de Residência</b> (coluna <b>DESCR/TERRITORIO</b>). Placas fixadas pela base TS São Paulo continuam na doca/onda da base.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;font-size:12.5px;margin:0;"><input type="checkbox" id="rzAtivo" onchange="rzCfgMudou()"> Regra ativa</label>
+        <label style="display:inline-flex;gap:6px;align-items:center;font-size:12.5px;margin:0;opacity:.75;"><input type="checkbox" id="rzOutraFaixa" disabled> A 1ª onda sempre respeita o leque de docas cadastrado da transportadora</label>
+      </div>
+    </div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;margin-top:6px;">
+      <div class="table-wrap" style="min-width:300px;"><table><thead><tr><th>Dia da semana</th><th>Placas (final)</th></tr></thead><tbody id="rzCalTbody"></tbody></table></div>
+      <div style="flex:1;min-width:260px;">
+        <label style="font-size:12.5px;display:block;margin-bottom:4px;">Dia de referência do rodízio</label>
+        <select id="rzDiaRef" onchange="rzCfgMudou()" style="min-width:230px;">
+          <option value="auto">Automático (dia de hoje — horário de Brasília)</option>
+          <option value="1">Segunda-feira (finais 1 e 2)</option>
+          <option value="2">Terça-feira (finais 3 e 4)</option>
+          <option value="3">Quarta-feira (finais 5 e 6)</option>
+          <option value="4">Quinta-feira (finais 7 e 8)</option>
+          <option value="5">Sexta-feira (finais 9 e 0)</option>
+          <option value="nenhum">Sem rodízio hoje (feriado)</option>
+        </select>
+        <div class="desc" style="margin-top:6px;max-width:none;">Use outro dia quando a operação for montada na véspera para a saída do dia seguinte, ou “Sem rodízio” em feriado. Volte para “Automático” depois.</div>
+        <div id="rzHoje" style="margin-top:10px;font-size:13px;"></div>
+      </div>
+    </div>
+    <div class="dropzone" id="rzDrop" style="margin-top:12px;" onclick="document.getElementById('rzInp').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="rzDropArq(event)">
+      <span class="k">Clique ou arraste o Tipo de Residência aqui</span>.xlsx / .xlsm — precisa das colunas Placa e DESCR/TERRITORIO (é o mesmo arquivo da Prioridade por região; também é lido quando solto no Upload &amp; Consolidação)
+    </div>
+    <input type="file" id="rzInp" multiple accept=".xlsx,.xlsm,.xls,.xlsb" style="display:none" onchange="rzInpArq(this)">
+    <div id="rzArq" class="desc" style="margin-top:8px;max-width:none;"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>Regiões de rodízio</h2>
+        <div class="desc">Já vem pré-definida com os <b>bairros abrangidos pelo rodízio</b> (lista abaixo): toda região do Tipo de Residência cujo nome contenha um desses bairros entra automaticamente. Você pode marcar ou desmarcar regiões à mão e incluir outras pelo nome; as escolhas ficam salvas nos Parâmetros e valem nos próximos dias. Alguns bairros só valem na parte interna da área (Lapa, Alto de Pinheiros, Campo Belo, Saúde, Tatuapé, Água Rasa): o arquivo não distingue isso, então desmarque a região se ela ficar fora.</div>
+        <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;font-size:12.5px;margin:8px 0 0;"><input type="checkbox" id="rzPadrao" onchange="rzCfgMudou()"> Usar a lista padrão de bairros do rodízio</label>
+        <div class="desc" style="max-width:none;margin-top:6px;" id="rzBairrosTxt"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input id="rzFiltro" placeholder="Buscar região..." style="width:180px;" oninput="rzRender()">
+        <input id="rzNova" placeholder="Incluir região pelo nome" style="width:210px;" onkeydown="if(event.key==='Enter')rzAddRegiao()">
+        <button class="small" onclick="rzAddRegiao()">+ Incluir</button>
+        <button class="small" onclick="rzLimparSel()">Desmarcar todas</button>
+      </div>
+    </div>
+    <div class="table-wrap" style="max-height:380px;overflow-y:auto;"><table><thead><tr><th style="width:90px">Rodízio</th><th>Região (DESCR/TERRITORIO)</th><th>Placas no arquivo</th><th>Placas com carga hoje</th></tr></thead><tbody id="rzRegTbody"></tbody></table></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>Placas do dia na 1ª onda por rodízio</h2>
+        <div class="desc" id="rzResDesc">Cargas do dia cuja placa é a do rodízio e está em região de rodízio, e como ficaram na alocação.</div>
+      </div>
+      <button class="primary" onclick="rzAplicar()" title="Recalcula a alocação do dia aplicando a regra">Aplicar na alocação do dia</button>
+    </div>
+    <div class="table-wrap" style="max-height:360px;overflow-y:auto;"><table><thead><tr><th>Placa</th><th>Final</th><th>Transportadora</th><th>Região(ões) de rodízio</th><th>Alocação atual</th></tr></thead><tbody id="rzResTbody"></tbody></table></div>
+  </div>
+</div>
+
 <!-- ================= CONFIG: PRIORIDADE POR REGIÃO ================= -->
 <div class="view" id="view-prioregiao">
   <div class="panel">
@@ -1309,14 +1382,14 @@
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;font-size:12.5px;margin:0;"><input type="checkbox" id="prAtivo" onchange="prCfgMudou()"> Regra ativa</label>
-        <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;font-size:12.5px;margin:0;" title="Se todas as docas da faixa da transportadora já estão ocupadas na 1ª onda, usa uma doca livre da unidade (fora da faixa) para garantir a 1ª onda. Desmarcado: a carga respeita a faixa e pode ir para a 2ª onda."><input type="checkbox" id="prOutraFaixa" onchange="prCfgMudou()"> Garantir 1ª onda usando doca de outra faixa se a da transportadora estiver cheia</label>
+        <label style="display:inline-flex;gap:6px;align-items:center;font-size:12.5px;margin:0;opacity:.75;"><input type="checkbox" id="prOutraFaixa" disabled> A 1ª onda sempre respeita o leque de docas cadastrado da transportadora</label>
       </div>
     </div>
     <div class="dropzone" id="prDrop" onclick="document.getElementById('prInp').click()"
          ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="prDropArq(event)">
-      <span class="k">Clique ou arraste o Tipo de Residência aqui</span>.xlsx / .xlsm — precisa das colunas Placa e DESCR/TERRITORIO (também é lido quando o arquivo é solto no Upload &amp; Consolidação)
+      <span class="k">Clique ou arraste o Tipo de Residência aqui</span>.xlsx / .xlsm — pode enviar vários arquivos (são somados) — precisa das colunas Placa e DESCR/TERRITORIO (também é lido quando o arquivo é solto no Upload &amp; Consolidação)
     </div>
-    <input type="file" id="prInp" accept=".xlsx,.xlsm,.xls,.xlsb" style="display:none" onchange="prInpArq(this)">
+    <input type="file" id="prInp" multiple accept=".xlsx,.xlsm,.xls,.xlsb" style="display:none" onchange="prInpArq(this)">
     <div id="prArq" class="desc" style="margin-top:8px;max-width:none;"></div>
   </div>
 
@@ -1359,6 +1432,14 @@
       <button class="primary small" id="tvSalvar" onclick="gdnTravaSalvar()">Salvar</button>
     </div>
     <div id="tvInfo" style="margin-top:10px;font-size:12.5px;color:var(--text-2);"></div>
+  </div>
+</div>
+
+<div class="view" id="view-admins">
+  <div class="panel">
+    <div class="panel-head"><div><h2>Administradores</h2>
+      <div class="desc">Só administradores podem aceitar um arquivo como novo padrão do validador de arquivos. O administrador é identificado pelo e-mail do login no Firebase: cadastre aqui o e-mail de cada um (o mesmo e-mail que ele usa para entrar na ferramenta). Não há senha separada.</div></div></div>
+    <div id="admBody"></div>
   </div>
 </div>
 
@@ -1857,7 +1938,7 @@ function toast(msg, type){
 /* =========================================================
    NAVEGAÇÃO
    ========================================================= */
-const CFG_SUBS=['parametros','cadastro','prioregiao','backup','abas','trava'];
+const CFG_SUBS=['parametros','cadastro','prioregiao','priorodizio','backup','abas','trava','admins'];
 let _cfgSubAtual='parametros';
 function switchTab(tab){
   if(tab==='config') tab=_cfgSubAtual;
@@ -1874,6 +1955,7 @@ function switchTab(tab){
   if(tab==='parametros') renderParametros();
   if(tab==='cadastro') renderCadastro();
   if(tab==='prioregiao') prRender();
+  if(tab==='priorodizio') rzRender();
   if(tab==='upload') { renderConsolidado(); renderOrfaos(); try{ renderFluxo(); }catch(e){} }
   if(tab==='dashboard') renderDashboard();
   if(tab==='backup') renderBackup();
@@ -1881,6 +1963,7 @@ function switchTab(tab){
   if(tab==='folhas') renderFolhas();
   if(tab==='abas') renderAbasVisiveis();
   if(tab==='trava' && typeof window.gdnTravaRender==='function') window.gdnTravaRender();
+  if(tab==='admins' && typeof window.valAdminRender==='function') window.valAdminRender();
   if(tab==='protocolo') renderProtocolo();
   if(tab==='ondasfora') renderOndasFora();
   if(tab==='relentrega') renderRelEntrega();
@@ -2590,6 +2673,7 @@ async function _handleFilesAutoInterno(arquivos){
       catch(err){ toast('Falha ao ler '+file.name, 'err'); }
     }
   }
+  const _valRel = (typeof valAuditarItens==='function') ? valAuditarItens(itens) : [];
   const res = {ok:{GAN:0, HEBLS:0, REGIAO:0, TS:0}, porNome:[], repetidos:[], naoReconhecidos:[], ts:[], extras:[]};
   const extras = [];   // planilhas de apoio (Coletas, Tipo de Residência, Programação, iscas...) — entregues às abas depois da consolidação
   itens.forEach(it=>{
@@ -2626,6 +2710,7 @@ async function _handleFilesAutoInterno(arquivos){
   ['GAN','HEBLS','REGIAO'].forEach(renderFileList);
   atualizarPreviaUpload();
   renderResumoAuto(res);
+  try{ if(typeof valMostrar==='function') valMostrar(_valRel); }catch(e){ console.error(e); }
   const total = res.ok.GAN + res.ok.HEBLS + res.ok.REGIAO;
   if(res.naoReconhecidos.length) toast(res.naoReconhecidos.length+' arquivo(s) não reconhecido(s) — veja o aviso.', 'err');
   return extras;
@@ -3426,31 +3511,177 @@ function prioRegiaoDaPlaca(placa){
   const alvo = new Set(prCfg().regioes.map(prNorm));
   return lst.filter(r=>alvo.has(prNorm(r)));
 }
+/* Aloca uma lista de cargas na 1ª onda (usada pela Prioridade por Rodizio e pela Prioridade por região).
+   rotuloFn(carga) → texto do motivo; flag → campo marcado na linha da alocação (prioRodizio / prioRegiao). */
+function alocar1aOnda(cand, resultado, ocupado, outraFaixa, rotuloFn, flag, out){
+  cand.forEach(c=>{
+    const nomeN = String(c.transportadora||'').trim().toUpperCase();
+    const cfg = STATE.config.transportadoras.find(t=>t.nome===c.transportadora) || STATE.config.transportadoras.find(t=>String(t.nome||'').trim().toUpperCase()===nomeN);
+    if(!cfg || !(cfg.docaIn>0 && cfg.docaFim>0)) return;   // sem faixa cadastrada: segue na fila normal (que sinaliza a falta de faixa)
+    const un = STATE.config.unidades.find(u=>u.id===cfg.unidade) || STATE.config.unidades[0]; if(!un) return;
+    const disp = getDocasDisponiveisUnidade(un), dispSet = new Set(disp);
+    /* o leque de docas cadastrado para a transportadora é sempre respeitado: nunca usa doca de fora da faixa */
+    const faixa = []; for(let d=cfg.docaIn; d<=cfg.docaFim; d++) if(dispSet.has(d)) faixa.push(d);
+    const doca = faixa.find(d=>!ocupado.has(un.id+'|'+d+'|1'));
+    if(doca===undefined){ out.semOnda1++; return; }     // faixa toda ocupada na 1ª onda: segue na fila normal (dentro da faixa), com preferência
+    ocupado.add(un.id+'|'+doca+'|1');
+    const motivo = rotuloFn(c)+' — 1ª onda';
+    const row = baseAlocRow(c, c.transportadora, 'OK', doca, motivo, 1); row[flag] = true;
+    resultado.push(row); out.ids.add(c.id); out.n++;
+  });
+}
 function aplicarPrioridadeRegiao(resultado, ocupado, jaIds){
   const out = {ids:new Set(), n:0, semOnda1:0};
   if(!prioRegiaoAtiva()) return out;
   const P = prCfg();
   const cand = STATE.cargas.filter(c=>!jaIds.has(c.id) && c.transportadora && prioRegiaoDaPlaca(c.placa).length)
     .sort((x,y)=> prioridadeDaCarga(x)-prioridadeDaCarga(y) || menorPreRomaneio(x)-menorPreRomaneio(y));
-  cand.forEach(c=>{
-    const cfg = STATE.config.transportadoras.find(t=>t.nome===c.transportadora);
-    const un = STATE.config.unidades.find(u=>cfg && u.id===cfg.unidade) || STATE.config.unidades[0]; if(!un) return;
-    const disp = getDocasDisponiveisUnidade(un), dispSet = new Set(disp);
-    const faixa = []; if(cfg && cfg.docaIn>0 && cfg.docaFim>0){ for(let d=cfg.docaIn; d<=cfg.docaFim; d++) if(dispSet.has(d)) faixa.push(d); }
-    let docas = faixa.slice();
-    if(P.outraFaixa!==false || !faixa.length){
-      const emFaixa = new Set();
-      STATE.config.transportadoras.forEach(t=>{ if(t.unidade===un.id && t.docaIn>0 && t.docaFim>0) for(let d=t.docaIn; d<=t.docaFim; d++) emFaixa.add(d); });
-      docas = docas.concat(disp.filter(d=>!faixa.includes(d)).sort((a,b)=>(emFaixa.has(a)?1:0)-(emFaixa.has(b)?1:0)||a-b));
-    }
-    const doca = docas.find(d=>!ocupado.has(un.id+'|'+d+'|1'));
-    if(doca===undefined){ out.semOnda1++; return; }     // nenhuma doca livre na 1ª onda: segue na fila normal, com preferência
-    ocupado.add(un.id+'|'+doca+'|1');
-    const motivo = 'Prioridade por região ('+prioRegiaoDaPlaca(c.placa).join(', ')+') — 1ª onda'+(faixa.includes(doca)?'':' em doca fora da faixa da transportadora');
-    const row = baseAlocRow(c, c.transportadora, 'OK', doca, motivo, 1); row.prioRegiao = true;
-    resultado.push(row); out.ids.add(c.id); out.n++;
-  });
+  alocar1aOnda(cand, resultado, ocupado, P.outraFaixa, c=>'Prioridade por região ('+prioRegiaoDaPlaca(c.placa).join(', ')+')', 'prioRegiao', out);
   return out;
+}
+
+/* =========================================================
+   PRIORIDADE POR RODIZIO (Configurações › Prioridade por Rodizio)
+   STATE.config.prioRodizio = {ativo, outraFaixa, diaRef:'auto'|'1'..'5'|'nenhum', regioes:[nome]}  → Parâmetros (Firebase, não apagado pelo Novo dia)
+   Região de cada placa: STATE.prioReg (Tipo de Residência, DESCR/TERRITORIO) — o mesmo arquivo da Prioridade por região.
+   Placa do dia: último caractere da placa (dígito) conforme o calendário do rodízio de São Paulo
+     Seg 1 e 2 · Ter 3 e 4 · Qua 5 e 6 · Qui 7 e 8 · Sex 9 e 0 (sábado/domingo: sem rodízio).
+   Regra: placa do dia com carga em região de rodízio assume a 1ª onda, antes de qualquer outra regra
+   (só a base TS São Paulo vem antes; vem antes também da Prioridade por região).
+   ========================================================= */
+const RZ_DIAS = {1:{nome:'Segunda-feira', d:[1,2]}, 2:{nome:'Terça-feira', d:[3,4]}, 3:{nome:'Quarta-feira', d:[5,6]}, 4:{nome:'Quinta-feira', d:[7,8]}, 5:{nome:'Sexta-feira', d:[9,0]}};
+function rzCfg(){ const C = STATE.config; if(!C.prioRodizio || typeof C.prioRodizio!=='object') C.prioRodizio = {ativo:true, outraFaixa:true, diaRef:'auto', padrao:true, excluidas:[], regioes:[]}; const R = C.prioRodizio; if(!Array.isArray(R.regioes)) R.regioes = []; if(!Array.isArray(R.excluidas)) R.excluidas = []; if(R.padrao==null) R.padrao = true; if(R.diaRef==null) R.diaRef = 'auto'; return R; }
+/* Bairros abrangidos pelo rodízio (área de restrição de São Paulo). Parte dos bairros é só em parte interna da área;
+   o Tipo de Residência não distingue isso, então o bairro inteiro é considerado — desmarque na tabela o que não valer. */
+const RZ_BAIRROS = {
+  'Região Central': ['Sé','República','Bela Vista','Consolação','Liberdade','Santa Cecília','Higienópolis','Bom Retiro','Brás','Pari','Cambuci'],
+  'Zona Oeste': ['Pinheiros','Jardins','Itaim Bibi','Vila Olímpia','Perdizes','Pompeia','Barra Funda','Lapa','Alto de Pinheiros'],
+  'Zona Sul': ['Moema','Vila Mariana','Paraíso','Aclimação','Ipiranga','Vila Nova Conceição','Brooklin','Campo Belo','Saúde'],
+  'Zona Leste': ['Mooca','Belém','Tatuapé','Água Rasa']
+};
+function rzNormEsp(s){ return ' '+String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim()+' '; }
+const RZ_BAIRROS_N = [].concat.apply([], Object.keys(RZ_BAIRROS).map(g=>RZ_BAIRROS[g])).map(rzNormEsp);
+/* o nome da região do arquivo contém (como palavra inteira) um dos bairros da lista padrão? */
+function rzNaListaPadrao(nome){ const n = rzNormEsp(nome); return RZ_BAIRROS_N.some(b=>n.indexOf(b)>=0); }
+/* a região está no rodízio? (lista padrão ligada e não excluída) ou (marcada à mão) */
+function rzNoRodizio(nome){
+  const R = rzCfg(), k = prNorm(nome);
+  if(R.regioes.some(r=>prNorm(r)===k)) return true;
+  return R.padrao!==false && rzNaListaPadrao(nome) && !R.excluidas.some(r=>prNorm(r)===k);
+}
+function rzDiaSemanaBR(){
+  try{ const w = new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo', weekday:'short'}).format(new Date()); return {Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6}[w]; }
+  catch(e){ return new Date().getDay(); }
+}
+/* 1..5 = segunda a sexta; 0 = sem rodízio (fim de semana, feriado) */
+function rzDiaEfetivo(){
+  const ref = rzCfg().diaRef;
+  if(ref==='nenhum') return 0;
+  if(ref && ref!=='auto'){ const n = parseInt(ref,10); return RZ_DIAS[n] ? n : 0; }
+  const w = rzDiaSemanaBR(); return RZ_DIAS[w] ? w : 0;
+}
+function rzDigitosDoDia(){ const d = RZ_DIAS[rzDiaEfetivo()]; return d ? d.d.slice() : []; }
+function rzFinalPlaca(placa){ const k = placaKey(placa), ch = k.slice(-1); return /[0-9]/.test(ch) ? parseInt(ch,10) : null; }
+function rzPlacaDoDia(placa){ const f = rzFinalPlaca(placa); return f!=null && rzDigitosDoDia().indexOf(f)>=0; }
+function prioRodizioAtivo(){ const c = rzCfg(); return c.ativo!==false && (c.regioes.length>0 || c.padrao!==false) && rzDigitosDoDia().length>0; }
+/* regiões de rodízio (nome como marcado) em que a placa tem carga; [] se a regra está desligada, se não é a placa do dia ou se não está nessas regiões */
+function prioRodizioDaPlaca(placa){
+  if(!prioRodizioAtivo() || !STATE.prioReg || !STATE.prioReg.placas) return [];
+  if(!rzPlacaDoDia(placa)) return [];
+  const lst = STATE.prioReg.placas[placaKey(placa)]; if(!lst || !lst.length) return [];
+  return lst.filter(r=>rzNoRodizio(r));
+}
+function aplicarPrioridadeRodizio(resultado, ocupado, jaIds){
+  const out = {ids:new Set(), n:0, semOnda1:0};
+  if(!prioRodizioAtivo()) return out;
+  const R = rzCfg();
+  const cand = STATE.cargas.filter(c=>!jaIds.has(c.id) && c.transportadora && prioRodizioDaPlaca(c.placa).length)
+    .sort((x,y)=> prioridadeDaCarga(x)-prioridadeDaCarga(y) || menorPreRomaneio(x)-menorPreRomaneio(y));
+  alocar1aOnda(cand, resultado, ocupado, R.outraFaixa, c=>'Prioridade por Rodizio (final '+rzFinalPlaca(c.placa)+' · '+prioRodizioDaPlaca(c.placa).join(', ')+')', 'prioRodizio', out);
+  return out;
+}
+function rzCfgMudou(){
+  const R = rzCfg();
+  R.ativo = !!document.getElementById('rzAtivo').checked;
+  R.outraFaixa = !!document.getElementById('rzOutraFaixa').checked;
+  R.padrao = !!document.getElementById('rzPadrao').checked;
+  R.diaRef = document.getElementById('rzDiaRef').value || 'auto';
+  saveState(); rzRender();
+}
+function rzMarcar(nome, v){
+  const R = rzCfg(), k = prNorm(nome), pad = R.padrao!==false && rzNaListaPadrao(nome);
+  R.regioes = R.regioes.filter(r=>prNorm(r)!==k);
+  R.excluidas = R.excluidas.filter(r=>prNorm(r)!==k);
+  if(v){ if(!pad) R.regioes.push(nome); } else if(pad) R.excluidas.push(nome);
+  saveState(); rzRender();
+}
+function rzMarcarIdx(i, v){ const n = (window._rzLista||[])[i]; if(n!=null) rzMarcar(n, v); }
+function rzAddRegiao(){
+  const el = document.getElementById('rzNova'), n = prLimpaNome(el && el.value); if(!n) return;
+  rzMarcar(n, true); el.value = '';
+}
+function rzLimparSel(){ const R = rzCfg(); if(!R.regioes.length && R.padrao===false) return; if(!confirm('Desmarcar todas as regiões de rodízio (inclusive a lista padrão de bairros)?')) return; R.regioes = []; R.excluidas = []; R.padrao = false; saveState(); rzRender(); }
+async function rzInpArq(inp){
+  const fs = Array.from(inp.files||[]); inp.value = ''; if(!fs.length) return;
+  for(const f of fs){ try{ prCarregarBuf(await f.arrayBuffer(), f.name); }catch(e){ console.error(e); toast('Não consegui ler "'+f.name+'": '+(e.message||e), 'err'); } }
+}
+function rzDropArq(ev){
+  ev.preventDefault(); const z = document.getElementById('rzDrop'); if(z) z.classList.remove('drag');
+  const fs = Array.from((ev.dataTransfer && ev.dataTransfer.files) || []); if(!fs.length) return;
+  (async()=>{ for(const f of fs){ try{ prCarregarBuf(await f.arrayBuffer(), f.name); }catch(e){ console.error(e); toast('Não consegui ler "'+f.name+'": '+(e.message||e), 'err'); } } })();
+}
+function rzAplicar(){
+  if(!(STATE.cargas||[]).length){ toast('Não há cargas consolidadas. Carregue os arquivos do dia e consolide antes.', 'err'); return; }
+  rodarAlocacao(); rzRender();
+}
+function rzRender(){
+  const tb = document.getElementById('rzRegTbody'); if(!tb) return;
+  const R = rzCfg();
+  const a = document.getElementById('rzAtivo'); if(a) a.checked = R.ativo!==false;
+  const o = document.getElementById('rzOutraFaixa'); if(o) o.checked = R.outraFaixa!==false;
+  const pd = document.getElementById('rzPadrao'); if(pd) pd.checked = R.padrao!==false;
+  const dr = document.getElementById('rzDiaRef'); if(dr) dr.value = (R.diaRef==null?'auto':String(R.diaRef));
+  /* calendário */
+  const ef = rzDiaEfetivo(), dig = rzDigitosDoDia();
+  const cal = document.getElementById('rzCalTbody');
+  if(cal) cal.innerHTML = [1,2,3,4,5].map(n=>{ const d = RZ_DIAS[n], hoje = n===ef;
+    return '<tr'+(hoje?' style="font-weight:700"':'')+'><td>'+d.nome+(hoje?' <span class="badge ok">dia do rodízio</span>':'')+'</td><td>'+d.d.join(' e ')+'</td></tr>'; }).join('');
+  const hj = document.getElementById('rzHoje');
+  if(hj){
+    const auto = (R.diaRef==null || R.diaRef==='auto');
+    hj.innerHTML = dig.length
+      ? 'Placas do dia: <b>final '+dig.join(' e ')+'</b> ('+RZ_DIAS[ef].nome+')'+(auto?'':' <span class="badge alert">dia de referência manual</span>')
+      : '<b>Hoje não há rodízio</b> ('+(R.diaRef==='nenhum'?'marcado como sem rodízio':'fim de semana')+') — a regra não prioriza nenhuma placa.'+(auto?'':' <span class="badge alert">dia de referência manual</span>');
+  }
+  const bt = document.getElementById('rzBairrosTxt');
+  if(bt) bt.innerHTML = Object.keys(RZ_BAIRROS).map(g=>'<b>'+g+':</b> '+RZ_BAIRROS[g].join(', ')+'.').join('<br>');
+  const D = STATE.prioReg, reg = (D && D.regioes) || {};
+  const info = document.getElementById('rzArq');
+  if(info) info.innerHTML = D ? 'Arquivo: <b>'+escAuto(D.nome)+'</b> — '+Object.keys(D.placas).length+' placa(s) em '+Object.keys(reg).length+' região(ões).' : 'Nenhum Tipo de Residência carregado hoje. Sem ele a regra não encontra placas.';
+  /* placas com carga hoje, por região (só as placas do dia entram em "do dia") */
+  const hoje = {}; const placasHoje = new Set((STATE.cargas||[]).map(c=>placaKey(c.placa)));
+  if(D) placasHoje.forEach(pk=>(D.placas[pk]||[]).forEach(r=>{ hoje[r] = (hoje[r]||0)+1; }));
+  const hojeDia = {}; if(D) placasHoje.forEach(pk=>{ if(rzPlacaDoDia(pk)) (D.placas[pk]||[]).forEach(r=>{ hojeDia[r] = (hojeDia[r]||0)+1; }); });
+  const nomes = {}; Object.keys(reg).forEach(r=>{ nomes[prNorm(r)] = r; }); R.regioes.forEach(r=>{ if(!nomes[prNorm(r)]) nomes[prNorm(r)] = r; });
+  const filtro = prNorm((document.getElementById('rzFiltro')||{}).value);
+  const lista = Object.values(nomes).filter(n=>!filtro || prNorm(n).indexOf(filtro)>=0)
+    .sort((x,y)=>(rzNoRodizio(y)?1:0)-(rzNoRodizio(x)?1:0) || x.localeCompare(y,'pt-BR'));
+  window._rzLista = lista;
+  const pega = (m,n)=> m[n]!=null ? m[n] : (Object.keys(m).find(r=>prNorm(r)===prNorm(n)) ? m[Object.keys(m).find(r=>prNorm(r)===prNorm(n))] : 0);
+  tb.innerHTML = lista.length ? lista.map((n,i)=>{
+    const on = rzNoRodizio(n), qa = pega(reg,n), h = pega(hoje,n), hd = pega(hojeDia,n);
+    return '<tr><td style="text-align:center"><input type="checkbox" '+(on?'checked':'')+' onchange="rzMarcarIdx('+i+', this.checked)"></td><td>'+escAuto(n)+(on?' <span class="badge ok">rodízio</span>'+(R.padrao!==false && rzNaListaPadrao(n)?' <span style="color:var(--text-2);font-size:11.5px">lista padrão</span>':''):'')+'</td><td>'+qa+'</td><td>'+h+(on && dig.length ? ' <span style="color:var(--text-2)">('+hd+' do dia)</span>' : '')+'</td></tr>';
+  }).join('') : '<tr><td colspan="4" style="color:var(--text-2)">'+(D||R.regioes.length ? 'Nenhuma região encontrada.' : 'Carregue o Tipo de Residência acima ou inclua uma região pelo nome.')+'</td></tr>';
+  /* resultado por placa */
+  const rt = document.getElementById('rzResTbody'), rd = document.getElementById('rzResDesc'); if(!rt) return;
+  const itens = (STATE.cargas||[]).map(c=>({c, regs:prioRodizioDaPlaca(c.placa)})).filter(x=>x.regs.length);
+  if(rd) rd.textContent = !(R.regioes.length || R.padrao!==false) ? 'Marque ao menos uma região de rodízio para a regra funcionar.' : (R.ativo===false ? 'Regra desligada: nenhuma placa é priorizada.' : (!dig.length ? 'Hoje não há rodízio: nenhuma placa é priorizada.' : ((STATE.cargas||[]).length ? itens.length+' carga(s) do dia com placa final '+dig.join(' ou ')+' em região de rodízio.' : 'Sem cargas no dia: consolide os arquivos para ver as placas.')));
+  rt.innerHTML = itens.length ? itens.map(x=>{
+    const al = (STATE.alocacao||[]).find(r=>r.cargaId===x.c.id);
+    const d = al ? pDoca(al) : null;
+    const st = !al ? '<span style="color:var(--text-2)">Alocação ainda não rodada</span>' : (al.onda===1 ? '<span class="badge ok">1ª onda'+(d!=null?' · doca '+d:'')+'</span>'+(al.prioRodizio?'':' <span style="color:var(--text-2)">(sem aplicar a regra — clique em “Aplicar”)</span>') : '<span class="badge alert">'+(al.onda||'—')+'ª onda'+(d!=null?' · doca '+d:'')+'</span> <span style="color:var(--text-2)">'+escAuto(al.motivo||'Clique em “Aplicar na alocação do dia”')+'</span>');
+    return '<tr><td class="mono">'+escAuto(x.c.placa)+'</td><td>'+rzFinalPlaca(x.c.placa)+'</td><td>'+escAuto(x.c.transportadora||'—')+'</td><td>'+escAuto(x.regs.join(' · '))+'</td><td>'+st+'</td></tr>';
+  }).join('') : '<tr><td colspan="5" style="color:var(--text-2)">Nenhuma placa do dia em região de rodízio.</td></tr>';
 }
 function prLerBuf(buf, nome){
   if(typeof XLSX==='undefined') throw new Error('Leitor de Excel não carregou');
@@ -3483,21 +3714,38 @@ function prLerBuf(buf, nome){
 function prCarregarBuf(buf, nome, silencioso){
   const r = prLerBuf(buf, nome);
   if(!r){ if(!silencioso) toast('Não achei as colunas Placa e DESCR/TERRITORIO em "'+nome+'".', 'err'); return false; }
-  STATE.prioReg = {nome:r.nome, placas:r.placas, regioes:r.regioes};
+  /* O Roadshow manda o Tipo de Residência em mais de um arquivo: cada arquivo novo SOMA ao que já foi carregado no dia
+     (mesmo nome de arquivo = substitui só aquele). O mapa final placa → regiões junta todos. */
+  const ant = STATE.prioReg || null;
+  const arqs = (ant && ant.arqs) ? Object.assign({}, ant.arqs) : (ant && ant.placas ? {[ant.nome||'arquivo anterior']:{placas:ant.placas}} : {});
+  arqs[r.nome] = {placas:r.placas};
+  const placas = {}, vis = {};
+  Object.keys(arqs).forEach(n=>{ const pl = arqs[n].placas||{}; Object.keys(pl).forEach(pk=>{
+    const l = placas[pk] || (placas[pk] = []);
+    pl[pk].forEach(rg=>{ const kn = prNorm(rg); if(!l.some(x=>prNorm(x)===kn)) l.push(vis[kn] || (vis[kn] = rg)); });
+  }); });
+  const regioes = {}; Object.keys(placas).forEach(pk=>placas[pk].forEach(rg=>{ regioes[rg] = (regioes[rg]||0)+1; }));
+  STATE.prioReg = {nome:Object.keys(arqs).join(' + '), arqs, placas, regioes};
   saveState();
-  if(!silencioso) toast('Tipo de Residência lido: '+Object.keys(r.placas).length+' placa(s) em '+Object.keys(r.regioes).length+' região(ões).', 'ok');
-  else toast('Prioridade por região: '+Object.keys(r.placas).length+' placa(s) e '+Object.keys(r.regioes).length+' região(ões) lidas do Tipo de Residência.', 'ok');
+  const nArq = Object.keys(arqs).length;
+  if(!silencioso) toast('Tipo de Residência lido'+(nArq>1?' ('+nArq+' arquivos somados)':'')+': '+Object.keys(placas).length+' placa(s) em '+Object.keys(regioes).length+' região(ões).', 'ok');
+  else toast('Prioridade por região: '+Object.keys(placas).length+' placa(s) e '+Object.keys(regioes).length+' região(ões) lidas do Tipo de Residência'+(nArq>1?' ('+nArq+' arquivos)':'')+'.', 'ok');
   try{ prRender(); }catch(e){}
+  try{ rzRender(); }catch(e){}
   return true;
 }
 async function prInpArq(inp){
-  const f = inp.files && inp.files[0]; inp.value = ''; if(!f) return;
-  try{ prCarregarBuf(await f.arrayBuffer(), f.name); }catch(e){ console.error(e); toast('Não consegui ler "'+f.name+'": '+(e.message||e), 'err'); }
+  const fs = Array.from(inp.files||[]); inp.value = ''; if(!fs.length) return;
+  for(const f of fs){ try{ prCarregarBuf(await f.arrayBuffer(), f.name); }catch(e){ console.error(e); toast('Não consegui ler "'+f.name+'": '+(e.message||e), 'err'); } }
 }
 function prDropArq(ev){
   ev.preventDefault(); const z = document.getElementById('prDrop'); if(z) z.classList.remove('drag');
-  const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0]; if(!f) return;
-  f.arrayBuffer().then(b=>prCarregarBuf(b, f.name)).catch(e=>{ console.error(e); toast('Não consegui ler "'+f.name+'": '+(e.message||e), 'err'); });
+  const fs = Array.from((ev.dataTransfer && ev.dataTransfer.files) || []); if(!fs.length) return;
+  (async()=>{ for(const f of fs){ try{ prCarregarBuf(await f.arrayBuffer(), f.name); }catch(e){ console.error(e); toast('Não consegui ler "'+f.name+'": '+(e.message||e), 'err'); } } })();
+}
+function prLimparArqs(){
+  if(!STATE.prioReg) return; if(!confirm('Remover os arquivos de Tipo de Residência carregados?')) return;
+  STATE.prioReg = null; saveState(); try{ prRender(); }catch(e){} try{ rzRender(); }catch(e){}
 }
 function prCfgMudou(){
   const P = prCfg();
@@ -3528,7 +3776,7 @@ function prRender(){
   const o = document.getElementById('prOutraFaixa'); if(o) o.checked = P.outraFaixa!==false;
   const D = STATE.prioReg, reg = (D && D.regioes) || {};
   const info = document.getElementById('prArq');
-  if(info) info.innerHTML = D ? 'Arquivo: <b>'+escAuto(D.nome)+'</b> — '+Object.keys(D.placas).length+' placa(s) em '+Object.keys(reg).length+' região(ões).' : 'Nenhum Tipo de Residência carregado hoje. Sem ele a regra não encontra placas.';
+  if(info) info.innerHTML = D ? 'Arquivo'+((D.arqs && Object.keys(D.arqs).length>1)?'s':'')+': <b>'+escAuto(D.nome)+'</b> — '+Object.keys(D.placas).length+' placa(s) em '+Object.keys(reg).length+' região(ões). <button onclick="prLimparArqs()" style="margin-left:6px">Limpar arquivos</button>' : 'Nenhum Tipo de Residência carregado hoje. Sem ele a regra não encontra placas.';
   /* placas com carga hoje, por região */
   const hoje = {}; const placasHoje = new Set((STATE.cargas||[]).map(c=>placaKey(c.placa)));
   if(D) placasHoje.forEach(pk=>(D.placas[pk]||[]).forEach(r=>{ hoje[r] = (hoje[r]||0)+1; }));
@@ -3651,10 +3899,12 @@ function rodarAlocacao(silencioso){
      entrar na doca). Essas cargas ficam EXATAMENTE nessa doca/onda e o restante é alocado em volta. */
   const tsPlano = aplicarDocasTS(resultado, ocupado);
   /* PRIORIDADE POR REGIÃO (Configurações): placas em região prioritária assumem a 1ª onda, antes de qualquer outra regra */
-  const prioPlano = aplicarPrioridadeRegiao(resultado, ocupado, tsPlano.ids);
+  /* PRIORIDADE POR RODIZIO (Configurações): placa do dia do rodízio em região de rodízio assume a 1ª onda — vem antes da prioridade por região */
+  const rzPlano = aplicarPrioridadeRodizio(resultado, ocupado, tsPlano.ids);
+  const prioPlano = aplicarPrioridadeRegiao(resultado, ocupado, new Set([...tsPlano.ids, ...rzPlano.ids]));
   const porTransp = {};
   STATE.cargas.forEach(c=>{
-    if(tsPlano.ids.has(c.id) || prioPlano.ids.has(c.id)) return;
+    if(tsPlano.ids.has(c.id) || rzPlano.ids.has(c.id) || prioPlano.ids.has(c.id)) return;
     const key = c.transportadora || '__SEM_TRANSPORTADORA__';
     if(!porTransp[key]) porTransp[key] = [];
     porTransp[key].push(c);
@@ -3688,10 +3938,10 @@ function rodarAlocacao(silencioso){
       cargas.forEach(c=> resultado.push(baseAlocRow(c, nomeTransp, 'ALTERAR', null, semFaixa ? 'Transportadora sem faixa de doca — preencha a faixa em Configurações › Parâmetros e rode a alocação' : 'Nenhuma doca disponível na faixa parametrizada para essa transportadora')));
       return;
     }
-    cargas.forEach(c=> fila.push({c, nomeTransp, docasFaixa, un: cfg.unidade, prio: prioRegiaoDaPlaca(c.placa).length>0}));
+    cargas.forEach(c=> fila.push({c, nomeTransp, docasFaixa, un: cfg.unidade, prio: prioRodizioDaPlaca(c.placa).length ? 2 : (prioRegiaoDaPlaca(c.placa).length ? 1 : 0)}));
   });
 
-  fila.sort((x,y)=> (y.prio?1:0)-(x.prio?1:0) || prioridadeDaCarga(x.c)-prioridadeDaCarga(y.c) || x.nomeTransp.localeCompare(y.nomeTransp) || menorPreRomaneio(x.c)-menorPreRomaneio(y.c));
+  fila.sort((x,y)=> (y.prio||0)-(x.prio||0) || prioridadeDaCarga(x.c)-prioridadeDaCarga(y.c) || x.nomeTransp.localeCompare(y.nomeTransp) || menorPreRomaneio(x.c)-menorPreRomaneio(y.c));
   fila.forEach(it=>{
     for(let onda=1; onda<=500; onda++){
       const doca = it.docasFaixa.find(d=>!ocupado.has(it.un+'|'+d+'|'+onda));
@@ -3734,7 +3984,7 @@ function rodarAlocacao(silencioso){
   STATE.alocacao = resultado;
   saveState();
   atualizarTodasAsAbas();
-  const msgAloc = 'Alocação recalculada: '+resultado.length+' carga(s) processada(s)'+(tsPlano.n?' — '+tsPlano.n+' com doca/onda fixada pela base TS':'')+(prioPlano.n?' — '+prioPlano.n+' placa(s) na 1ª onda por prioridade de região':'')+'.'
+  const msgAloc = 'Alocação recalculada: '+resultado.length+' carga(s) processada(s)'+(tsPlano.n?' — '+tsPlano.n+' com doca/onda fixada pela base TS':'')+(rzPlano.n?' — '+rzPlano.n+' placa(s) na 1ª onda por rodízio':'')+(prioPlano.n?' — '+prioPlano.n+' placa(s) na 1ª onda por prioridade de região':'')+'.'
     + (nCompactadas ? ' '+nCompactadas+' carga(s) subiram para ondas anteriores com doca livre (otimização de ondas).' : '')
     + (nDocaLivre ? ' '+nDocaLivre+' carga(s) de transportadora sem faixa foram alocadas em docas livres (confira; o ideal é preencher a faixa em Configurações › Parâmetros).' : '')
     + (transpCriadas.length ? ' Transportadora(s) sem faixa de docas: '+transpCriadas.join(', ')+'.' : '');
@@ -4621,6 +4871,12 @@ function iscaEtiquetas(){
   });
 }
 
+/* Botão Atualizar: refaz a distribuição das iscas do arquivo com as prioridades atuais (placas já reservadas ficam fora; escolhas manuais são mantidas) e recalcula os vínculos com a alocação */
+function iscaAtualizar(){
+  try{ if(STATE.iscaLote) ilDistribuir(false); else saveState(); }catch(e){ console.error(e); }
+  renderIscas();
+  toast('Iscas atualizadas: '+iscaTodas().length+' cadastrada(s), '+iscaOrdenadas().filter(x=>x.v.st==='ok').length+' vinculada(s).','ok');
+}
 function adicionarIscas(){
   const ta = document.getElementById('iscaTexto');
   if(adicionarIscasDeTexto(ta.value)) ta.value = '';
@@ -5714,18 +5970,19 @@ function pNomeAba(nome, usados){
   while(usados.has(n.toLowerCase())){ n=base.slice(0,28)+' '+(i++); }
   usados.add(n.toLowerCase()); return n;
 }
+/* Aba no layout oficial da Lista de Carga (mesmas colunas, larguras e cabeçalho fixo da Carga Acumulada) */
+function pWsLista(rows, msgVazio){
+  if(!rows.length) return XLSX.utils.aoa_to_sheet([[msgVazio||'Nenhuma carga no filtro atual.']]);
+  const ws=XLSX.utils.json_to_sheet(rows), cols=Object.keys(rows[0]);
+  ws['!cols']=cols.map(c=>({wch:Math.min(46, Math.max(c.length, ...rows.map(r=>String(r[c]==null?'':r[c]).length))+2)}));
+  ws['!freeze']={xSplit:0,ySplit:1};
+  return ws;
+}
 function pAddSheetsFilial(wb){
   const items=pItensFiltrados(), usados=new Set((wb.SheetNames||[]).map(x=>x.toLowerCase()));
   const addAba=(nome, filialCod)=>{
     const {rows}=pLinhasLista(items, filialCod);
-    let ws;
-    if(rows.length){
-      ws=XLSX.utils.json_to_sheet(rows);
-      const cols=Object.keys(rows[0]);
-      ws['!cols']=cols.map(c=>({wch:Math.min(46, Math.max(c.length, ...rows.map(r=>String(r[c]==null?'':r[c]).length))+2)}));
-      ws['!freeze']={xSplit:0,ySplit:1};
-    } else ws=XLSX.utils.aoa_to_sheet([['Nenhuma carga desta filial no filtro atual.']]);
-    XLSX.utils.book_append_sheet(wb, ws, pNomeAba(nome, usados));
+    XLSX.utils.book_append_sheet(wb, pWsLista(rows, 'Nenhuma carga desta filial no filtro atual.'), pNomeAba(nome, usados));
     return rows.length;
   };
   const res={acum:addAba('Carga Acumulada', null)};
@@ -5957,7 +6214,6 @@ function renderRelEntrega(){
   h+='<div class="grid cols-4" style="margin-bottom:14px;">'
     + stat(m.folhas.length,'folhas (uma por placa)') + stat(nEnt,'entregas nessas folhas','teal')
     + stat(semFora,'placas do relatório sem carga (não entram)','amber') + stat(m.faltam.length,'cargas da lista sem entregas no relatório') + '</div>';
-  if(semFora) h+=`<div class="desc" style="margin-bottom:8px;"><b>Fora da impressão (placa não está na Lista de Carga):</b> ${m.sem.map(f=>pEsc(f.placa)).join(' · ')}</div>`;
   if(m.faltam.length) h+=`<div class="desc" style="margin-bottom:8px;"><b>Cargas da Lista sem linhas no relatório:</b> ${m.faltam.map(it=>'carga '+it.n+' · '+pEsc(it.placa)).join(' · ')}</div>`;
   if(!m.folhas.length){ if(pr) pr.style.display='none'; box.innerHTML=h+'<div class="empty">Nenhuma placa do relatório tem carga na Lista de Carga.</div>'; return; }
   const sel=m.folhas.find(f=>f.pk===REL.sel)||m.folhas[0], dataPad=protoDataOperacao();
@@ -6319,9 +6575,12 @@ function exportarListaOndasExcel(){
   pAddSheetsFilial(wb);
   const add=(nome,data,cols)=>{ const ws=XLSX.utils.json_to_sheet(data); ws['!cols']=cols.map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,ws,nome.slice(0,31)); };
   const cols=[7,7,10,20,11,14,10,9,12,60,16,13];
-  add('Lista por Onda', ok.map(linha), cols);
+  /* Lista por Onda e abas de cada onda: MESMO layout da Carga Acumulada (pLinhasLista), mesma numeração de CARGA */
+  const itensL=pItensFiltrados(), usadosL=new Set(wb.SheetNames.map(x=>x.toLowerCase()));
+  const addLista=(nome,its)=>XLSX.utils.book_append_sheet(wb, pWsLista(pLinhasLista(its,null).rows,'Nenhuma carga nesta onda no filtro atual.'), pNomeAba(nome,usadosL));
+  addLista('Lista por Onda', itensL);
   const ondas=Array.from(new Set(ok.map(a=>a.onda))).sort((a,b)=>a-b);
-  ondas.forEach(o=>add(o+'a Onda', ok.filter(a=>a.onda===o).map(linha), cols));
+  ondas.forEach(o=>addLista(o+'a Onda', itensL.filter(it=>!it.pend && it.a.onda===o)));
   const pd={}; ok.forEach(a=>{ const d=pDoca(a); (pd[d]=pd[d]||[]).push(a); });
   add('Resumo por Doca', Object.keys(pd).map(Number).sort((a,b)=>a-b).map(d=>({
     'Doca':d,'Unidade':pUnidadeDaDoca(d),'Transportadoras':Array.from(new Set(pd[d].map(a=>a.transportadora))).join(', '),
@@ -6559,23 +6818,23 @@ function pararSyncIscas(){ if(iscaUnsub){ iscaUnsub(); iscaUnsub = null; } iscaP
 /* ---------- Parâmetros (Configurações) no Firestore (gdn_docas / parametrosConfig) ----------
    Unidades, docas indisponíveis/extras, faixas, transportadoras, filiais, abas visíveis etc.: o "Novo dia" não apaga e o banco é a fonte da verdade. */
 const paramRef = doc(db, 'gdn_docas', 'parametrosConfig');
-let paramUltimo = null, paramTimer = null, paramUnsub = null, paramPronto = false;
+let paramUltimo = null, paramTimer = null, paramUnsub = null, paramPronto = false, paramSujo = false;   // paramSujo: há alteração local ainda não enviada ao Firebase
 const PARAM_FORA = ['cadastroPlacas','iscaMapa','iscaTerrExtra','iscaRegioesExtra','iscaTerritorios','migFilialCAJD0'];   // têm documentos próprios ou são marcas locais
 function paramDados(){ const C = STATE.config||{}, o = {}; Object.keys(C).forEach(k=>{ if(PARAM_FORA.indexOf(k)<0 && C[k]!==undefined) o[k]=C[k]; }); return JSON.parse(JSON.stringify(o)); }
 function paramStatus(txt, erro){ const el = document.getElementById('paramNuvem'); if(el){ el.textContent = txt; el.style.color = erro ? 'var(--red,#c0392b)' : 'inherit'; } }
 async function paramEnviar(){
   if(!paramPronto || !auth.currentUser) return;
-  const d = paramDados(), j = canon(d); if(j === paramUltimo) return;
+  const d = paramDados(), j = canon(d); if(j === paramUltimo){ paramSujo = false; return; }
   try{
     await setDoc(paramRef, {json: JSON.stringify(d), atualizadoEm: serverTimestamp(), atualizadoPor: auth.currentUser.email || ''});
-    paramUltimo = j;
+    paramUltimo = j; paramSujo = false;
     paramStatus('☁ Parâmetros salvos no Firebase — iguais em todos os computadores e não apagados pelo “Novo dia”.');
   }catch(e){
     console.error('Firestore parâmetros (gravar)', e);
     paramStatus('⚠ Não foi possível gravar os parâmetros no Firebase ('+(e.code||e.message)+'). Confira as regras do Firestore para gdn_docas/parametrosConfig. Os dados continuam salvos neste navegador.', true);
   }
 }
-window.gdnParamSync = function(){ clearTimeout(paramTimer); paramTimer = setTimeout(paramEnviar, 800); };
+window.gdnParamSync = function(){ paramSujo = true; clearTimeout(paramTimer); paramTimer = setTimeout(paramEnviar, 800); };
 function iniciarSyncParam(){
   if(paramUnsub) return;
   paramStatus('☁ Conectando ao Firebase…');
@@ -6586,9 +6845,16 @@ function iniciarSyncParam(){
     let rem = {};
     try{ rem = JSON.parse(snap.data().json || '{}') || {}; }catch(e){ rem = {}; }
     paramUltimo = canon(rem);
+    if(paramSujo) return;   // há alteração local (ex.: faixa de doca) ainda não enviada: não sobrescreve com a versão antiga do banco
     if(paramUltimo !== canon(paramDados())){                           // o banco é a fonte da verdade
       const C = STATE.config = STATE.config||{};
+      /* proteção: faixa de doca preenchida aqui nunca é substituída por 0–0 vindo do banco */
+      const faixaLocal = {};
+      (C.transportadoras||[]).forEach(t=>{ if(t && t.docaIn>0 && t.docaFim>0) faixaLocal[String(t.nome||'').trim().toUpperCase()] = {docaIn:t.docaIn, docaFim:t.docaFim}; });
       Object.keys(rem).forEach(k=>{ if(PARAM_FORA.indexOf(k)<0) C[k] = rem[k]; });
+      let restaurouFaixa = false;
+      (C.transportadoras||[]).forEach(t=>{ const f = faixaLocal[String(t && t.nome||'').trim().toUpperCase()]; if(f && !(t.docaIn>0 && t.docaFim>0)){ t.docaIn = f.docaIn; t.docaFim = f.docaFim; restaurouFaixa = true; } });
+      if(restaurouFaixa) window.gdnParamSync();
       try{ revincularTransportadoras(); }catch(e){}
       try{ saveState(); }catch(e){}
       ['renderParametros','renderAbasVisiveis','aplicarAbasVisiveis','renderPainel','renderOndasFora'].forEach(fn=>{ try{ if(typeof window[fn]==='function') window[fn](); }catch(e){} });
@@ -9220,6 +9486,333 @@ function prodExcel(){
     pintar();
   };
 })();
+</script>
+<script>
+/* ===== VALIDADOR DE ARQUIVOS — padrão de colunas/dados + comparação com a última versão aceita =====
+   Roda no Upload único (handleFilesAuto). Não bloqueia o processamento: avisa na tela qual arquivo, coluna e linhas estão fora do padrão.
+   Para ajustar o padrão: edite SCHEMAS (colunas) e TXT (arquivos de texto). Última versão aceita fica no localStorage ('val_baseline_v1'). */
+(function(){
+var KEY='val_baseline_v2';
+var N=function(s){ return typeof tsNormHdr==='function' ? tsNormHdr(s) : String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''); };
+var CHK={
+  placa:function(v){ return /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(String(v).toUpperCase().replace(/[^A-Z0-9]/g,'')); },
+  doca:function(v){ return /\d/.test(String(v)); },
+  data:function(v){ if(typeof v==='number') return v>20000&&v<80000; var t=String(v).trim(), m=t.match(/^(\d{1,2})([\/.\-])(\d{1,2})\2(\d{4})$/); if(m) return +m[1]>=1&&+m[1]<=31&&+m[3]>=1&&+m[3]<=12; return /^\d{4}-\d{2}-\d{2}/.test(t); },
+  num:function(v){ return typeof v==='number' || /^-?\d+([.,]\d+)?$/.test(String(v).trim()); }
+};
+/* Padrão embutido (extraído do que a ferramenta já exige). obrig = obrigatórias · umDe = pelo menos uma de cada grupo · opc = esperadas · fmt = formato dos valores */
+var SCHEMAS={
+  TS:      {rot:'Base TS São Paulo', obrig:['PLACA','DOCA'], umDe:[['LOJA','PRE05']], opc:['DATA','SEQ','LOJA','PRE05','PREROMANEIO','LACRELV','LACREBAU','QTDNF','VOLUMES','DOCA05','CUB','TIPO','MOTORISTA','RG','CPF','TELEFONE'], fmt:{DATA:'data',PLACA:'placa',DOCA:'doca',DOCA05:'doca',VOLUMES:'num',QTDNF:'num'}},
+  lista_cs:{rot:'Lista de carga (aba 6)', obrig:['SEQ','PLACA','QTDNF'], umDe:[], opc:[], fmt:{PLACA:'placa',QTDNF:'num'}},
+  lista_kc:{rot:'Lista de carga (aba 3)', obrig:['CARGA','PLACAS','PRE*'], umDe:[], opc:[], fmt:{}},
+  kit:     {rot:'Kit_Coletas (aba 6)', obrig:['ORM','PLACA','TIPODECOLETA'], umDe:[], opc:[], fmt:{PLACA:'placa'}},
+  coletas: {rot:'Coletas (aba 3)', obrig:['NFDV','ORM'], umDe:[], opc:['FILIAL','NFVM','SERIE','KCLIENTE','CLIENTE','DESCRICAODOPRODUTO','QTD','TIPODECOLETA','NTP','CEP','ENDERECO','PLANOPRIME'], fmt:{NFDV:'num',ORM:'num'}},
+  tipo:    {rot:'Tipo de Residência (aba 3)', obrig:['PLACA'], umDe:[['CLIENTE','ORM'],['FILIAL','NF']], opc:['CLIENTE','FILIAL','NF','DATA','SERIE','SEQUENCIA','TERRITORIO','PERIODODEENTREGA','TIPODERESIDENCIA','DESCRTERRITORIO','DESCRPERIODO','DESCRRESIDENCIA','CEP'], fmt:{PLACA:'placa'}, nucleo:['PLACA','NF','CLIENTE','FILIAL']},
+  prog:    {rot:'Programação (abas 5 e 6)', obrig:['PLACA','MOTORISTA'], umDe:[], opc:['PESSOAS','CARROS','TRANSP','VEICULO','OBSERVACAO','TECNOLOGIA','SINALDORASTREADOR','SINAL','CONTATOEQUIPE','RG','CPF','BRUTA','LIQUIDA','REGIAO','RESIDENCIA','ZONA','RODIZIO','ENTRADA','REC'], fmt:{PLACA:'placa'}},
+  rota:    {rot:'Relatório Analítico de Rota/Pedidos (aba Relatório)', obrig:['PLACA','SEQUENCIAENTREGAPLANEJADO','IDPEDIDO'], umDe:[], opc:['NOMEDEPOSITO','DATAROTA','NOMETRANSPORTADORA','CODIGOCLIENTE','NOMECLIENTE','ENDERECO','BAIRRO','CIDADE','CEP','ESTADO','TELEFONE','NOMEROTA','STATUSROTA','TIPOATENDIMENTO'], fmt:{DATAROTA:'data'}},
+  iscas:   {rot:'Iscas — saída de inserção (aba 4)', obrig:['CLIENTE','CIDADE','EQUIP','PLACA'], umDe:[], opc:['DATA','SEQ','CEP','RUA','BAIRRO','UF','NF','STATUS'], fmt:{PLACA:'placa',NF:'num'}, vazioOk:['PLACA']}
+};
+var BONITO={LACRELV:'LACRE - LV',LACREBAU:'LACRE - BAÚ',SEQ:'SEQ.',SERIE:'Série',KCLIENTE:'K_Cliente',DESCRICAODOPRODUTO:'Descrição do Produto',QTD:'Qtd',NTP:'Nº TP',ENDERECO:'Endereço',PLANOPRIME:'Plano Prime',VEICULO:'VEÍCULO',OBSERVACAO:'OBSERVAÇÃO',SINALDORASTREADOR:'SINAL DO RASTREADOR',CONTATOEQUIPE:'CONTATO EQUIPE',REGIAO:'REGIÃO',RESIDENCIA:'RESIDÊNCIA',SEQUENCIA:'Sequência',TERRITORIO:'Território',PERIODODEENTREGA:'Período de entrega',TIPODERESIDENCIA:'Tipo de Residência',DESCRTERRITORIO:'DESCR/TERRITORIO',DESCRPERIODO:'DESCR/PERIODO',DESCRRESIDENCIA:'DESCR/RESIDENCIA',NOMEDEPOSITO:'Nome Depósito',DATAROTA:'Data Rota',NOMETRANSPORTADORA:'Nome Transportadora',CODIGOCLIENTE:'Código Cliente',NOMECLIENTE:'Nome Cliente',STATUSROTA:'Status Rota',TIPOATENDIMENTO:'Tipo Atendimento',NOMEROTA:'Nome Rota',SEQUENCIAENTREGAPLANEJADO:'Sequência Entrega Planejado',IDPEDIDO:'ID Pedido',TIPODECOLETA:'TIPO DE COLETA',DOCA05:'DOCA 05',PRE05:'PRÉ-05',PREROMANEIO:'PRÉ-ROMANEIO',QTDNF:'QTD NF','PRE*':'PRÉ-… (ex.: PRÉ-CAJ-33)'};
+var nm=function(c){ return BONITO[c]||c; };
+var colsDe=function(S){ var a=S.obrig.concat(S.opc); S.umDe.forEach(function(g){ a=a.concat(g); }); return a.filter(function(c,i){ return a.indexOf(c)===i; }); };
+var casa=function(k,c){ return c.slice(-1)==='*' ? k.indexOf(c.slice(0,-1))===0 : k===c; };
+var tem=function(ks,c){ return ks.some(function(k){ return casa(k,c); }); };
+function dist(a,b){ var m=a.length,n=b.length,d=[],i,j; for(i=0;i<=m;i++) d[i]=[i]; for(j=1;j<=n;j++) d[0][j]=j;
+  for(i=1;i<=m;i++) for(j=1;j<=n;j++) d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1)); return d[m][n]; }
+function esc(s){ return String(s).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function agora(){ return new Date().toLocaleString('pt-BR'); }
+function loadBase(){ try{ return JSON.parse(localStorage.getItem(KEY)||'{}')||{}; }catch(e){ return {}; } }
+function saveBase(t,b){ try{ var o=loadBase(); o[t]=b; localStorage.setItem(KEY,JSON.stringify(o)); }catch(e){} }
+var vazioTxt=function(v){ return String(v==null?'':v).trim()===''; };
+var amostraMasc=function(l){ return String(l).trim().replace(/[0-9]/g,'9').replace(/[A-Za-z]/g,'A').slice(0,80); };
+
+/* ---------- planilhas ---------- */
+function valPlanilha(it){
+  var r={nome:it.nome,rot:'',nivel:'ok',itens:[],diff:[],base:''};
+  var add=function(nv,col,msg,linhas){ r.itens.push({nv:nv,col:col,msg:msg,linhas:linhas}); if(nv==='erro') r.nivel='erro'; else if(r.nivel==='ok') r.nivel='aviso'; };
+  var wb; try{ wb=XLSX.read(it.buf,{type:'array',sheetRows:50000}); }catch(e){ add('erro','(arquivo)','Não consegui abrir a planilha (corrompida, protegida por senha ou formato inválido).'); return r; }
+  var tApp=null;
+  try{ if(typeof parseTSPlanilha==='function' && parseTSPlanilha(it.buf).length) tApp='TS'; else if(typeof classificarPlanilhaExtra==='function'){ var cl=classificarPlanilhaExtra(it.nome,it.buf); tApp=cl&&cl.tipo||null; } }catch(e){}
+  if(tApp && !SCHEMAS[tApp]) return r;   /* tipo reconhecido pela ferramenta, sem padrão de colunas definido (ex.: iscas) */
+  var best=null;
+  wb.SheetNames.forEach(function(sn){
+    var ws=wb.Sheets[sn]; if(!ws||!ws['!ref']) return;
+    var aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true});
+    for(var i=0;i<Math.min(aoa.length,40);i++){
+      var ks=(aoa[i]||[]).map(N); if(ks.filter(Boolean).length<2) continue;
+      Object.keys(SCHEMAS).forEach(function(t){
+        if(tApp && t!==tApp) return;
+        var S=SCHEMAS[t], cols=colsDe(S), h=0, ob=0;
+        cols.forEach(function(c){ if(tem(ks,c)){ h++; if(S.obrig.indexOf(c)>=0) ob++; } });
+        var sc=h/cols.length;
+        if(!best||sc>best.sc||(sc===best.sc&&ob>best.ob)) best={t:t,sc:sc,ob:ob,row:i,aoa:aoa,ks:ks};
+      });
+    }
+  });
+  if(!best){ add('erro','(planilha)','A planilha está vazia ou não tem linha de cabeçalho nas 40 primeiras linhas.'); return r; }
+  var S=SCHEMAS[best.t], ks=best.ks, hdr=best.aoa[best.row].map(function(v){ return String(v==null?'':v).trim(); });
+  r.tipo=best.t; r.rot=S.rot+(best.sc<0.34&&!tApp?' (provável)':'');
+  if(best.sc<0.34&&!tApp) add('erro','(cabeçalho)','Não reconheço as colunas de nenhum modelo. Colunas encontradas: '+hdr.filter(Boolean).join(' | ')+'. O mais parecido é “'+S.rot+'”.');
+  var nao=ks.filter(function(k){ return k && colsDe(S).every(function(c){ return !casa(k,c); }); });
+  var sug=function(c){ var b=null,cc=c.replace('*',''); nao.forEach(function(k){ if(!b && k.length>=3 && cc.length>=3 && (k.indexOf(cc)>=0||cc.indexOf(k)>=0||dist(k,cc)<=2)) b=k; }); return b?hdr[ks.indexOf(b)]:null; };
+  S.obrig.forEach(function(c){ if(!tem(ks,c)){ var s=sug(c); add('erro',nm(c),'coluna obrigatória ausente'+(s?' — encontrei “'+s+'” no lugar (foi renomeada?)':'')); } });
+  S.umDe.forEach(function(g){ if(!g.some(function(c){ return tem(ks,c); })) add('erro',g.map(nm).join(' ou '),'nenhuma destas colunas foi encontrada (pelo menos uma é obrigatória)'); });
+  var faltam=S.opc.filter(function(c){ return !tem(ks,c); });
+  if(faltam.length) add('aviso',faltam.map(nm).join(', '),'coluna(s) esperada(s) que não vieram neste arquivo'+faltam.map(function(c){ var g=sug(c); return g?' · “'+g+'” pode ser '+nm(c):''; }).join(''));
+  /* dados linha a linha */
+  var nR=0, vaz={}, inv={}, pre={}, ob=S.obrig, nuc=(S.nucleo||[]).map(function(c){ return ks.indexOf(c); }).filter(function(j){ return j>=0; });
+  ks.forEach(function(k){ if(k) pre[k]=0; });
+  best.aoa.slice(best.row+1).forEach(function(row,ix){
+    row=row||[]; if(nuc.length ? !nuc.some(function(j){ return !vazioTxt(row[j]); }) : row.filter(function(v){ return !vazioTxt(v); }).length<2) return; nR++;
+    var ln=best.row+2+ix;
+    ks.forEach(function(k,j){ if(k && !vazioTxt(row[j])) pre[k]++; });
+    Object.keys(S.fmt).forEach(function(c){
+      var j=ks.indexOf(c); if(j<0) return; var v=row[j];
+      if(vazioTxt(v)){ if(ob.indexOf(c)>=0 && !(best.t==='TS'&&c==='DOCA') && (S.vazioOk||[]).indexOf(c)<0) (vaz[c]=vaz[c]||[]).push(ln); }
+      else if(N(v)!==c && !CHK[S.fmt[c]](v)) (inv[c]=inv[c]||[]).push({ln:ln,v:String(v).slice(0,25)});
+    });
+  });
+  Object.keys(vaz).forEach(function(c){ add('aviso',nm(c),vaz[c].length+' linha(s) sem valor — a ferramenta ignora essas linhas',vaz[c].slice(0,8)); });
+  /* comparação com a última versão aceita */
+  var fr={}; Object.keys(pre).forEach(function(k){ fr[k]=nR?pre[k]/nR:0; });
+  var nova={nome:it.nome,em:agora(),cab:hdr.filter(Boolean),preench:fr,n:nR};
+  var base=loadBase()[best.t];
+  if(base){
+    r.base=base.nome+' · '+base.em;
+    var bk=base.cab.map(N);
+    var rem=base.cab.filter(function(h){ return ks.indexOf(N(h))<0 && !colsDe(S).some(function(c){ return casa(N(h),c); }); });
+    var novas=hdr.filter(function(h,j){ return h && bk.indexOf(ks[j])<0; });
+    if(rem.length){ add('aviso',rem.join(', '),'existia na última versão e não está neste arquivo'); r.diff.push('Colunas que sumiram: '+rem.join(', ')); }
+    if(novas.length) r.diff.push('Colunas novas: '+novas.join(', '));
+    Object.keys(base.preench||{}).forEach(function(k){ var j=ks.indexOf(k); if(j>=0 && base.preench[k]>=0.9 && fr[k]<0.5) add('aviso',hdr[j],'veio quase vazia: preenchida em '+Math.round(fr[k]*100)+'% das linhas (na última versão: '+Math.round(base.preench[k]*100)+'%)'); });
+  }
+  if(r.nivel==='ok') saveBase(best.t,nova); else r._base=nova;
+  return r;
+}
+
+/* ---------- arquivos de texto: GAN / Log de NF (hebls) / Região ---------- */
+function txtDefs(){ return {
+  GAN:{rot:'GAN', re:/(\d{5,6})\s+(\d{2}|[Dd]-?0)\s+(\d{2}\/\d{2}\/\d{2,4})\s+([A-Za-z0-9]{3}-?[A-Za-z0-9]{3,5})\b/, cand:/^\s*\d{4,7}\s+\S+\s+\d{2}\/\d{2}\/\d{2,4}/, fmt:'PRÉ-ROMANEIO · FILIAL · DATA · PLACA'},
+  HEBLS:{rot:'Log de NF', re:HEBLS_RE_LINHA, cand:/Nota Fiscal\s+incluida/i, fmt:'FILIAL · NF · … Nota Fiscal … Pre-Romaneio: nº'},
+  REGIAO:{rot:'Região', re:/^\s*\S{5,9}\s+\S+\s+\d+\s+\d+\s*$/, cand:/^\s*[A-Za-z]{3}\d\S*\s+\S+\s+\S+/, fmt:'PLACA · CÓDIGO · SEQ · VALOR'}
+}; }
+function valTexto(it){
+  var r={nome:it.nome,rot:'',nivel:'ok',itens:[],diff:[],base:''};
+  var add=function(nv,col,msg,linhas){ r.itens.push({nv:nv,col:col,msg:msg,linhas:linhas}); if(nv==='erro') r.nivel='erro'; else if(r.nivel==='ok') r.nivel='aviso'; };
+  var D=txtDefs(), det=detectarTipoArquivo(it.nome,it.texto), B=loadBase();
+  var linhas=String(it.texto).split(/\r?\n/);
+  if(!det){
+    add('erro','(conteúdo)','Nenhuma linha no padrão GAN, Log de NF ou Região. Primeiras linhas do arquivo: '+linhas.filter(function(l){ return l.trim(); }).slice(0,3).map(function(l){ return '“'+l.trim().slice(0,70)+'”'; }).join(' / '));
+    Object.keys(D).forEach(function(t){ if(B[t]) r.diff.push('Última versão de '+D[t].rot+' ('+B[t].nome+'): linhas no formato '+B[t].amostra); else r.diff.push(D[t].rot+' esperado: '+D[t].fmt); });
+    return r;
+  }
+  var d=D[det.tipo]; r.tipo=det.tipo; r.rot=d.rot;
+  if(det.porNome) add('aviso','(conteúdo)','Tipo definido só pelo nome do arquivo — nenhuma linha reconhecida no conteúdo.');
+  var ruins=[], boa=null;
+  linhas.forEach(function(l,i){ if(d.re.test(l)){ if(!boa) boa=l; } else if(d.cand.test(l)) ruins.push({ln:i+1,t:l.trim().slice(0,70)}); });
+  var dica=(det.tipo==='REGIAO'&&ruins.length&&ruins[0].t.split(/\s+/).length===3)?' — provável SEQ e VALOR colados sem espaço; a ferramenta ignora essa linha':'';
+  if(det.tipo==='GAN' && ruins.length) add('aviso','(linhas)',ruins.length+' linha(s) incompleta(s) — falta algum campo (PRÉ-ROMANEIO, FILIAL, DATA ou PLACA). Ex.: “'+ruins[0].t+'”',ruins.slice(0,8).map(function(x){ return x.ln; }));
+  var nova={nome:it.nome,em:agora(),amostra:boa?amostraMasc(boa):''};
+  var b=B[det.tipo];
+  if(r.nivel!=='ok' && b){ r.base=b.nome+' · '+b.em; if(b.amostra) r.diff.push('Formato na última versão: '+b.amostra+(boa?' · agora: '+nova.amostra:'')); }
+  if(r.nivel==='ok'){ if(boa) saveBase(det.tipo,nova); } else r._base=nova;
+  return r;
+}
+
+window.valAuditarItens=function(itens){
+  var rel=[];
+  (itens||[]).forEach(function(it){ try{
+    if(it.buf){ if(typeof ehLinhaProduto==='function' && ehLinhaProduto(it.buf)) return; rel.push(valPlanilha(it)); }
+    else if(it.texto!=null) rel.push(valTexto(it));
+  }catch(e){ console.error('validador',e); } });
+  return rel;
+};
+
+/* ---------- notificação na tela ---------- */
+/* ---------- administradores (Configurações › Administradores) ----------
+   Lista em STATE.config.valAdmins = [{id,nome,email,criado,por}] (sincroniza como os demais parâmetros). Admin = e-mail logado no Firebase Auth.
+   O administrador principal (jeronimos@fastshop.com.br) é sempre admin; só admins logados cadastram/removem/aceitam. */
+function adms(){ var C=(typeof STATE!=='undefined'&&STATE.config)||{}; return Array.isArray(C.valAdmins)?C.valAdmins:[]; }
+function setAdms(a){ STATE.config=STATE.config||{}; STATE.config.valAdmins=a; try{ saveState(); }catch(e){} }
+function hex(u){ return Array.from(u).map(function(x){ return ('0'+x.toString(16)).slice(-2); }).join(''); }
+async function sha(t){ return hex(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)))); }
+function novoSalt(){ var a=new Uint8Array(12); crypto.getRandomValues(a); return hex(a); }
+function dlg(titulo,campos,okTxt,valida){
+  return new Promise(function(res){
+    var o=document.createElement('div'); o.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(3,6,12,.78);display:flex;align-items:center;justify-content:center;padding:20px';
+    var h='<div style="background:var(--bg-1);border:1px solid var(--line);border-radius:10px;width:100%;max-width:400px;padding:18px"><div style="font-weight:700;font-size:15px;margin-bottom:12px">'+esc(titulo)+'</div>';
+    campos.forEach(function(c){ h+='<div style="margin-bottom:10px"><label>'+esc(c.l)+'</label>'+(c.opts?'<select id="dg_'+c.id+'" style="width:100%">'+c.opts.map(function(x){ return '<option value="'+esc(x.v)+'">'+esc(x.t)+'</option>'; }).join('')+'</select>':'<input id="dg_'+c.id+'" type="'+(c.t||'text')+'" style="width:100%" autocomplete="off">')+'</div>'; });
+    h+='<div id="dg_err" style="color:var(--red);font-size:12.5px;min-height:16px;margin-bottom:8px"></div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="ghost" id="dg_no">Cancelar</button><button class="primary" id="dg_ok">'+esc(okTxt||'Confirmar')+'</button></div></div>';
+    o.innerHTML=h; document.body.appendChild(o);
+    var fim=function(v){ o.remove(); res(v); };
+    var ok=async function(){ var v={}; campos.forEach(function(c){ v[c.id]=o.querySelector('#dg_'+c.id).value; }); var e=valida?await valida(v):''; if(e){ o.querySelector('#dg_err').textContent=e; return; } fim(v); };
+    o.querySelector('#dg_no').onclick=function(){ fim(null); }; o.querySelector('#dg_ok').onclick=ok;
+    o.addEventListener('keydown',function(ev){ if(ev.key==='Enter') ok(); else if(ev.key==='Escape') fim(null); });
+    var f=o.querySelector('input,select'); if(f) f.focus();
+  });
+}
+var ADMIN_MASTER='jeronimos@fastshop.com.br';
+function meuEmail(){ var el=document.getElementById('userEmail'); var t=el?(el.textContent||'').trim().toLowerCase():''; return t.indexOf('@')>0?t:''; }
+function emailOk(e){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
+function listaAdmins(){ var A=adms().filter(function(a){ return a&&a.email; }); if(!A.some(function(a){ return a.email===ADMIN_MASTER; })) A=[{id:'master',nome:'Administrador principal',email:ADMIN_MASTER,criado:'',por:'',fixo:true}].concat(A); return A; }
+function souAdmin(){ var m=meuEmail(); return !!m && listaAdmins().some(function(a){ return a.email===m; }); }
+function pedirAdmin(titulo){
+  var m=meuEmail();
+  if(!m){ try{ toast('Entre na ferramenta com seu e-mail do Firebase.','err'); }catch(e){} return null; }
+  if(!souAdmin()){ try{ toast('Somente administradores podem fazer isso. Seu e-mail ('+m+') não está na lista.','err'); }catch(e){} return null; }
+  if(!confirm(titulo+'\n\nConfirmar como '+m+'?')) return null;
+  var a=listaAdmins().filter(function(x){ return x.email===m; })[0]; return {nome:a.nome||m,email:m};
+}
+window.valAdminRender=function(){
+  var el=document.getElementById('admBody'); if(!el) return; var A=listaAdmins(), L=((STATE.config||{}).valLog)||[], m=meuEmail(), eu=souAdmin();
+  var h='<div style="padding:12px 14px;border-radius:8px;border:1px solid var(--line);background:var(--bg-2);margin-bottom:14px;font-size:13px">'
+    +'<b>'+A.length+'</b> administrador(es). Você está logado como <b>'+esc(m||'—')+'</b> — '+(eu?'<b style="color:var(--green,#3ecf8e)">administrador</b>: pode cadastrar, remover e aceitar padrões.':'<b style="color:var(--amber)">sem permissão de administrador</b>. Só quem está na lista abaixo consegue cadastrar, remover e aceitar padrões.')+'</div>';
+  h+='<div style="margin-bottom:16px">'+A.map(function(a){ return '<div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px"><b style="min-width:200px">'+esc(a.nome||a.email)+'</b><span class="mono" style="min-width:230px">'+esc(a.email)+'</span><span style="color:var(--text-2);flex:1">'+(a.fixo?'principal (fixo)':'criado em '+esc(a.criado||'')+(a.por?' por '+esc(a.por):''))+'</span>'+(a.fixo?'':'<button class="small danger" onclick="valAdmRem(\''+a.id+'\')">Remover</button>')+'</div>'; }).join('')+'</div>';
+  h+='<div style="font-weight:600;margin-bottom:8px;font-size:13.5px">Cadastrar administrador</div><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"><div><label>Nome</label><input id="admNome" autocomplete="off"></div><div><label>E-mail cadastrado no Firebase</label><input id="admEmail" type="email" autocomplete="off" placeholder="nome@empresa.com.br" style="min-width:260px"></div><button class="primary" onclick="valAdmAdd()">Cadastrar</button></div>';
+  h+='<div style="margin-top:18px;font-weight:600;font-size:13.5px">Padrões aceitos (últimos)</div><div style="font-size:12.5px;color:var(--text-2);margin-top:6px">'+(L.length?L.slice(-15).reverse().map(function(x){ return '<div>'+esc(x.em)+' — '+esc(x.quem)+' aceitou <span class="mono">'+esc(x.arquivo)+'</span> ('+esc(x.tipo)+')</div>'; }).join(''):'Nenhum ainda.')+'</div>';
+  h+='<div style="margin-top:16px;font-size:12px;color:var(--text-2);max-width:760px">Observação: o administrador é reconhecido pelo e-mail com que fez login no Firebase Authentication, então só consegue agir quem realmente entrou com esse e-mail. A conferência da lista é feita na própria ferramenta; para bloqueio total, a mesma regra precisa ser aplicada também nas regras do Firebase.</div>';
+  el.innerHTML=h;
+};
+window.valAdmAdd=function(){
+  var nome=(document.getElementById('admNome').value||'').trim(), em=(document.getElementById('admEmail').value||'').trim().toLowerCase(), A=listaAdmins();
+  var quem=pedirAdmin('Cadastrar administrador'); if(!quem) return;
+  if(!emailOk(em)){ toast('Informe um e-mail válido.','err'); return; }
+  if(A.some(function(a){ return a.email===em; })){ toast('Esse e-mail já é administrador.','err'); return; }
+  setAdms(adms().filter(function(a){ return a&&a.email; }).concat([{id:'a'+Date.now().toString(36),nome:nome||em,email:em,criado:agora(),por:quem.email}]));
+  toast('Administrador cadastrado.','ok'); window.valAdminRender();
+};
+window.valAdmRem=function(id){
+  var a=adms().filter(function(x){ return x.id===id; })[0]; if(!a) return;
+  var q=pedirAdmin('Remover o administrador '+a.email); if(!q) return;
+  setAdms(adms().filter(function(x){ return x.id!==id && x.email; })); toast('Administrador removido.','ok'); window.valAdminRender();
+};
+window.valAceitar=function(ix){
+  var r=(window.VAL_REL||[])[ix]; if(!(r&&r.tipo&&r._base)) return;
+  var q=pedirAdmin('Aceitar “'+r.nome+'” como novo padrão'); if(!q) return;
+  saveBase(r.tipo,r._base); r.nivel='ok';
+  try{ STATE.config=STATE.config||{}; var lg=(STATE.config.valLog||[]).concat([{em:agora(),quem:q.email,arquivo:r.nome,tipo:r.rot||r.tipo}]); STATE.config.valLog=lg.slice(-50); saveState(); }catch(e){}
+  try{ toast('Padrão atualizado por '+q.email+'.','ok'); }catch(e){}
+  var c=document.getElementById('valCard'+ix); if(c) c.remove();
+};
+window.valCopiar=function(){ var t=(window.VAL_REL||[]).filter(function(r){ return r.nivel!=='ok'; }).map(function(r){
+  return r.nome+' ['+(r.rot||'tipo não identificado')+']\n'+r.itens.map(function(i){ return ' - '+i.col+': '+i.msg+(i.linhas&&i.linhas.length?' (linhas '+i.linhas.join(', ')+')':''); }).join('\n')+(r.diff.length?'\n   Comparação com a última versão: '+r.diff.join(' | '):''); }).join('\n\n');
+  try{ navigator.clipboard.writeText(t); toast('Relatório copiado.','ok'); }catch(e){} };
+window.valMostrar=function(rel){
+  var pr=(rel||[]).filter(function(r){ return r.nivel!=='ok'; }); if(!pr.length) return;
+  window.VAL_REL=rel;
+  var old=document.getElementById('valModal'); if(old) old.remove();
+  var h='';
+  pr.forEach(function(r){
+    var ix=rel.indexOf(r), cor=r.nivel==='erro'?'--red':'--amber';
+    h+='<div id="valCard'+ix+'" style="border-left:4px solid var('+cor+');background:var(--bg-2);border-radius:6px;padding:12px 14px;margin-bottom:12px">'
+     +'<div style="font-weight:700;font-size:14px">'+(r.nivel==='erro'?'❌ ':'⚠️ ')+esc(r.nome)+' <span style="color:var(--text-2);font-weight:400;font-size:12px">· '+esc(r.rot||'tipo não identificado')+'</span></div>';
+    r.itens.forEach(function(i){ h+='<div style="margin-top:8px;font-size:13px;line-height:1.5"><b>'+esc(i.col)+'</b> — '+esc(i.msg)+(i.linhas&&i.linhas.length?'<div style="color:var(--text-2);font-size:12px">Linhas: '+esc(i.linhas.join(', '))+'</div>':'')+'</div>'; });
+    if(r.diff.length) h+='<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line);font-size:12px;color:var(--text-1);line-height:1.6"><b>Comparação com a última versão'+(r.base?' ('+esc(r.base)+')':'')+'</b><br>'+r.diff.map(esc).join('<br>')+'</div>';
+    if(r.nivel==='aviso' && r._base) h+='<div style="margin-top:10px"><button class="small" onclick="valAceitar('+ix+')">🔒 Aceitar como novo padrão (administrador)</button></div>';
+    h+='</div>';
+  });
+  var m=document.createElement('div'); m.id='valModal';
+  m.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(3,6,12,.72);display:flex;align-items:center;justify-content:center;padding:20px';
+  m.innerHTML='<div style="background:var(--bg-1);border:1px solid var(--line);border-radius:10px;max-width:760px;width:100%;max-height:86vh;display:flex;flex-direction:column">'
+   +'<div style="padding:14px 18px;border-bottom:1px solid var(--line);font-size:16px;font-weight:700">Arquivo(s) fora do padrão <span style="color:var(--text-2);font-weight:400;font-size:12px">· '+pr.length+' de '+rel.length+' arquivo(s) enviados</span></div>'
+   +'<div style="padding:14px 18px;overflow:auto">'+h+'</div>'
+   +'<div style="padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end"><button class="ghost" onclick="valCopiar()">Copiar relatório</button><button class="primary" onclick="document.getElementById(\'valModal\').remove()">Entendi</button></div></div>';
+  document.body.appendChild(m);
+};
+/* envios fora do Upload único (cada aba tem o seu botão): audita o conteúdo antes de a aba processar. Só olha dados/colunas, nunca o nome do arquivo. */
+window.valAuditarArquivos=async function(fs,textoOk){
+  var itens=[];
+  for(var i=0;i<fs.length;i++){ var f=fs[i]; try{
+    if(/\.zip$/i.test(f.name)){ if(typeof extrairZipItens==='function') (await extrairZipItens(f)).forEach(function(x){ itens.push(x); }); }
+    else if(/\.(xlsx|xlsm|xls|xlsb|ods)$/i.test(f.name)) itens.push({nome:f.name,buf:await f.arrayBuffer()});
+    else if(textoOk && /\.txt$/i.test(f.name)) itens.push({nome:f.name,texto:await lerArquivoComoTexto(f)});
+  }catch(e){ console.error(e); } }
+  try{ valMostrar(window.valAuditarItens(itens)); }catch(e){ console.error(e); }
+};
+var VAL_IDS=['kcInp','csInp','relFile','ffFile','iscaFile','inpGAN','inpHEBLS','inpREGIAO'];
+document.addEventListener('change',function(e){
+  var t=e.target; if(!t||t.type!=='file'||VAL_IDS.indexOf(t.id)<0) return;
+  var fs=Array.from(t.files||[]); if(fs.length) window.valAuditarArquivos(fs,/^inp(GAN|HEBLS|REGIAO)$/.test(t.id));
+},true);
+})();
+</script>
+
+
+<script>
+/* Padrão de botões (modelo da aba 3 · Coleta): Data + "⬇ Baixar Excel" (só baixa ao clicar) + "Imprimir" (abre direto, sem baixar) */
+window.padDataBR=function(btn){
+  var inp=btn&&btn.parentNode&&btn.parentNode.querySelector('input[type=date]'), v=inp&&inp.value;
+  if(v){ var p=v.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+  var d=new Date(); return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();
+};
+window.padLimpo=function(id){
+  var el=document.getElementById(id); if(!el) return null;
+  var c=el.cloneNode(true);
+  c.querySelectorAll('button,script,.no-print').forEach(function(x){x.remove();});
+  c.querySelectorAll('input,select,textarea').forEach(function(x){
+    if(x.type==='checkbox'||x.type==='radio'){ x.replaceWith(document.createTextNode(x.checked?'☑':'☐')); return; }
+    var v=x.tagName==='SELECT'?(x.options[x.selectedIndex]||{}).text:x.value;
+    x.replaceWith(document.createTextNode(v||''));
+  });
+  return c;
+};
+window.padAbrir=function(titulo,corpo,dt,paisagem){
+  var html='<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>'+titulo+'</title><style>'+
+   '@page{size:A4 '+(paisagem===false?'portrait':'landscape')+';margin:8mm}html,body{margin:0;padding:0;background:#fff;color:#000;font-family:Calibri,Arial,sans-serif}'+
+   '.dt{font-size:15px;font-weight:700;margin:0 0 6px}*{max-height:none!important;overflow:visible!important}'+
+   'table{border-collapse:collapse;width:100%;font-size:10.5px}th,td{border:1px solid #000;padding:3px 4px;text-align:center;color:#000!important;background:#fff!important}'+
+   'th{font-weight:700;background:#FABF8F!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}tr{page-break-inside:avoid}thead{display:table-header-group}'+
+   '</style></head><body><div class="dt">'+titulo+' — '+dt+'</div>'+corpo+'</body></html>';
+  var w=null; try{w=window.open('','_blank');}catch(e){}
+  if(w){ w.document.open(); w.document.write(html); w.document.close(); w.focus(); setTimeout(function(){w.print();},500); }
+  else{ var fr=document.createElement('iframe'); fr.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;'; document.body.appendChild(fr);
+    var dd=fr.contentWindow.document; dd.open(); dd.write(html); dd.close();
+    setTimeout(function(){fr.contentWindow.focus();fr.contentWindow.print();setTimeout(function(){fr.remove();},60000);},500); }
+};
+window.padTabelaRows=function(rows){
+  if(!rows||!rows.length) return '';
+  var esc=function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}, cols=Object.keys(rows[0]);
+  return '<table><thead><tr>'+cols.map(function(c){return '<th>'+esc(c)+'</th>';}).join('')+'</tr></thead><tbody>'+
+    rows.map(function(r){return '<tr>'+cols.map(function(c){return '<td>'+esc(r[c])+'</td>';}).join('')+'</tr>';}).join('')+'</tbody></table>';
+};
+window.padImprimir=function(id,titulo,btn){
+  var c=window.padLimpo(id);
+  if(!c||!c.textContent.trim()){ try{toast('Nada para imprimir. Gere os dados primeiro.','err');}catch(e){alert('Nada para imprimir.');} return; }
+  window.padAbrir(titulo,c.innerHTML,window.padDataBR(btn));
+};
+/* Lista de Carga: imprime exatamente as linhas/colunas do Excel da aba selecionada (Acumulada ou filial), respeitando os filtros */
+window.pImprimirLista=function(btn){
+  try{
+    if(!STATE.alocacao.length){ toast('Rode a alocação antes de imprimir.','err'); return; }
+    var rows=pLinhasLista(pItensFiltrados(), (typeof pFilialSel!=='undefined'&&pFilialSel)||null).rows;
+    if(!rows.length){ toast('Nenhuma carga no filtro atual.','err'); return; }
+    window.padAbrir('Lista de Carga',window.padTabelaRows(rows),window.padDataBR(btn));
+  }catch(e){ console.error(e); toast('Não consegui abrir a impressão: '+(e.message||e),'err'); }
+};
+/* Protocolo de Bancada: mesmas cargas/valores do Histórico de Bancada em Excel (onda > doca) */
+window.protoImprimir=function(btn){
+  try{
+    if(!STATE.alocacao.length){ toast('Rode a alocação antes de imprimir.','err'); return; }
+    var L=protoLinhas(); if(!L.length){ toast('Nenhuma carga alocada em doca.','err'); return; }
+    var rows=L.map(function(x){return {'DOCA CAJ-1':x.doca,'PRÉ- CAJ-33':x.p33,'PRÉ- CAJ-05':x.p05,'PRÉ- CAJ-D0':x.pD0,'33':'','05':'','D0':''};});
+    window.padAbrir('Histórico de Bancada LV',window.padTabelaRows(rows),window.padDataBR(btn),false);
+  }catch(e){ console.error(e); toast('Não consegui abrir a impressão: '+(e.message||e),'err'); }
+};
+window.padExcel=function(id,nome){
+  var c=window.padLimpo(id), t=c&&(c.tagName==='TABLE'?c:c.querySelector('table'));
+  if(!t||typeof XLSX==='undefined'){ try{toast('Nada para exportar ou biblioteca de Excel não carregou.','err');}catch(e){} return; }
+  XLSX.writeFile(XLSX.utils.table_to_book(t,{sheet:nome.slice(0,31)}),nome.replace(/\s+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
+};
+/* campo Data ao lado dos botões (igual à aba 3), nas abas que ganharam o padrão */
+document.addEventListener('DOMContentLoaded',function(){
+  var hoje=new Date().toISOString().slice(0,10), vistos=new Set();
+  document.querySelectorAll('button[onclick*="padImprimir("],button[onclick*="pImprimirLista("],button[onclick*="protoImprimir("]').forEach(function(b){
+    var p=b.parentNode; if(vistos.has(p)||p.querySelector('input[type=date]')) return; vistos.add(p);
+    var l=document.createElement('label'); l.style.cssText='margin:0;font-size:12px;color:var(--text-2);';
+    l.innerHTML='Data <input type="date" value="'+hoje+'" style="margin-left:4px;">';
+    p.insertBefore(l,p.querySelector('button'));
+  });
+});
 </script>
 </body>
 </html>
