@@ -162,6 +162,17 @@
   }
   .toast.err{border-left-color:var(--red);}
   .toast.ok{border-left-color:var(--teal);}
+  /* animação de carregamento dos arquivos (aba Upload) */
+  .ul-loader{display:none;align-items:center;gap:14px;margin-top:12px;padding:12px 14px;background:var(--bg-2);border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:8px;}
+  .ul-loader.on{display:flex;}
+  .ul-spin{width:26px;height:26px;flex:0 0 26px;border:3px solid var(--bg-3);border-top-color:var(--amber);border-radius:50%;animation:ulspin .8s linear infinite;}
+  .ul-body{flex:1;min-width:0;}
+  .ul-txt{font-size:13px;color:var(--text-0);font-weight:600;}
+  .ul-sub{font-size:12px;color:var(--text-1);margin-top:2px;}
+  .ul-bar{position:relative;height:5px;margin-top:8px;background:var(--bg-3);border-radius:3px;overflow:hidden;}
+  .ul-bar::after{content:"";position:absolute;top:0;left:0;height:100%;width:35%;background:var(--amber);border-radius:3px;animation:ulbar 1.2s ease-in-out infinite;}
+  @keyframes ulspin{to{transform:rotate(360deg);}}
+  @keyframes ulbar{0%{transform:translateX(-100%);}100%{transform:translateX(300%);}}
   @keyframes slidein{from{transform:translateX(20px);opacity:0;}to{transform:translateX(0);opacity:1;}}
 
   .empty{padding:34px 18px;text-align:center;color:var(--text-2);font-size:13px;}
@@ -662,6 +673,7 @@
       <span class="k">Clique ou arraste todos os arquivos aqui</span>múltiplos arquivos misturados · arquivos .zip são extraídos automaticamente
     </div>
     <input type="file" id="inpAUTO" multiple style="display:none" onchange="handleFilesAuto(Array.from(event.target.files)); this.value=''">
+    <div id="uploadLoader" class="ul-loader" role="status" aria-live="polite"><div class="ul-spin"></div><div class="ul-body"><div class="ul-txt" id="uploadLoaderTxt">Carregando arquivos…</div><div class="ul-sub">Lendo, identificando e consolidando. Aguarde, isso pode levar alguns segundos.</div><div class="ul-bar"></div></div></div>
     <div id="autoResumo" style="margin-top:12px;"></div>
   </div>
 
@@ -2652,14 +2664,22 @@ async function extrairZipItens(file){
 function handleDropAuto(ev){ ev.preventDefault(); ev.currentTarget.classList.remove('drag'); handleFilesAuto(Array.from(ev.dataTransfer.files)); }
 
 let UPLOAD_OCUPADO = false;
+function uploadLoaderMostrar(n){
+  const el = document.getElementById('uploadLoader'); if(!el) return;
+  const t = document.getElementById('uploadLoaderTxt'); if(t) t.textContent = 'Carregando '+n+' arquivo'+(n===1?'':'s')+'…';
+  el.classList.add('on');
+}
+function uploadLoaderOcultar(){ const el = document.getElementById('uploadLoader'); if(el) el.classList.remove('on'); }
 async function handleFilesAuto(fileList){
   const arquivos = Array.from(fileList || []);
   if(!arquivos.length) return;
   if(UPLOAD_OCUPADO){ toast('Aguarde o término da leitura anterior.', 'err'); return; }
   UPLOAD_OCUPADO = true;
+  uploadLoaderMostrar(arquivos.length);
+  try{ await new Promise(r=>requestAnimationFrame(()=>setTimeout(r,30))); }catch(e){}   /* deixa a animação aparecer antes da leitura pesada */
   try{ const extras = await _handleFilesAutoInterno(arquivos); await fluxoAposEnvio(extras); }
   catch(err){ console.error(err); toast('Erro ao carregar os arquivos: '+(err&&err.message?err.message:err), 'err'); }
-  finally{ UPLOAD_OCUPADO = false; try{ renderFluxo(); }catch(e){} }
+  finally{ UPLOAD_OCUPADO = false; uploadLoaderOcultar(); try{ renderFluxo(); }catch(e){} }
 }
 async function _handleFilesAutoInterno(arquivos){
   const itens = [];
