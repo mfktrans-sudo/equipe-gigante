@@ -170,9 +170,9 @@
   .ul-txt{font-size:13px;color:var(--text-0);font-weight:600;}
   .ul-sub{font-size:12px;color:var(--text-1);margin-top:2px;}
   .ul-bar{position:relative;height:5px;margin-top:8px;background:var(--bg-3);border-radius:3px;overflow:hidden;}
-  .ul-bar::after{content:"";position:absolute;top:0;left:0;height:100%;width:35%;background:var(--amber);border-radius:3px;animation:ulbar 1.2s ease-in-out infinite;}
+  .ul-fill{position:absolute;top:0;left:0;height:100%;width:0%;background:var(--amber);border-radius:3px;transition:width .25s ease;}
+  .ul-pct{font-family:var(--mono);font-weight:700;color:var(--amber);margin-left:8px;}
   @keyframes ulspin{to{transform:rotate(360deg);}}
-  @keyframes ulbar{0%{transform:translateX(-100%);}100%{transform:translateX(300%);}}
   @keyframes slidein{from{transform:translateX(20px);opacity:0;}to{transform:translateX(0);opacity:1;}}
 
   .empty{padding:34px 18px;text-align:center;color:var(--text-2);font-size:13px;}
@@ -673,7 +673,7 @@
       <span class="k">Clique ou arraste todos os arquivos aqui</span>múltiplos arquivos misturados · arquivos .zip são extraídos automaticamente
     </div>
     <input type="file" id="inpAUTO" multiple style="display:none" onchange="handleFilesAuto(Array.from(event.target.files)); this.value=''">
-    <div id="uploadLoader" class="ul-loader" role="status" aria-live="polite"><div class="ul-spin"></div><div class="ul-body"><div class="ul-txt" id="uploadLoaderTxt">Carregando arquivos…</div><div class="ul-sub">Lendo, identificando e consolidando. Aguarde, isso pode levar alguns segundos.</div><div class="ul-bar"></div></div></div>
+    <div id="uploadLoader" class="ul-loader" role="status" aria-live="polite"><div class="ul-spin"></div><div class="ul-body"><div class="ul-txt"><span id="uploadLoaderTxt">Carregando arquivos…</span><span class="ul-pct" id="uploadLoaderPct">0%</span></div><div class="ul-sub" id="uploadLoaderSub">Lendo, identificando e consolidando.</div><div class="ul-bar"><div class="ul-fill" id="uploadLoaderFill"></div></div></div></div>
     <div id="autoResumo" style="margin-top:12px;"></div>
   </div>
 
@@ -2668,6 +2668,26 @@ function uploadLoaderMostrar(n){
   const el = document.getElementById('uploadLoader'); if(!el) return;
   const t = document.getElementById('uploadLoaderTxt'); if(t) t.textContent = 'Carregando '+n+' arquivo'+(n===1?'':'s')+'…';
   el.classList.add('on');
+  _ULP = {ini: Date.now(), pct: 0};
+  uploadLoaderProgresso(0, 'Lendo os arquivos…');
+}
+let _ULP = {ini:0, pct:0};
+const _ulTick = ()=> new Promise(r=>{ try{ requestAnimationFrame(()=>setTimeout(r,0)); }catch(e){ setTimeout(r,0); } });
+/* porcentagem 0–100 (nunca volta para trás) + etapa + tempo restante estimado */
+function uploadLoaderProgresso(pct, etapa){
+  if(pct < _ULP.pct) pct = _ULP.pct;
+  pct = Math.max(0, Math.min(100, Math.round(pct)));
+  _ULP.pct = pct;
+  const f = document.getElementById('uploadLoaderFill'); if(f) f.style.width = pct+'%';
+  const p = document.getElementById('uploadLoaderPct'); if(p) p.textContent = pct+'%';
+  const sub = document.getElementById('uploadLoaderSub');
+  if(sub){
+    if(etapa) _ULP.etapa = etapa;
+    const dec = (Date.now()-_ULP.ini)/1000;
+    let eta = '';
+    if(pct>=10 && pct<100 && dec>=2){ const rest = Math.max(1, Math.round(dec*(100-pct)/pct)); eta = ' · faltam cerca de '+(rest>=60 ? Math.floor(rest/60)+' min '+(rest%60)+' s' : rest+' s'); }
+    sub.textContent = (pct>=100 ? 'Concluído.' : (_ULP.etapa||'')) + eta;
+  }
 }
 function uploadLoaderOcultar(){ const el = document.getElementById('uploadLoader'); if(el) el.classList.remove('on'); }
 async function handleFilesAuto(fileList){
@@ -2679,11 +2699,14 @@ async function handleFilesAuto(fileList){
   try{ await new Promise(r=>requestAnimationFrame(()=>setTimeout(r,30))); }catch(e){}   /* deixa a animação aparecer antes da leitura pesada */
   try{ const extras = await _handleFilesAutoInterno(arquivos); await fluxoAposEnvio(extras); }
   catch(err){ console.error(err); toast('Erro ao carregar os arquivos: '+(err&&err.message?err.message:err), 'err'); }
-  finally{ UPLOAD_OCUPADO = false; uploadLoaderOcultar(); try{ renderFluxo(); }catch(e){} }
+  finally{ UPLOAD_OCUPADO = false; uploadLoaderProgresso(100); setTimeout(()=>{ if(!UPLOAD_OCUPADO) uploadLoaderOcultar(); }, 500); try{ renderFluxo(); }catch(e){} }
 }
 async function _handleFilesAutoInterno(arquivos){
   const itens = [];
+  let _lidos = 0;
   for(const file of arquivos){
+    uploadLoaderProgresso(35*_lidos/arquivos.length, 'Lendo arquivo '+(_lidos+1)+' de '+arquivos.length+'…'); _lidos++;
+    await _ulTick();
     const isZip = /\.zip$/i.test(file.name) || file.type === 'application/zip' || file.type === 'application/x-zip-compressed';
     if(isZip){
       (await extrairZipItens(file)).forEach(i=>itens.push(i));
@@ -2695,10 +2718,11 @@ async function _handleFilesAutoInterno(arquivos){
       catch(err){ toast('Falha ao ler '+file.name, 'err'); }
     }
   }
+  uploadLoaderProgresso(35, 'Identificando os arquivos…');
   const _valRel = (typeof valAuditarItens==='function') ? valAuditarItens(itens) : [];
   const res = {ok:{GAN:0, HEBLS:0, REGIAO:0, TS:0}, porNome:[], repetidos:[], naoReconhecidos:[], ts:[], extras:[]};
   const extras = [];   // planilhas de apoio (Coletas, Tipo de Residência, Programação, iscas...) — entregues às abas depois da consolidação
-  itens.forEach(it=>{
+  const _procItem = it=>{
     if(it.buf && ehLinhaProduto(it.buf)){   // Linha de Produto (aba "Painel (Diário)"): alimenta a aba 10 · PAINEL DIARIO
       const pi = (typeof window.pdInfo==='function') ? window.pdInfo() : null;
       if(pi && String(pi.nome||'').trim().toLowerCase()===String(it.nome).trim().toLowerCase()){ res.repetidos.push(it.nome); return; }
@@ -2728,7 +2752,13 @@ async function _handleFilesAutoInterno(arquivos){
     PENDING[det.tipo].push({nome: it.nome, regiao: extrairRegiaoDoNome(it.nome), texto: it.texto});
     res.ok[det.tipo]++;
     if(det.porNome) res.porNome.push(it.nome);
-  });
+  };
+  for(let _k=0; _k<itens.length; _k++){
+    uploadLoaderProgresso(35+25*_k/itens.length, 'Identificando arquivo '+(_k+1)+' de '+itens.length+'…');
+    await _ulTick();
+    _procItem(itens[_k]);
+  }
+  uploadLoaderProgresso(60, 'Montando a prévia…');
   ['GAN','HEBLS','REGIAO'].forEach(renderFileList);
   atualizarPreviaUpload();
   renderResumoAuto(res);
@@ -2789,8 +2819,10 @@ async function despacharExtras(extras){
     ['coletas','kcFiles'], ['tipo','kcFiles'], ['lista_kc','kcFiles'],
     ['kit','csFiles'], ['lista_cs','csFiles'], ['prog','csFiles'], ['prog','ffArquivos'], ['iscas','iscaArquivos'], ['linha','pdFiles']
   ];
+  const _totG = grupos.filter(([t])=>por[t] && por[t].length).length; let _feitoG = 0;
   for(const [tipo, fn] of grupos){
     const l = por[tipo]; if(!l || !l.length) continue;
+    uploadLoaderProgresso(78+20*_feitoG/_totG, 'Enviando '+(ROTULO_EXTRA[tipo]||tipo)+'…'); await _ulTick();
     const files = l.map(arq);
     try{
       if(fn==='kcFiles' && typeof window.kcFiles==='function') await window.kcFiles(files);
@@ -2799,6 +2831,7 @@ async function despacharExtras(extras){
       else if(fn==='iscaArquivos') await iscaArquivos(files);
       else if(fn==='pdFiles' && typeof window.pdFiles==='function') await window.pdFiles(files.slice(0,1));   // só uma Linha de Produto por dia
     }catch(e){ console.error(e); toast('Não consegui processar '+l.map(x=>x.nome).join(', ')+': '+(e&&e.message||e), 'err'); }
+    _feitoG++;
   }
 }
 
@@ -2817,7 +2850,9 @@ function fluxoConsolidar(){
 }
 async function fluxoAposEnvio(extras){
   const consolidou = fluxoAutoLigado() && fluxoTemPendentes();
+  if(consolidou){ uploadLoaderProgresso(62, 'Consolidando e alocando as docas…'); await _ulTick(); }
   if(consolidou) fluxoConsolidar();
+  uploadLoaderProgresso(78, 'Enviando os arquivos de apoio às abas…');
   await despacharExtras(extras);
   // terminado o envio e a consolidação, segue para o 1º passo: aba 1 · Lista de Carga
   if(consolidou && (STATE.alocacao||[]).length){ try{ switchTab('painel'); }catch(e){} }
