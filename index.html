@@ -834,6 +834,8 @@
         <button class="primary" onclick="otimizarOndas()" title="Sobe para a onda anterior toda carga que tenha doca livre numa onda menor (ex.: 3ª onda → 2ª onda). Mantém ajustes manuais e cargas da base TS.">⚡ Otimizar ondas</button>
         <button class="primary" onclick="exportarListaOndasExcel()">⬇ Baixar Excel</button>
         <button class="primary" onclick="pImprimirLista(this)">Imprimir</button>
+        <select id="etqPorFolha" title="Quantas etiquetas por folha A4"><option value="2" selected>2 etiquetas por folha</option><option value="1">1 etiqueta por folha</option></select>
+        <button class="primary" onclick="etqBaixarWord()" title="Word A4 com PRÉ, ONDA (doca-onda) e PLACA das cargas da 3ª onda em diante, ordenado por doca">🖨 Etiquetas Word (3ª onda+)</button>
       </div>
     </div>
     <div class="grid cols-4" id="pStats"></div>
@@ -9813,6 +9815,23 @@ document.addEventListener('DOMContentLoaded',function(){
     p.insertBefore(l,p.querySelector('button'));
   });
 });
+</script>
+<script>
+/* Garantia: a sub-aba "Prioridade por Rodizio" (Configurações) é recriada se o botão sumir da barra por qualquer motivo */
+(function(){
+  function garantir(){
+    var bar=document.getElementById('subtabsConfig'); if(!bar||bar.querySelector('[data-sub="priorodizio"]')) return;
+    if(!document.getElementById('view-priorodizio')) return;
+    var b=document.createElement('button'); b.className='subtab-btn'; b.setAttribute('data-sub','priorodizio');
+    b.setAttribute('onclick',"switchTab('priorodizio')"); b.textContent='Prioridade por Rodizio';
+    var ref=bar.querySelector('[data-sub="prioregiao"]'); if(ref&&ref.nextSibling) bar.insertBefore(b,ref.nextSibling); else bar.appendChild(b);
+  }
+  document.addEventListener('DOMContentLoaded',function(){
+    garantir(); var bar=document.getElementById('subtabsConfig');
+    if(bar&&window.MutationObserver) new MutationObserver(garantir).observe(bar,{childList:true});
+    document.addEventListener('click',function(){ setTimeout(garantir,0); },true);
+  });
+})();
 </script>
 </body>
 </html>
