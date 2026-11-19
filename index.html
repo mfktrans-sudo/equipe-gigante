@@ -180,11 +180,12 @@
   .ul-loader.rl-novo{position:relative;overflow:hidden;gap:16px;padding:16px 18px;border-radius:12px;border:1px solid var(--line);background:linear-gradient(135deg,var(--bg-2),var(--bg-1));box-shadow:0 8px 26px rgba(0,0,0,.22);}
   .ul-loader.rl-novo::before{content:'';position:absolute;left:0;top:0;height:2px;width:40%;background:linear-gradient(90deg,transparent,var(--amber),var(--teal),transparent);animation:rlglow 1.6s ease-in-out infinite;}
   .ul-loader.rl-novo .ul-spin{display:none;}
-  .ul-loader.rl-novo .rl-orb{display:block;position:relative;width:46px;height:46px;flex:0 0 46px;}
-  .rl-orb i{position:absolute;border-radius:50%;}
-  .rl-orb .a{inset:0;border:3px solid transparent;border-top-color:var(--amber);border-right-color:var(--amber);animation:ulspin 1.1s linear infinite;}
-  .rl-orb .b{inset:8px;border:3px solid transparent;border-bottom-color:var(--teal);border-left-color:var(--teal);animation:ulspin .8s linear infinite reverse;}
-  .rl-orb .c{inset:18px;background:var(--amber);box-shadow:0 0 12px var(--amber);animation:rlpulse 1.2s ease-in-out infinite;}
+  .ul-loader.rl-novo .rl-orb{display:block;position:relative;width:54px;height:54px;flex:0 0 54px;}
+  /* anel de partículas girando (pontos brilhantes com cauda que some), usado nas abas Upload e Relação de Entrega */
+  .rl-orb i{position:absolute;border-radius:50%;border:2px dotted #6fdcff;filter:drop-shadow(0 0 3px #2bb8ff);-webkit-mask-image:conic-gradient(transparent 0deg,#000 300deg);mask-image:conic-gradient(transparent 0deg,#000 300deg);}
+  .rl-orb .a{inset:0;animation:ulspin 1.5s linear infinite;}
+  .rl-orb .b{inset:4px;border-width:1.5px;opacity:.85;animation:ulspin 2.1s linear infinite;animation-delay:-.7s;}
+  .rl-orb .c{inset:8px;border-width:1.5px;opacity:.7;animation:ulspin 2.9s linear infinite;animation-delay:-1.4s;}
   .ul-loader.rl-novo .ul-txt{font-size:14px;display:flex;align-items:baseline;}
   .ul-loader.rl-novo .ul-pct{margin-left:auto;font-size:17px;}
   .ul-loader.rl-novo .ul-bar{height:8px;border-radius:6px;margin-top:10px;}
