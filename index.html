@@ -1197,7 +1197,7 @@
         <button class="primary" onclick="padExcel('ofdTabela','Ondas Fora da doca')">⬇ Baixar Excel</button>
         <button class="primary" onclick="ofdImprimir()" title="Imprime direto as etiquetas (PRÉ, ONDA e PLACA), uma por placa, no mesmo modelo do Word">Imprimir</button>
         <select id="ofdModo" onchange="renderOndasFora()" title="Quais ondas entram nas etiquetas"><option value="3+" selected>3ª onda em diante</option><option value="3">Somente a 3ª onda</option></select>
-        <select id="ofdPorFolha" title="Quantas etiquetas por folha A4"><option value="2" selected>2 etiquetas por folha</option><option value="1">1 etiqueta por folha</option></select>
+        <select id="ofdPorFolha" title="Cada carga sai em uma folha A4 separada"><option value="1" selected>1 etiqueta por folha (cada carga em uma A4)</option></select>
         <button class="primary" onclick="ofdBaixarWord()" title="Baixa o Word A4 pronto para impressão">⬇ Baixar Word (A4)</button>
       </div>
     </div>
@@ -6563,7 +6563,7 @@ function renderOndasFora(){
     box.innerHTML = '<div style="padding:28px;text-align:center;color:var(--text-2);">Nenhuma alocação carregada. Carregue a lista de carga e clique em “Rodar alocação” na aba 1 · Lista de Carga.</div>';
     return;
   }
-  const its = ofdLista(), sel = document.getElementById('ofdPorFolha'), pf = sel && sel.value==='1' ? 1 : 2;
+  const its = ofdLista(), sel = document.getElementById('ofdPorFolha'), pf = 1; /* cada carga em uma A4 */
   const stat = (n,l,cor)=>`<div class="stat"><div class="num"${cor?` style="color:var(--${cor})"`:''}>${n}</div><div class="lbl">${l}</div></div>`;
   st.innerHTML = [
     stat(its.length,'etiquetas'),
@@ -6587,7 +6587,7 @@ function ofdImprimir(){
     if(!STATE.alocacao || !STATE.alocacao.length){ toast('Rode a alocação antes de imprimir as etiquetas.','err'); return; }
     const its = ofdLista();
     if(!its.length){ toast('Nenhuma carga alocada nessa seleção de onda.','err'); return; }
-    const sel = document.getElementById('ofdPorFolha'), pf = sel && sel.value==='1' ? 1 : 2;
+    const sel = document.getElementById('ofdPorFolha'), pf = 1; /* cada carga em uma A4 */
     const W = pf===1 ? 190 : 180, H = W*436/652, u = W/652;           // mm; proporção do modelo (652 x 436)
     const esc = s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const mm = n=>(n*u).toFixed(3)+'mm';
@@ -6621,7 +6621,7 @@ async function ofdBaixarWord(){
   const its = ofdLista();
   if(!its.length){ toast('Nenhuma carga alocada nessa seleção de onda.','err'); return; }
   if(typeof JSZip==='undefined'){ toast('Biblioteca de ZIP não carregou (verifique a internet).','err'); return; }
-  const sel = document.getElementById('ofdPorFolha'), pf = sel && sel.value==='1' ? 1 : 2;
+  const sel = document.getElementById('ofdPorFolha'), pf = 1; /* cada carga em uma A4 */
   const modo = (document.getElementById('ofdModo')||{}).value || '3+';
   const blob = await etqGerarDocx(its.map(it=>it.a), pf);
   bkBaixar(blob, 'etiquetas_'+(modo==='3'?'3a_onda':'3a_onda_em_diante')+'_'+new Date().toISOString().slice(0,10)+'.docx');
