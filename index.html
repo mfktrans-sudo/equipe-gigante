@@ -844,10 +844,6 @@
         <select id="pOnda" onchange="renderPainel()"></select>
         <button class="primary" onclick="rodarAlocacao()">Rodar alocação ▶</button>
         <button class="primary" onclick="otimizarOndas()" title="Sobe para a onda anterior toda carga que tenha doca livre numa onda menor (ex.: 3ª onda → 2ª onda). Mantém ajustes manuais e cargas da base TS.">⚡ Otimizar ondas</button>
-        <button class="primary" onclick="exportarListaOndasExcel()">⬇ Baixar Excel</button>
-        <button class="primary" onclick="pImprimirLista(this)">Imprimir</button>
-        <select id="etqPorFolha" title="Quantas etiquetas por folha A4"><option value="2" selected>2 etiquetas por folha</option><option value="1">1 etiqueta por folha</option></select>
-        <button class="primary" onclick="etqBaixarWord()" title="Word A4 com PRÉ, ONDA (doca-onda) e PLACA das cargas da 3ª onda em diante, ordenado por doca">🖨 Etiquetas Word (3ª onda+)</button>
       </div>
     </div>
     <div class="grid cols-4" id="pStats"></div>
@@ -1037,7 +1033,7 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <input id="csFiltro" placeholder="Buscar placa ou carga..." style="width:200px;" oninput="csRender()">
         <button class="primary" onclick="padExcel('csTab','Saida de Veiculos')">⬇ Baixar Excel</button>
-        <button class="primary" onclick="csImprimirTodos()">Imprimir todos</button>
+        <button class="primary" onclick="csImprimirTodos()" title="Imprime um formulário por veículo">Imprimir</button>
       </div>
     </div>
 
@@ -1182,10 +1178,10 @@
       </div>
     </details>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="primary" onclick="relImprimir()">Imprimir</button>
-      <button class="primary" onclick="relBaixarWord()">⬇ Baixar Word (.docx)</button>
       <button class="primary" onclick="relBaixarExcel('abas')" title="Cada placa numa aba do Excel, pronta para imprimir individualmente">⬇ Excel — uma aba por placa</button>
       <button class="primary" onclick="relBaixarExcel('unica')" title="Todas as cargas numa planilha só, uma por página">⬇ Excel — planilha única</button>
+      <button class="primary" onclick="relImprimir()">Imprimir</button>
+      <button class="primary" onclick="relBaixarWord()">⬇ Baixar Word (.docx)</button>
       <button class="danger" onclick="relLimpar()">Remover arquivos</button>
     </div>
     <div class="desc" style="margin-top:8px;">Uma carga por folha A4, na ordem das cargas. Em “Imprimir / salvar PDF” escolha a impressora, ou “Salvar como PDF”, na janela que abrir. O Word e o Excel saem prontos para imprimir ou ajustar.</div>
@@ -1198,11 +1194,11 @@
       <div><h2>Ondas Fora da doca</h2>
         <div class="desc">Lê a mesma alocação da Lista de Carga (mesmo nº de carga, doca e onda) e monta as etiquetas A4 com <b>PRÉ</b>, <b>ONDA</b> (doca-onda) e <b>PLACA</b> das cargas que ficaram fora da doca, na mesma ordem da lista.</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <button class="primary" onclick="padExcel('ofdTabela','Ondas Fora da doca')">⬇ Baixar Excel</button>
+        <button class="primary" onclick="ofdImprimir()" title="Imprime direto as etiquetas (PRÉ, ONDA e PLACA), uma por placa, no mesmo modelo do Word">Imprimir</button>
         <select id="ofdModo" onchange="renderOndasFora()" title="Quais ondas entram nas etiquetas"><option value="3+" selected>3ª onda em diante</option><option value="3">Somente a 3ª onda</option></select>
         <select id="ofdPorFolha" title="Quantas etiquetas por folha A4"><option value="2" selected>2 etiquetas por folha</option><option value="1">1 etiqueta por folha</option></select>
         <button class="primary" onclick="ofdBaixarWord()" title="Baixa o Word A4 pronto para impressão">⬇ Baixar Word (A4)</button>
-        <button class="primary" onclick="padExcel('ofdTabela','Ondas Fora da doca')">⬇ Baixar Excel</button>
-        <button class="primary" onclick="padImprimir('ofdTabela','Ondas Fora da doca',this)">Imprimir</button>
       </div>
     </div>
     <div class="grid cols-4" id="ofdStats"></div>
@@ -5393,6 +5389,22 @@ function ilDistribuir(manter){
   const poolTerr = r => cacheT[r.key] || (cacheT[r.key] = ilPoolDe(()=>true).filter(p=>bate(p, codsDe(r))));
   const pend = [];
   L.rows.forEach(r=>{ if(r.manual && r.placa) return; if(manter && r.placa) return; r.placa = ''; r.sobra = false; pend.push(r); });
+  /* PRIORIDADE: a isca digitada (placa que não está em nenhuma linha do arquivo) OCUPA uma linha do arquivo — o total nunca passa da quantidade de iscas do arquivo.
+     Primeiro as placas de prioridade tomam suas linhas (de preferência a da mesma região da placa); só depois o restante é completado com as indicações da distribuição. */
+  const temK = new Set(L.rows.filter(r=>r.placa).map(r=>placaKey(r.placa)));
+  const digK = new Set((STATE.iscas||[]).map(x=>placaKey(x.placa)).filter(Boolean));
+  (STATE.iscas||[]).forEach(x=>{ const k = placaKey(x.placa); if(!k || temK.has(k)) return;
+    const regP = ilNorm(ilInfoPlaca(x.placa).regiao||'');
+    const livres = pend.filter(y=>!y.placa);
+    let r = livres.find(y=>regP && ilNorm(ilRegiaoDe(y.key))===regP) || livres[0];
+    if(r){ pend.splice(pend.indexOf(r),1); }
+    else {   /* nenhuma linha livre: libera a última linha automática (não manual e que não seja de outra prioridade) */
+      const cand = L.rows.filter(y=>!y.manual && y.placa && !digK.has(placaKey(y.placa)));
+      r = cand.filter(y=>y.sobra).pop() || cand.pop();
+      if(r) temK.delete(placaKey(r.placa));
+    }
+    if(r){ r.placa = x.placa; r.sobra = false; temK.add(k); }
+  });
   const comReg = pend.filter(r=>ilRegiaoDe(r.key)), semReg = pend.filter(r=>!ilRegiaoDe(r.key));
   /* 1ª passada: placa da região escolhida E com o mesmo território da isca */
   const resto = [];
@@ -5407,10 +5419,6 @@ function ilDistribuir(manter){
   }
   /* área sem região escolhida: se o território da isca tem placa nos arquivos de Região, já vincula */
   semReg.forEach(r=>{ const pt = poolTerr(r).find(livre); if(pt) tomar(r, pt, false); });
-  /* isca digitada (prioridade) cuja placa não está em nenhuma linha do arquivo: assume uma linha ainda sem placa, para trazer o nome do cliente */
-  const tem = new Set(L.rows.filter(r=>r.placa).map(r=>placaKey(r.placa)));
-  (STATE.iscas||[]).forEach(x=>{ const k = placaKey(x.placa); if(!k || tem.has(k)) return;
-    const r = L.rows.find(y=>!y.manual && !y.placa); if(r){ r.placa = x.placa; r.sobra = false; tem.add(k); } });
   saveState();
 }
 
@@ -6027,19 +6035,85 @@ function pNomeAba(nome, usados){
   while(usados.has(n.toLowerCase())){ n=base.slice(0,28)+' '+(i++); }
   usados.add(n.toLowerCase()); return n;
 }
-/* Aba no layout oficial da Lista de Carga (mesmas colunas, larguras e cabeçalho fixo da Carga Acumulada) */
-function pWsLista(rows, msgVazio){
-  if(!rows.length) return XLSX.utils.aoa_to_sheet([[msgVazio||'Nenhuma carga no filtro atual.']]);
-  const ws=XLSX.utils.json_to_sheet(rows), cols=Object.keys(rows[0]);
-  ws['!cols']=cols.map(c=>({wch:Math.min(46, Math.max(c.length, ...rows.map(r=>String(r[c]==null?'':r[c]).length))+2)}));
-  ws['!freeze']={xSplit:0,ySplit:1};
-  return ws;
+/* =========================================================
+   EXCEL NO PADRÃO DA LISTA DE CARGA (idêntico ao arquivo modelo usado hoje):
+   Calibri 12 · tudo centralizado · cabeçalho em negrito com fundo cinza · bordas finas em todas as células de dados ·
+   largura de coluna ajustada ao conteúdo · sem painel congelado · sem filtro.
+   Cabeçalho SEM borda nas abas Carga Acumulada / Carga 33 / Carga 05 / Carga CAJ-x / Lista por Onda;
+   COM borda nas abas de cada onda, Resumo por Doca e Pendências.
+   ========================================================= */
+/* larguras reais do Calibri (unidades de 2048/em) — usadas para ajustar a largura das colunas como o "Ajustar largura" do Excel */
+const P_XL_CW={'0':1038,'1':1038,'2':1038,'3':1038,'4':1038,'5':1038,'6':1038,'7':1038,'8':1038,'9':1038,' ':463,
+  'A':1185,'B':1114,'C':1092,'D':1260,'E':1000,'F':941,'G':1292,'H':1276,'I':516,'J':653,'K':1064,'L':861,'M':1751,'N':1322,'O':1356,'P':1058,'Q':1378,'R':1112,'S':941,'T':998,'U':1314,'V':1162,'W':1822,'X':1063,'Y':998,'Z':959,
+  'a':981,'b':1076,'c':866,'d':1076,'e':1019,'f':625,'g':964,'h':1076,'i':470,'j':490,'k':931,'l':470,'m':1636,'n':1076,'o':1080,'p':1076,'q':1076,'r':714,'s':801,'t':686,'u':1076,'v':925,'w':1464,'x':887,'y':927,'z':809,
+  '-':627,'.':517,',':511,'(':621,')':621,'|':943,':':548,';':548,'·':517,'ª':700,'º':700,'/':791,'+':1000,'_':1000};
+function pXlW(txt, bold){            // largura estimada (unidades do Excel) de um texto em Calibri 12
+  let u=0;
+  for(const ch of String(txt==null?'':txt)){
+    let c=P_XL_CW[ch];
+    if(c==null){ const base=ch.normalize('NFD').charAt(0); c=P_XL_CW[base]; }
+    u+= (c==null?1000:c);
+  }
+  let px=u/2048*16; if(bold) px*=1.03;
+  return (px+7)/8;
 }
-function pAddSheetsFilial(wb){
-  const items=pItensFiltrados(), usados=new Set((wb.SheetNames||[]).map(x=>x.toLowerCase()));
+function pXlColL(i){ let n=i+1, s=''; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26); } return s; }
+function pXlEsc(v){ return String(v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+/* estilos (mesma ordem do modelo): 1 centralizado | 2 cabeçalho (negrito+cinza) | 3 dado com borda | 4 cabeçalho com borda */
+const P_XL_STYLES='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+  '<fonts count="2"><font><sz val="12"/><color rgb="FF000000"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="12"/><color rgb="FF000000"/><name val="Calibri"/><family val="2"/></font></fonts>'+
+  '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9D9D9"/><bgColor indexed="64"/></patternFill></fill></fills>'+
+  '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color indexed="64"/></left><right style="thin"><color indexed="64"/></right><top style="thin"><color indexed="64"/></top><bottom style="thin"><color indexed="64"/></bottom><diagonal/></border></borders>'+
+  '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
+  '<cellXfs count="6"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+
+  '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="center"/></xf>'+
+  '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center"/></xf>'+
+  '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center"/></xf>'+
+  '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center"/></xf>'+
+  '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>'+
+  '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+/* sheet = {nome, rows:[{coluna:valor}], vazio:'msg', borda:true|false (borda no cabeçalho)} */
+function pXlSheetXml(sh, primeira){
+  const rows=sh.rows||[], head='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">';
+  const view='<sheetViews><sheetView'+(primeira?' tabSelected="1"':'')+' workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="15.75"/>';
+  const marg='<pageMargins left="0.511811024" right="0.511811024" top="0.78740157499999996" bottom="0.78740157499999996" header="0.31496062000000002" footer="0.31496062000000002"/>';
+  if(!rows.length){
+    return head+'<dimension ref="A1"/>'+view+'<sheetData><row r="1"><c r="A1" t="inlineStr"><is><t xml:space="preserve">'+pXlEsc(sh.vazio||'Nenhuma carga no filtro atual.')+'</t></is></c></row></sheetData>'+marg+'</worksheet>';
+  }
+  const cols=Object.keys(rows[0]), hs=sh.borda?4:2, n=cols.length, ult=rows.length+1;
+  const larg=cols.map(c=>{ let w=pXlW(c,true); rows.forEach(r=>{ const v=r[c]; if(v!==''&&v!=null){ const x=pXlW(v,false); if(x>w) w=x; } }); return Math.min(100, Math.round(w*1000)/1000); });
+  const cel=(c,r,v,st)=>{
+    const ref=pXlColL(c)+r;
+    if(v===''||v==null) return '<c r="'+ref+'" s="'+st+'"/>';
+    if(typeof v==='number' && isFinite(v)) return '<c r="'+ref+'" s="'+st+'"><v>'+v+'</v></c>';
+    return '<c r="'+ref+'" s="'+st+'" t="inlineStr"><is><t xml:space="preserve">'+pXlEsc(v)+'</t></is></c>';
+  };
+  let sd='<row r="1">'+cols.map((c,i)=>cel(i,1,c,hs)).join('')+'</row>';
+  rows.forEach((r,k)=>{ sd+='<row r="'+(k+2)+'">'+cols.map((c,i)=>cel(i,k+2,r[c],3)).join('')+'</row>'; });
+  const colXml='<cols>'+larg.map((w,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+w+'" style="1" bestFit="1" customWidth="1"/>').join('')+'<col min="'+(n+1)+'" max="16384" width="9" style="1"/></cols>';
+  return head+'<dimension ref="A1:'+pXlColL(n-1)+ult+'"/>'+view+colXml+'<sheetData>'+sd+'</sheetData>'+marg+'<ignoredErrors><ignoredError sqref="A1:'+pXlColL(n-1)+ult+'" numberStoredAsText="1"/></ignoredErrors></worksheet>';
+}
+/* partes do .xlsx (caminho -> conteúdo); separado do ZIP para poder testar */
+function pXlPartes(sheets){
+  const P={}, N=sheets.length, X='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  P['[Content_Types].xml']=X+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'+sheets.map((_,i)=>'<Override PartName="/xl/worksheets/sheet'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('')+'<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>';
+  P['_rels/.rels']=X+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+  P['xl/workbook.xml']=X+'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView xWindow="-120" yWindow="-120" windowWidth="20730" windowHeight="11040" tabRatio="705"/></bookViews><sheets>'+sheets.map((s,i)=>'<sheet name="'+pXlEsc(s.nome)+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>').join('')+'</sheets></workbook>';
+  P['xl/_rels/workbook.xml.rels']=X+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+sheets.map((_,i)=>'<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>').join('')+'<Relationship Id="rId'+(N+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
+  P['xl/styles.xml']=P_XL_STYLES;
+  sheets.forEach((s,i)=>{ P['xl/worksheets/sheet'+(i+1)+'.xml']=pXlSheetXml(s, i===0); });
+  return P;
+}
+function pXlsxGerar(sheets){
+  const P=pXlPartes(sheets), zip=new JSZip();
+  Object.keys(P).forEach(k=>zip.file(k,P[k]));
+  return zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', compression:'DEFLATE'});
+}
+function pAddSheetsFilial(sheets){
+  const items=pItensFiltrados(), usados=new Set(sheets.map(x=>x.nome.toLowerCase()));
   const addAba=(nome, filialCod)=>{
     const {rows}=pLinhasLista(items, filialCod);
-    XLSX.utils.book_append_sheet(wb, pWsLista(rows, 'Nenhuma carga desta filial no filtro atual.'), pNomeAba(nome, usados));
+    sheets.push({nome:pNomeAba(nome, usados), rows:rows, vazio:'Nenhuma carga desta filial no filtro atual.', borda:false});
     return rows.length;
   };
   const res={acum:addAba('Carga Acumulada', null)};
@@ -6049,12 +6123,12 @@ function pAddSheetsFilial(wb){
   });
   return res;
 }
-function exportarCargasFilialExcel(){
-  if(typeof XLSX==='undefined'){ toast('Biblioteca de Excel não carregou. Verifique a conexão.','err'); return; }
+async function exportarCargasFilialExcel(){
+  if(typeof JSZip==='undefined'){ toast('Biblioteca de ZIP não carregou. Verifique a conexão.','err'); return; }
   if(!STATE.alocacao.length){ toast('Rode a alocação antes de gerar o Excel.','err'); return; }
-  const wb=XLSX.utils.book_new(), r=pAddSheetsFilial(wb);
+  const sheets=[], r=pAddSheetsFilial(sheets);
   const ts=new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
-  XLSX.writeFile(wb,`cargas_acumuladas_por_filial_${ts}.xlsx`);
+  bkBaixar(await pXlsxGerar(sheets), `cargas_acumuladas_por_filial_${ts}.xlsx`);
   toast('Excel gerado: '+r.acum+' carga(s) no acumulado + '+STATE.config.filiais.length+' aba(s) de filial.','ok');
 }
 
@@ -6507,6 +6581,41 @@ function renderOndasFora(){
       }).join('')
     + '</tbody></table>';
 }
+/* Imprimir (aba 8): abre direto a impressão das etiquetas no MESMO modelo do Word (PRÉ | ONDA | PLACA), uma por placa */
+function ofdImprimir(){
+  try{
+    if(!STATE.alocacao || !STATE.alocacao.length){ toast('Rode a alocação antes de imprimir as etiquetas.','err'); return; }
+    const its = ofdLista();
+    if(!its.length){ toast('Nenhuma carga alocada nessa seleção de onda.','err'); return; }
+    const sel = document.getElementById('ofdPorFolha'), pf = sel && sel.value==='1' ? 1 : 2;
+    const W = pf===1 ? 190 : 180, H = W*436/652, u = W/652;           // mm; proporção do modelo (652 x 436)
+    const esc = s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const mm = n=>(n*u).toFixed(3)+'mm';
+    const etq = a=>{
+      const pre = etqPreTxt(a), onda = pDoca(a)+'-'+a.onda, placa = String(a.placa||'').toUpperCase();
+      const pxPre = Math.max(18, Math.min(45, 290/(Math.max(pre.length,1)*0.58)));
+      return '<div class="et"><table><colgroup><col style="width:'+(310/652*100)+'%"><col style="width:'+(82/652*100)+'%"><col style="width:'+(146/652*100)+'%"><col style="width:'+(114/652*100)+'%"></colgroup>'
+        +'<tr style="height:'+mm(48)+'"><td style="font-size:'+mm(26)+'">PRÉ</td><td></td><td colspan="2" style="font-size:'+mm(26)+'">ONDA</td></tr>'
+        +'<tr style="height:'+mm(72)+'"><td style="font-size:'+mm(pxPre)+'">'+esc(pre)+'</td><td colspan="2" style="font-size:'+mm(45)+'">'+esc(onda)+'</td><td></td></tr>'
+        +'<tr style="height:'+mm(95)+'"><td colspan="4" style="font-size:'+mm(26)+';vertical-align:bottom">PLACA</td></tr>'
+        +'<tr style="height:'+mm(155)+'"><td colspan="4" style="font-size:'+mm(118)+'">'+esc(placa)+'</td></tr>'
+        +'<tr style="height:'+mm(66)+'"><td colspan="4"></td></tr></table></div>';
+    };
+    let corpo=''; its.forEach((it,i)=>{ corpo += etq(it.a); });
+    const html='<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Ondas Fora da doca</title><style>'
+      +'@page{size:A4 portrait;margin:10mm}html,body{margin:0;padding:0;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+      +'.et{width:'+W+'mm;height:'+H.toFixed(2)+'mm;margin:0 auto 6mm;box-sizing:border-box;border:0.3mm solid #000;overflow:hidden;page-break-inside:avoid;break-inside:avoid}'
+      +'.et:nth-child('+pf+'n){margin-bottom:0;page-break-after:always;break-after:page}.et:last-child{page-break-after:auto;break-after:auto}'
+      +'table{width:100%;height:100%;border-collapse:collapse;table-layout:fixed}td{padding:0;margin:0;text-align:center;vertical-align:middle;font-weight:700;line-height:1;overflow:hidden;white-space:nowrap;color:#000}'
+      +'</style></head><body>'+corpo+'</body></html>';
+    let w=null; try{ w=window.open('','_blank'); }catch(e){}
+    if(w){ w.document.open(); w.document.write(html); w.document.close(); w.focus(); setTimeout(function(){ w.print(); },500); }
+    else{ const fr=document.createElement('iframe'); fr.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;'; document.body.appendChild(fr);
+      const dd=fr.contentWindow.document; dd.open(); dd.write(html); dd.close();
+      setTimeout(function(){ fr.contentWindow.focus(); fr.contentWindow.print(); setTimeout(function(){ fr.remove(); },60000); },500); }
+    toast(its.length+' etiqueta(s) enviadas para impressão — '+Math.ceil(its.length/pf)+' folha(s) A4.','ok');
+  }catch(e){ console.error(e); toast('Não consegui abrir a impressão: '+(e.message||e),'err'); }
+}
 async function ofdBaixarWord(){
   if(!STATE.alocacao || !STATE.alocacao.length){ toast('Rode a alocação antes de gerar as etiquetas.','err'); return; }
   const its = ofdLista();
@@ -6619,33 +6728,28 @@ async function protoBaixarHistorico(){
   toast('Histórico de Bancada gerado: '+L.length+' carga(s) · data '+dataBR+'.','ok');
 }
 
-function exportarListaOndasExcel(){
-  if(typeof XLSX==='undefined'){ toast('Biblioteca de Excel não carregou. Verifique a conexão.','err'); return; }
+async function exportarListaOndasExcel(){
+  if(typeof JSZip==='undefined'){ toast('Biblioteca de ZIP não carregou. Verifique a conexão.','err'); return; }
   if(!STATE.alocacao.length){ toast('Rode a alocação antes de gerar o Excel.','err'); return; }
   const rows=pFiltrar();
   const ok=rows.filter(a=>a.status!=='ALTERAR' && pDoca(a)!=null).sort((a,b)=>(a.onda-b.onda)||(pDoca(a)-pDoca(b))||(a.transportadora||'').localeCompare(b.transportadora||''));
   const pend=rows.filter(a=>a.status==='ALTERAR' || pDoca(a)==null);
-  const linha=a=>({'Onda':a.onda,'Doca':pDoca(a),'Unidade':pUnidadeDaDoca(pDoca(a)),'Transportadora':a.transportadora||'','Placa':a.placa,'Região':a.regiao||'',
-    'Prioridade':a.prioridade,'Qtd PRÉs':a.pres.length,'Qtd Entregas':pEntregas(a),'PRÉs (filial·nº·qtd)':pPresTxt(a),
-    'Status da onda':statusOnda(a.transportadora,a.onda),'Ajuste manual':a.docaManual!=null?'Sim':'Não'});
-  const wb=XLSX.utils.book_new();
-  pAddSheetsFilial(wb);
-  const add=(nome,data,cols)=>{ const ws=XLSX.utils.json_to_sheet(data); ws['!cols']=cols.map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb,ws,nome.slice(0,31)); };
-  const cols=[7,7,10,20,11,14,10,9,12,60,16,13];
+  const sheets=[];
+  pAddSheetsFilial(sheets);
+  const itensL=pItensFiltrados(), usadosL=new Set(sheets.map(x=>x.nome.toLowerCase()));
   /* Lista por Onda e abas de cada onda: MESMO layout da Carga Acumulada (pLinhasLista), mesma numeração de CARGA */
-  const itensL=pItensFiltrados(), usadosL=new Set(wb.SheetNames.map(x=>x.toLowerCase()));
-  const addLista=(nome,its)=>XLSX.utils.book_append_sheet(wb, pWsLista(pLinhasLista(its,null).rows,'Nenhuma carga nesta onda no filtro atual.'), pNomeAba(nome,usadosL));
-  addLista('Lista por Onda', itensL);
+  const addLista=(nome,its,borda)=>sheets.push({nome:pNomeAba(nome,usadosL), rows:pLinhasLista(its,null).rows, vazio:'Nenhuma carga nesta onda no filtro atual.', borda:borda});
+  addLista('Lista por Onda', itensL, false);
   const ondas=Array.from(new Set(ok.map(a=>a.onda))).sort((a,b)=>a-b);
-  ondas.forEach(o=>addLista(o+'a Onda', itensL.filter(it=>!it.pend && it.a.onda===o)));
+  ondas.forEach(o=>addLista(o+'a Onda', itensL.filter(it=>!it.pend && it.a.onda===o), true));
   const pd={}; ok.forEach(a=>{ const d=pDoca(a); (pd[d]=pd[d]||[]).push(a); });
-  add('Resumo por Doca', Object.keys(pd).map(Number).sort((a,b)=>a-b).map(d=>({
+  sheets.push({nome:pNomeAba('Resumo por Doca',usadosL), borda:true, vazio:'Nenhuma carga alocada.', rows:Object.keys(pd).map(Number).sort((a,b)=>a-b).map(d=>({
     'Doca':d,'Unidade':pUnidadeDaDoca(d),'Transportadoras':Array.from(new Set(pd[d].map(a=>a.transportadora))).join(', '),
     'Ondas':Array.from(new Set(pd[d].map(a=>a.onda))).sort((a,b)=>a-b).join(', '),'Cargas':pd[d].length,'Entregas':pd[d].reduce((s,a)=>s+pEntregas(a),0),
-    'Placas':pd[d].map(a=>a.onda+'ª: '+a.placa).join(' | ')})), [7,10,30,12,8,10,70]);
-  if(pend.length) add('Pendências', pend.map(a=>({'Placa':a.placa,'Transportadora':a.transportadora||'','Motivo':a.motivo||'Sem doca'})), [11,22,60]);
+    'Placas':pd[d].map(a=>a.onda+'ª: '+a.placa).join(' | ')}))});
+  if(pend.length) sheets.push({nome:pNomeAba('Pendências',usadosL), borda:true, rows:pend.map(a=>({'Placa':a.placa,'Transportadora':a.transportadora||'','Motivo':a.motivo||'Sem doca'}))});
   const ts=new Date().toISOString().slice(0,16).replace(/[:T]/g,'-');
-  XLSX.writeFile(wb,`lista_por_onda_${ts}.xlsx`);
+  bkBaixar(await pXlsxGerar(sheets), `lista_por_onda_${ts}.xlsx`);
   toast('Excel gerado: '+ok.length+' carga(s) em '+ondas.length+' onda(s).','ok');
 }
 </script>
