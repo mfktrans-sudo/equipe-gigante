@@ -3615,6 +3615,24 @@ function alocar1aOnda(cand, resultado, ocupado, outraFaixa, rotuloFn, flag, out)
     resultado.push(row); out.ids.add(c.id); out.n++;
   });
 }
+/* AUTO-APLICAR: sempre que algo que a Prioridade por região / por Rodizio usa mudar (arquivo Tipo de Residência,
+   regiões marcadas, ativar/desativar, dia de referência), a alocação do dia é recalculada sozinha — sem clicar em
+   "Aplicar na alocação do dia". Se houver ajustes manuais no mapa de docas, não recalcula (para não descartá-los). */
+let _autoPrioTimer = null;
+function autoAplicarPrioridade(){
+  clearTimeout(_autoPrioTimer);
+  _autoPrioTimer = setTimeout(()=>{
+    try{
+      if(!(STATE.cargas||[]).length) return;                       // ainda não consolidou: a consolidação já roda a alocação
+      if(STATE.alocacao.some(a=>a.status==='AJUSTADO')){
+        toast('Há ajustes manuais no mapa de docas — a prioridade não foi reaplicada sozinha. Use “Aplicar na alocação do dia” se quiser recalcular.', 'err'); return;
+      }
+      const m = rodarAlocacao(true, true);
+      try{ prRender(); }catch(e){} try{ rzRender(); }catch(e){}
+      if(m) toast(m, 'ok');
+    }catch(e){ console.error('autoAplicarPrioridade', e); }
+  }, 350);
+}
 function aplicarPrioridadeRegiao(resultado, ocupado, jaIds){
   const out = {ids:new Set(), n:0, semOnda1:0};
   if(!prioRegiaoAtiva()) return out;
@@ -3699,21 +3717,21 @@ function rzCfgMudou(){
   R.outraFaixa = !!document.getElementById('rzOutraFaixa').checked;
   R.padrao = !!document.getElementById('rzPadrao').checked;
   R.diaRef = document.getElementById('rzDiaRef').value || 'auto';
-  saveState(); rzRender();
+  saveState(); rzRender(); autoAplicarPrioridade();
 }
 function rzMarcar(nome, v){
   const R = rzCfg(), k = prNorm(nome), pad = R.padrao!==false && rzNaListaPadrao(nome);
   R.regioes = R.regioes.filter(r=>prNorm(r)!==k);
   R.excluidas = R.excluidas.filter(r=>prNorm(r)!==k);
   if(v){ if(!pad) R.regioes.push(nome); } else if(pad) R.excluidas.push(nome);
-  saveState(); rzRender();
+  saveState(); rzRender(); autoAplicarPrioridade();
 }
 function rzMarcarIdx(i, v){ const n = (window._rzLista||[])[i]; if(n!=null) rzMarcar(n, v); }
 function rzAddRegiao(){
   const el = document.getElementById('rzNova'), n = prLimpaNome(el && el.value); if(!n) return;
   rzMarcar(n, true); el.value = '';
 }
-function rzLimparSel(){ const R = rzCfg(); if(!R.regioes.length && R.padrao===false) return; if(!confirm('Desmarcar todas as regiões de rodízio (inclusive a lista padrão de bairros)?')) return; R.regioes = []; R.excluidas = []; R.padrao = false; saveState(); rzRender(); }
+function rzLimparSel(){ const R = rzCfg(); if(!R.regioes.length && R.padrao===false) return; if(!confirm('Desmarcar todas as regiões de rodízio (inclusive a lista padrão de bairros)?')) return; R.regioes = []; R.excluidas = []; R.padrao = false; saveState(); rzRender(); autoAplicarPrioridade(); }
 async function rzInpArq(inp){
   const fs = Array.from(inp.files||[]); inp.value = ''; if(!fs.length) return;
   for(const f of fs){ try{ prCarregarBuf(await f.arrayBuffer(), f.name); }catch(e){ console.error(e); toast('Não consegui ler "'+f.name+'": '+(e.message||e), 'err'); } }
@@ -3825,6 +3843,7 @@ function prCarregarBuf(buf, nome, silencioso){
   else toast('Prioridade por região: '+Object.keys(placas).length+' placa(s) e '+Object.keys(regioes).length+' região(ões) lidas do Tipo de Residência'+(nArq>1?' ('+nArq+' arquivos)':'')+'.', 'ok');
   try{ prRender(); }catch(e){}
   try{ rzRender(); }catch(e){}
+  autoAplicarPrioridade();
   return true;
 }
 async function prInpArq(inp){
@@ -3839,25 +3858,26 @@ function prDropArq(ev){
 function prLimparArqs(){
   if(!STATE.prioReg) return; if(!confirm('Remover os arquivos de Tipo de Residência carregados?')) return;
   STATE.prioReg = null; saveState(); try{ prRender(); }catch(e){} try{ rzRender(); }catch(e){}
+  autoAplicarPrioridade();
 }
 function prCfgMudou(){
   const P = prCfg();
   P.ativo = !!document.getElementById('prAtivo').checked;
   P.outraFaixa = !!document.getElementById('prOutraFaixa').checked;
-  saveState(); prRender();
+  saveState(); prRender(); autoAplicarPrioridade();
 }
 function prMarcar(nome, v){
   const P = prCfg(), k = prNorm(nome);
   P.regioes = P.regioes.filter(r=>prNorm(r)!==k);
   if(v) P.regioes.push(nome);
-  saveState(); prRender();
+  saveState(); prRender(); autoAplicarPrioridade();
 }
 function prMarcarIdx(i, v){ const n = (window._prLista||[])[i]; if(n!=null) prMarcar(n, v); }
 function prAddRegiao(){
   const el = document.getElementById('prNova'), n = prLimpaNome(el && el.value); if(!n) return;
   prMarcar(n, true); el.value = '';
 }
-function prLimparSel(){ const P = prCfg(); if(!P.regioes.length) return; if(!confirm('Desmarcar todas as regiões prioritárias?')) return; P.regioes = []; saveState(); prRender(); }
+function prLimparSel(){ const P = prCfg(); if(!P.regioes.length) return; if(!confirm('Desmarcar todas as regiões prioritárias?')) return; P.regioes = []; saveState(); prRender(); autoAplicarPrioridade(); }
 function prAplicar(){
   if(!(STATE.cargas||[]).length){ toast('Não há cargas consolidadas. Carregue os arquivos do dia e consolide antes.', 'err'); return; }
   rodarAlocacao(); prRender();
@@ -3978,10 +3998,11 @@ function otimizarOndas(){
   toast(n ? ('Ondas otimizadas: '+n+' carga(s) movida(s) para ondas anteriores com doca livre.') : 'Nenhuma carga pode subir de onda: não há doca livre em onda anterior.', n?'ok':'');
 }
 
-function rodarAlocacao(silencioso){
+function rodarAlocacao(silencioso, auto){
   /* silencioso=true: usado pela consolidação — não mostra toast próprio e devolve a mensagem (ou false se não rodou) */
   if(STATE.cargas.length===0){ if(!silencioso) toast('Não há cargas consolidadas.', 'err'); return false; }
   const nAjustes = STATE.alocacao.filter(a=>a.status==='AJUSTADO').length;
+  if(nAjustes && auto){ return false; }   // modo automático: nunca descarta ajustes manuais do mapa de docas
   if(nAjustes && !confirm(nAjustes+' carga(s) foram ajustadas manualmente no mapa de docas. Recalcular a alocação descarta esses ajustes. Continuar?')) return false;
   revincularTransportadoras();   // garante que placas cadastradas depois da consolidação sejam reconhecidas
   const transpCriadas = garantirTranspParametros(STATE.cargas.map(c=>c.transportadora));
