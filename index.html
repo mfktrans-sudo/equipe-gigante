@@ -1805,6 +1805,11 @@ function _saveStateImpl(force){
   let json;
   try{ json = JSON.stringify(STATE); }
   catch(e){ avisarFalhaSalvar(e,'serializar'); return false; }
+  if(window.__GDN_LS_CHEIO_ATE && Date.now() < window.__GDN_LS_CHEIO_ATE){   /* localStorage estourou há poucos segundos: não repete as tentativas (e a limpeza) a cada gravação, grava direto na reserva */
+    GDN_IDB.set('state',{json:json,t:Date.now()});
+    if(window.gdnCadastroSync) window.gdnCadastroSync(); if(window.gdnIscaSync) window.gdnIscaSync(); if(window.gdnParamSync) window.gdnParamSync();
+    return false;
+  }
   try{ localStorage.setItem(STORAGE_KEY, json); GDN_IDB.del('state'); if(window.gdnCadastroSync) window.gdnCadastroSync(); if(window.gdnIscaSync) window.gdnIscaSync(); if(window.gdnParamSync) window.gdnParamSync(); return true; }
   catch(e1){
     /* 1ª tentativa de recuperação: apaga só chaves ANTIGAS desta ferramenta (prefixo gdn_) e tenta de novo */
@@ -1815,7 +1820,7 @@ function _saveStateImpl(force){
       localStorage.setItem(STORAGE_KEY, json); GDN_IDB.del('state');
       if(window.gdnCadastroSync) window.gdnCadastroSync(); if(window.gdnIscaSync) window.gdnIscaSync(); if(window.gdnParamSync) window.gdnParamSync();
       return true;
-    }catch(e2){ GDN_IDB.set('state',{json:json,t:Date.now()}); console.warn('localStorage cheio: estado salvo na reserva (IndexedDB).'); try{ gdnLogMaioresChaves(); }catch(_){} try{ localStorage.removeItem(STORAGE_KEY); }catch(_){} if(window.gdnCadastroSync) window.gdnCadastroSync(); if(window.gdnIscaSync) window.gdnIscaSync(); if(window.gdnParamSync) window.gdnParamSync(); return false; }
+    }catch(e2){ window.__GDN_LS_CHEIO_ATE = Date.now() + 20000; GDN_IDB.set('state',{json:json,t:Date.now()}); console.warn('localStorage cheio: estado salvo na reserva (IndexedDB).'); try{ gdnLogMaioresChaves(); }catch(_){} try{ localStorage.removeItem(STORAGE_KEY); }catch(_){} if(window.gdnCadastroSync) window.gdnCadastroSync(); if(window.gdnIscaSync) window.gdnIscaSync(); if(window.gdnParamSync) window.gdnParamSync(); return false; }
   }
 }
 
@@ -2818,7 +2823,7 @@ function ehLinhaProduto(buf){
 }
 function classificarPlanilhaExtra(nome, buf){
   if(typeof XLSX==='undefined') return null;
-  let wb; try{ wb = XLSX.read(buf, {type:'array'}); }catch(e){ return null; }
+  let wb; try{ wb = XLSX.read(buf, {type:'array', sheetRows:40}); }catch(e){ try{ wb = XLSX.read(buf, {type:'array'}); }catch(e2){ return null; } }   /* só o topo (40 linhas) basta para achar o cabeçalho */
   const N = tsNormHdr;
   for(const sn of wb.SheetNames){
     const ws = wb.Sheets[sn]; if(!ws || !ws['!ref']) continue;
@@ -3434,6 +3439,19 @@ function tsTexto(v){
 }
 function parseTSPlanilha(buf){
   if(typeof XLSX==='undefined') return [];
+  /* pré-checagem rápida: lê só o topo de cada aba; se nenhuma tem o cabeçalho da base TS, não precisa ler o arquivo inteiro (planilhas grandes, como o Tipo de Residência, levavam vários segundos aqui) */
+  try{
+    const wbTopo = XLSX.read(buf, {type:'array', sheetRows:60});
+    const temCab = wbTopo.SheetNames.some(sn=>{
+      const aoaT = XLSX.utils.sheet_to_json(wbTopo.Sheets[sn], {header:1, defval:'', raw:true});
+      for(let i=0; i<Math.min(aoaT.length,15); i++){
+        const m = {}; (aoaT[i]||[]).forEach((c,j)=>{ const k = tsNormHdr(c); if(k && m[k]===undefined) m[k] = j; });
+        if(m.PLACA!==undefined && m.DOCA!==undefined && (m.LOJA!==undefined || m.PRE05!==undefined)) return true;
+      }
+      return false;
+    });
+    if(!temCab) return [];
+  }catch(e){ /* se a pré-checagem falhar, segue pela leitura completa como antes */ }
   let wb; try{ wb = XLSX.read(buf, {type:'array'}); }catch(e){ return []; }
   const out = [];
   wb.SheetNames.forEach(sn=>{
@@ -9665,9 +9683,9 @@ const PROD_OPS = {
 };
 const PROD = {rows:[], files:[], op:'sep', hide:new Set(), from:'', to:'', tipo:'', q:'', top:20, full:false, blocos:[], nomes:{}, equipe:[], falt:{ativo:false,ign:new Set()},
   ui:{conf:{g:['BR','MA','LV','OUT'],sep:false,ord:'vol'}, sep:{g:['BR','MA','LV'],sep:true,ord:'vol'}, carr:{g:['BR','MA','LV','OUT'],sep:false,ord:'vol'}}};
-const prNorm = s=>String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+const prodNorm = s=>String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
 const prNum = x=>{ const v=Number(String(x==null?'':x).replace(/\./g,'').replace(',','.')); return isFinite(v)?v:0; };
-function prGrupo(l){ const n=prNorm(l); return /branca|refriger/.test(n)?'BR':/marrom/.test(n)?'MA':/vermelha/.test(n)?'LV':'OUT'; }
+function prGrupo(l){ const n=prodNorm(l); return /branca|refriger/.test(n)?'BR':/marrom/.test(n)?'MA':/vermelha/.test(n)?'LV':'OUT'; }
 function prData(x){   // 'dd/mm/yyyy hh:mm' (ou serial Excel) -> 'yyyy-mm-dd'
   x=String(x||'').trim(); let m=x.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
@@ -9675,16 +9693,16 @@ function prData(x){   // 'dd/mm/yyyy hh:mm' (ou serial Excel) -> 'yyyy-mm-dd'
   return '';
 }
 function prodParse(linhas, fid){
-  const hi = linhas.findIndex(r=>{ const n=r.map(prNorm); return n.includes('matricula') && n.some(c=>c.startsWith('nome')); });
+  const hi = linhas.findIndex(r=>{ const n=r.map(prodNorm); return n.includes('matricula') && n.some(c=>c.startsWith('nome')); });
   if(hi<0) return {rows:[], erro:'Cabeçalho não encontrado (esperado: Matricula, Nome Funcionario, Atividade…).'};
-  const h = linhas[hi].map(prNorm), col = f=>h.findIndex(f);
+  const h = linhas[hi].map(prodNorm), col = f=>h.findIndex(f);
   const C = {ini:col(c=>c.startsWith('data de')), m:col(c=>c==='matricula'), n:col(c=>c.startsWith('nome')), r:col(c=>c.startsWith('romaneio')),
     e:col(c=>c.includes('enderecos')), p:col(c=>c.includes('paletes')), vs:col(c=>c.includes('volumes separados')), vc:col(c=>c.includes('volumes conferidos')),
     vl:col(c=>c.includes('volumes carregados')), l:col(c=>c.startsWith('linha de')), t:col(c=>c.includes('tipo de operacao')), a:col(c=>c.startsWith('atividade'))};
   if([C.ini,C.m,C.n,C.a].some(i=>i<0)) return {rows:[], erro:'Faltam colunas obrigatórias (Data_de, Matricula, Nome Funcionario, Atividade).'};
   const rows=[]; let ign=0;
   linhas.slice(hi+1).forEach(c=>{
-    const d=prData(c[C.ini]), a0=prNorm(c[C.a]), m=String(c[C.m]||'').trim();
+    const d=prData(c[C.ini]), a0=prodNorm(c[C.a]), m=String(c[C.m]||'').trim();
     const a = /separ/.test(a0)?'SEPARACAO':/confer/.test(a0)?'CONFERENCIA':/carreg/.test(a0)?'CARREGAMENTO':'';
     if(!d||!m||!a){ if(c.some(x=>String(x).trim())) ign++; return; }
     const g=x=>C[x]>=0?c[C[x]]:'';
@@ -9860,9 +9878,9 @@ function prodSVG(rows,S){
 }
 function prodRender(){
   if(PROD.op==='mov'||PROD.op==='equipe') return;
-  const cfg=PROD_OPS[PROD.op], u=PROD.ui[PROD.op], q=prNorm(PROD.q), mm=prMatMap();
+  const cfg=PROD_OPS[PROD.op], u=PROD.ui[PROD.op], q=prodNorm(PROD.q), mm=prMatMap();
   const base=PROD.rows.filter(r=>mm.has(r.m) && r.a===cfg.ativ && u.g.includes(r.g) && (!PROD.from||r.d>=PROD.from) && (!PROD.to||r.d<=PROD.to) && (!PROD.tipo||r.t===PROD.tipo)
-    && (!q || prNorm(mm.get(r.m).emp.nome).includes(q) || r.m.includes(q)));
+    && (!q || prodNorm(mm.get(r.m).emp.nome).includes(q) || r.m.includes(q)));
   const agg=rs=>{ const m=new Map(); rs.forEach(r=>{ const k=mm.get(r.m).principal; let x=m.get(k); if(!x){ x={m:k,nc:prNomeDe(k),vol:0,pre:new Set(),end:0}; m.set(k,x); } x.vol+=r[cfg.v]; x.pre.add(r.r); x.end+=r.e; });
     const a=[...m.values()].map(x=>({...x,pre:x.pre.size}));
     return a.sort((x,y)=> u.ord==='nome' ? x.nc.localeCompare(y.nc) : (y[u.ord]-x[u.ord]) || (y.vol-x.vol)); };
