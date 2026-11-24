@@ -1364,7 +1364,7 @@
       <div style="flex:1;min-width:260px;">
         <label style="font-size:12.5px;display:block;margin-bottom:4px;">Dia de referência do rodízio</label>
         <select id="rzDiaRef" onchange="rzCfgMudou()" style="min-width:230px;">
-          <option value="auto">Automático (dia de hoje — horário de Brasília)</option>
+          <option value="auto">Automático (dia da saída: a partir das 18h vale o dia seguinte — horário de Brasília)</option>
           <option value="1">Segunda-feira (finais 1 e 2)</option>
           <option value="2">Terça-feira (finais 3 e 4)</option>
           <option value="3">Quarta-feira (finais 5 e 6)</option>
@@ -3654,8 +3654,16 @@ function rzNoRodizio(nome){
   if(R.regioes.some(r=>prNorm(r)===k)) return true;
   return R.padrao!==false && rzNaListaPadrao(nome) && !R.excluidas.some(r=>prNorm(r)===k);
 }
+/* Operação do 3º turno: começa à noite (~22:30) e os carros saem só no dia seguinte. Por isso, no modo Automático, a partir de
+   RZ_HORA_VIRADA (horário de Brasília) vale o rodízio do DIA SEGUINTE; da meia-noite até essa hora vale o dia do calendário (que já é o dia da saída). */
+const RZ_HORA_VIRADA = 18;
 function rzDiaSemanaBR(){
-  try{ const w = new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo', weekday:'short'}).format(new Date()); return {Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6}[w]; }
+  try{
+    const p = new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo', weekday:'short', hour:'2-digit', hourCycle:'h23'}).formatToParts(new Date());
+    const w = {Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6}[p.find(x=>x.type==='weekday').value];
+    const h = parseInt(p.find(x=>x.type==='hour').value, 10);
+    return (h >= RZ_HORA_VIRADA) ? (w + 1) % 7 : w;
+  }
   catch(e){ return new Date().getDay(); }
 }
 /* 1..5 = segunda a sexta; 0 = sem rodízio (fim de semana, feriado) */
