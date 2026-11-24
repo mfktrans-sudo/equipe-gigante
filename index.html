@@ -986,6 +986,7 @@
     <div class="panel-head"><div><h2>Etiqueta Zebra</h2><div class="desc">Cada etiqueta é dividida ao meio por uma linha de corte/dobra e leva <b>2 cargas diferentes</b> (metade de cima e de baixo), cada uma com <b>nome do cliente</b>, <b>PRÉ</b> e <b>DOCA - onda</b> (1ª, 2ª, 3ª, 4ª…). Padrão: 100 × 100 mm (10 × 10 cm), igual ao driver Zebra TP.</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <button class="primary" onclick="iscaBaixarWord()">⬇ Baixar Word (.docx) 10×10 cm</button>
+        <button class="primary" onclick="iscaBaixarPDF()">⬇ Baixar PDF</button>
         <button class="primary" onclick="iscaImprimir()">Imprimir</button></div></div>
     <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">
       <div><label>Largura (mm)</label><input id="iscaLarg" type="number" min="30" max="300" style="width:90px" onchange="iscaSalvarCfg()"></div>
@@ -5932,6 +5933,68 @@ async function iscaBaixarWord(){
   bkBaixar(blob, 'iscas_etiquetas_'+new Date().toISOString().slice(0,10)+'.docx');
   toast(iscaFolhas().length+' etiqueta(s) de '+(c.larg/10)+' × '+(c.alt/10)+' cm geradas em Word (2 cargas por etiqueta). Imprima na Zebra TP com margens 0 e escala 100%.','ok');
 }
+/* PDF direto (vetorial, sem biblioteca): 1 página por etiqueta, no tamanho configurado (larg × alt, mm), com a MESMA
+   geometria e os MESMOS textos da prévia/impressão (iscaGeom + iscaLayout): moldura, linha tracejada de dobra e textos centralizados. */
+function iscaPdfLatin1(t){
+  let o = '';
+  String(t==null?'':t).split('').forEach(ch=>{
+    const c = ch.charCodeAt(0);
+    if(ch==='—') o += '\x97'; else if(ch==='–') o += '\x96'; else if(c<256) o += ch; else o += '?';
+  });
+  return o.replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)');
+}
+function iscaPdfLarg(txt, fsMm){   /* largura do texto em mm, em Arial/Helvetica negrito (mesma métrica do Helvetica-Bold do PDF) */
+  try{
+    if(!window._iscaPdfCtx){ window._iscaPdfCtx = document.createElement('canvas').getContext('2d'); window._iscaPdfCtx.font = 'bold 100px Arial, Helvetica, sans-serif'; }
+    const w = window._iscaPdfCtx.measureText(String(txt)).width / 100;
+    if(w > 0) return w * fsMm;
+  }catch(e){}
+  return String(txt).length * fsMm * 0.6;
+}
+function iscaGerarPdf(){
+  const c = iscaCfg(), fl = iscaFolhas(), G = iscaGeom(c), K = 72/25.4, f = v=>(v*K).toFixed(3);
+  const objs = [];                       // índice 0 = objeto 1
+  const nPag = fl.length;
+  objs[0] = '<< /Type /Catalog /Pages 2 0 R >>';
+  objs[2] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
+  const kids = [];
+  fl.forEach((fa, i)=>{
+    const pObj = 4 + i*2, cObj = 5 + i*2;
+    kids.push(pObj+' 0 R');
+    let q = '0 g 0 G\n';
+    // moldura (a borda do CSS fica por dentro da caixa: o traço é centralizado meia espessura para dentro)
+    q += f(G.bw)+' w [] 0 d\n';
+    q += f(G.x0+G.bw/2)+' '+f(G.H-G.mgy-(G.H-2*G.mgy)+G.bw/2)+' '+f(G.aw-G.bw)+' '+f((G.H-2*G.mgy)-G.bw)+' re S\n';
+    // linha tracejada de corte/dobra, no meio
+    const yM = G.H - (G.mgy + G.Hs);
+    q += f(G.bw)+' w ['+f(G.bw*3)+' '+f(G.bw*2)+'] 0 d\n'+f(G.x0)+' '+f(yM)+' m '+f(G.x0+G.aw)+' '+f(yM)+' l S\n[] 0 d\n';
+    // textos (metade de cima = a, de baixo = b)
+    [fa.a, fa.b].forEach((e,k)=>{
+      if(!e) return;
+      iscaLayout(e,c).it.forEach(t=>{
+        const topo = G.mgy + k*G.Hs + t.y, base = topo + t.fs*0.8465;      // linha-base (Arial: ascendente 0,905; line-height 1)
+        const x = G.x0 + (G.aw - iscaPdfLarg(t.txt, t.fs))/2;
+        q += 'BT /F1 '+f(t.fs)+' Tf '+f(Math.max(0,x))+' '+f(G.H-base)+' Td ('+iscaPdfLatin1(t.txt)+') Tj ET\n';
+      });
+    });
+    objs[pObj-1] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+f(c.larg)+' '+f(c.alt)+'] /Resources << /Font << /F1 3 0 R >> >> /Contents '+cObj+' 0 R >>';
+    objs[cObj-1] = '<< /Length '+q.length+' >>\nstream\n'+q+'endstream';
+  });
+  objs[1] = '<< /Type /Pages /Kids ['+kids.join(' ')+'] /Count '+nPag+' >>';
+  let out = '%PDF-1.4\n', offs = [];
+  objs.forEach((o,i)=>{ offs[i] = out.length; out += (i+1)+' 0 obj\n'+o+'\nendobj\n'; });
+  const xr = out.length;
+  out += 'xref\n0 '+(objs.length+1)+'\n0000000000 65535 f \n' + offs.map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('');
+  out += 'trailer\n<< /Size '+(objs.length+1)+' /Root 1 0 R >>\nstartxref\n'+xr+'\n%%EOF';
+  const u8 = new Uint8Array(out.length); for(let i=0;i<out.length;i++) u8[i] = out.charCodeAt(i) & 255;
+  return new Blob([u8], {type:'application/pdf'});
+}
+function iscaBaixarPDF(){
+  if(!iscaFolhas().length){ toast('Não há etiquetas prontas para gerar.','err'); return; }
+  const c = iscaCfg(), blob = iscaGerarPdf();
+  bkBaixar(blob, 'iscas_etiquetas_'+new Date().toISOString().slice(0,10)+'.pdf');
+  toast(iscaFolhas().length+' etiqueta(s) de '+(c.larg/10)+' × '+(c.alt/10)+' cm geradas em PDF (1 etiqueta por página, 2 cargas por etiqueta). Imprima na Zebra TP com margens 0 e escala 100%.','ok');
+}
 function iscaCopiarZPL(){
   const z = iscaZPL(); if(!z){ toast('Não há etiquetas prontas para copiar.','err'); return; }
   const ok = ()=>toast('ZPL copiado. Cole no Zebra Setup Utilities (Open Communication with Printer) ou envie em modo RAW.','ok');
@@ -9358,7 +9421,12 @@ window.pdImprimir = function(){
   var html = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>PAINEL DIARIO</title><style>@page{size:A4 portrait;margin:0}html,body{margin:0;padding:0 8mm;background:#fff;color:#000;font-family:Calibri,Carlito,Arial,sans-serif}'+
     '.pd-tab{border-collapse:collapse;table-layout:fixed;width:100%;font-size:11pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}.pd-tab td{padding:0 2px;text-align:center;white-space:nowrap;overflow:hidden;border:0;line-height:1.1}'+
     '.pd-tab td.pdh{background:#000;color:#fff;font-weight:700}.pd-tab td.pdt{font-size:20pt;font-weight:700}.pd-tab tr{page-break-inside:avoid}.pd-tab thead{display:table-header-group}.pd-tab tfoot{display:table-footer-group}'+
-    '.pd-tab tr.sp td{height:8mm;padding:0}</style></head><body>'+tab+'</body></html>';
+    '.pd-tab tr.sp td{height:8mm;padding:0}</style></head><body>'+tab+
+    /* MÁXIMO 2 FOLHAS: se o painel (muitas cargas) passar de 2 páginas A4, reduz a escala do conteúdo até caber em 2 folhas.
+       Com até 2 páginas nada muda (escala 100%). A altura medida inclui as linhas-espaçador repetidas na 2ª página. */
+    '<script>(function(){try{var t=document.querySelector(".pd-tab");if(!t)return;var mm=96/25.4,pag=297*mm,sp=t.querySelector("tr.sp td"),spH=sp?sp.offsetHeight:8*mm;'+
+    'var H=t.offsetHeight+2*spH,lim=2*pag*0.95;if(H>lim){var z=lim/H;t.style.zoom=z;t.style.width=(100/z)+"%";'+
+    '}}catch(e){}})();<\/script></body></html>';
   var w = null; try{ w = window.open('','_blank'); }catch(e){}
   if(w){ w.document.open(); w.document.write(html); w.document.close(); w.focus(); setTimeout(function(){ w.print(); }, 500); }
   else{
