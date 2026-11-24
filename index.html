@@ -8093,6 +8093,8 @@ function calcular(){
   });
   var sem = [], porPlaca = {};
   cargas.forEach(function(c){ var k = norm(c.placa); if(!porPlaca[k]) porPlaca[k] = c; });
+  /* QTD NF também conta as notas da filial D0 da placa (vêm do Tipo de Residência carregado na aba 3) */
+  try{ if(typeof window.kcNfD0DaPlaca==='function') Object.keys(porPlaca).forEach(function(k){ var n = window.kcNfD0DaPlaca(porPlaca[k].placa)||0; if(n){ porPlaca[k].qtd = (Number(porPlaca[k].qtd)||0) + n; porPlaca[k].qtdD0 = n; } }); }catch(e){ console.warn('Saída: notas D0 não somadas', e); }
   /* Fonte das coletas: o Kit_Coletas enviado nesta aba (se houver); senão, as coletas da aba 3 · Coleta (ORM já ligada à placa pelo Tipo de Residência).
      NFDV, em ordem: coluna do Kit -> planilha de Coletas enviada aqui (por ORM) -> planilha de Coletas da aba 3 (por ORM). */
   var vivas = kcVivas(), nfdvAba3 = {};
@@ -8318,7 +8320,7 @@ if(!S.opts.data) S.opts.data = hojeISO();
 (function(){
 'use strict';
 var KEY = 'kc_kit_v1';
-var S = { coletas:[], tipo:{}, lista:{}, arqs:[], data:'' };
+var S = { coletas:[], tipo:{}, lista:{}, arqs:[], data:'', tipoD0:{} };
 var ROWS = [];
 
 function nm(s){ return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
@@ -8338,7 +8340,7 @@ function kcIdbDel(k){ return kcIdb().then(function(db){ return new Promise(funct
 function kcIdbGet(k){ return kcIdb().then(function(db){ return new Promise(function(ok,er){ var q=db.transaction('kv').objectStore('kv').get(k); q.onsuccess=function(){ db.close(); ok(q.result); }; q.onerror=function(){ er(q.error); }; }); }); }
 function persist(){
   if(window.__GDN_RESETANDO && !window.__GDN_PERSIST_OK) return;
-  var leve = {coletas:S.coletas, tipo:{}, lista:S.lista, arqs:S.arqs, data:S.data};
+  var leve = {coletas:S.coletas, tipo:{}, lista:S.lista, arqs:S.arqs, data:S.data, tipoD0:S.tipoD0};
   try{ localStorage.setItem(KEY, JSON.stringify(leve)); }
   catch(e){ console.warn('Kit coletas: não consegui salvar no navegador', e); }
   try{ if(window.gdnDia) window.gdnDia.salvar('coleta'); }catch(e){}
@@ -8349,10 +8351,10 @@ function restore(){
     var raw = localStorage.getItem(KEY);
     if(raw){
       var p = JSON.parse(raw);
-      S.coletas = p.coletas||[]; S.tipo = p.tipo||{}; S.lista = p.lista||{}; S.arqs = p.arqs||[]; S.data = p.data||'';
+      S.coletas = p.coletas||[]; S.tipo = p.tipo||{}; S.lista = p.lista||{}; S.arqs = p.arqs||[]; S.data = p.data||''; S.tipoD0 = p.tipoD0||{};
     }
   }catch(e){ console.warn('Kit coletas: estado salvo ilegível, ignorando', e); }
-  kcIdbGet('tudo').then(function(t){ if(t && ((t.coletas||[]).length || Object.keys(t.tipo||{}).length)){ S.coletas = t.coletas||[]; S.tipo = t.tipo||{}; S.lista = t.lista||{}; S.arqs = t.arqs||[]; S.data = t.data||''; if(typeof window.kcRender==='function') window.kcRender(); } }).catch(function(){});
+  kcIdbGet('tudo').then(function(t){ if(t && ((t.coletas||[]).length || Object.keys(t.tipo||{}).length)){ S.coletas = t.coletas||[]; S.tipo = t.tipo||{}; S.lista = t.lista||{}; S.arqs = t.arqs||[]; S.data = t.data||''; S.tipoD0 = t.tipoD0||{}; if(typeof window.kcRender==='function') window.kcRender(); } }).catch(function(){});
 }
 
 /* ---------- leitura dos arquivos ---------- */
@@ -8425,6 +8427,36 @@ function parseTipo(rows){
   }
   return out;
 }
+/* Notas da filial D0 por placa (Tipo de Residência: colunas PLACA + FILIAL + NF [+ SERIE, DATA]). Guarda {placa:{dataKey:[chaves de NF]}} — NF repetida não conta duas vezes. */
+function parseTipoD0(rows, acc){
+  var h = findHeaderTipo(rows); if(!h || h.map.FILIAL==null || h.map.NF==null) return acc;
+  for(var i=h.row+1;i<rows.length;i++){
+    var r = rows[i]||[]; var p = tx(r[h.map.PLACA]).toUpperCase().replace(/[^A-Z0-9]/g,'');
+    if(!p) continue;
+    if(!/^D-?0$/i.test(tx(r[h.map.FILIAL]).replace(/\s+/g,''))) continue;
+    var nf = tx(r[h.map.NF]).replace(/\.0+$/,''); if(!nf) continue;
+    var ser = h.map.SERIE!=null ? tx(r[h.map.SERIE]).toUpperCase() : '';
+    var dk = h.map.DATA!=null ? tx(r[h.map.DATA]).replace(/\.0+$/,'') : '';
+    var o = acc[p] = acc[p] || {}; var l = o[dk] = o[dk] || [];
+    var chave = ser+'|'+nf; if(l.indexOf(chave)<0) l.push(chave);
+  }
+  return acc;
+}
+/* Qtd de notas D0 da placa para a data do kit (ddmmaa). Se a data do kit não existir no arquivo, usa a data mais recente do arquivo. */
+function dataKeyD0(){
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(S.data||''); var alvo = m ? m[3]+m[2]+m[1].slice(2) : '';
+  var tem = {}, ult = '';
+  Object.keys(S.tipoD0||{}).forEach(function(p){ Object.keys(S.tipoD0[p]).forEach(function(d){ tem[d]=1; if(d && (!ult || d>ult)) ult=d; }); });
+  return (alvo && tem[alvo]) ? alvo : ult;
+}
+window.kcNfD0DaPlaca = function(placa){
+  try{
+    var p = String(placa||'').toUpperCase().replace(/[^A-Z0-9]/g,''); var o = (S.tipoD0||{})[p]; if(!o) return 0;
+    var dk = dataKeyD0(); var l = o[dk] || (Object.keys(o).length===1 && dk==='' ? o[''] : null) || [];
+    if(!o[dk] && o['']) l = l.concat(o['']);   /* linhas sem data no arquivo */
+    return l.length;
+  }catch(e){ return 0; }
+};
 function hitsTipo(){ var h = 0; S.coletas.forEach(function(c){ if(S.tipo[normOrm(c.orm)] || S.tipo[c.orm]) h++; }); return h; }
 function tokensOrm(v){
   if(v==null || v==='') return [];
@@ -8478,7 +8510,7 @@ window.kcFiles = async function(fileList){
   if(typeof XLSX==='undefined'){ say('Biblioteca de planilhas (XLSX) não carregou. Confira a internet e recarregue a página.','err'); return; }
   var files = Array.from(fileList||[]), ok = 0;
   for(var i=0;i<files.length;i++){
-    var f = files[i], achou = false, accTipo = null, accRows = null;
+    var f = files[i], achou = false, accTipo = null, accRows = null, accD0 = null;
     try{
       var wb = await lerArquivo(f);
       var diag = [];
@@ -8490,6 +8522,7 @@ window.kcFiles = async function(fileList){
         var n;
         if(tipo==='tipo'){   /* o arquivo pode ter várias abas parecidas: junta as ORMs de todas */
           var m1 = parseTipo(rows); accTipo = accTipo || {}; Object.keys(m1).forEach(function(k){ accTipo[k] = m1[k]; });
+          accD0 = parseTipoD0(rows, accD0 || {});
           if(!accRows || rows.length > accRows.length) accRows = rows;
           continue;
         }
@@ -8500,7 +8533,7 @@ window.kcFiles = async function(fileList){
         achou = true; ok++;
       }
       if(!achou && accTipo){
-        S.tipo = accTipo; TIPO_WB = wb; TIPO_DIAG = diag.join(' · '); var nt = Object.keys(S.tipo).length;
+        S.tipo = accTipo; S.tipoD0 = accD0 || {}; TIPO_WB = wb; TIPO_DIAG = diag.join(' · '); var nt = Object.keys(S.tipo).length;
         S.arqs = S.arqs.filter(function(a){ return a.tipo!=='tipo'; });
         S.arqs.push({tipo:'tipo', nome:f.name, n:nt}); achou = true; ok++;
       }
@@ -8512,11 +8545,11 @@ window.kcFiles = async function(fileList){
 window.kcDrop = function(ev){ ev.preventDefault(); ev.currentTarget.classList.remove('drag'); window.kcFiles(ev.dataTransfer.files); };
 window.kcLimpar = function(){
   if(!confirm('Remover Coletas, Tipo de Residência e Lista de carga carregados nesta aba?')) return;
-  S.coletas=[]; S.tipo={}; S.lista={}; S.arqs=[]; TIPO_WB=null; TIPO_DIAG=''; persist(); window.kcRender();
+  S.coletas=[]; S.tipo={}; S.tipoD0={}; S.lista={}; S.arqs=[]; TIPO_WB=null; TIPO_DIAG=''; persist(); window.kcRender();
 };
 /* Novo dia: limpa tudo da aba sem confirmação e volta a data para hoje. */
 window.kcNovoDia = function(){
-  S.coletas=[]; S.tipo={}; S.lista={}; S.arqs=[]; S.data=''; ROWS=[]; TIPO_WB=null; TIPO_DIAG='';
+  S.coletas=[]; S.tipo={}; S.tipoD0={}; S.lista={}; S.arqs=[]; S.data=''; ROWS=[]; TIPO_WB=null; TIPO_DIAG='';
   persist(); window.kcRender();
   return kcIdbDel('tudo');   /* quem chama (Novo dia) espera isto terminar antes de recarregar */
 };
@@ -8708,9 +8741,9 @@ window.kcColetasDoDia = function(){
 };
 restore();
 if(window.gdnDia) window.gdnDia.registrar('coleta', {
-  get: function(){ return {coletas:S.coletas, tipo:S.tipo, lista:S.lista, arqs:S.arqs, data:S.data}; },
+  get: function(){ return {coletas:S.coletas, tipo:S.tipo, lista:S.lista, arqs:S.arqs, data:S.data, tipoD0:S.tipoD0}; },
   tem: function(){ return !!((S.coletas||[]).length || Object.keys(S.tipo||{}).length || (S.arqs||[]).length); },
-  set: function(p){ S.coletas = p.coletas||[]; S.tipo = p.tipo||{}; S.lista = p.lista||{}; S.arqs = p.arqs||[]; S.data = p.data||''; persist(); window.kcRender(); }
+  set: function(p){ S.coletas = p.coletas||[]; S.tipo = p.tipo||{}; S.lista = p.lista||{}; S.arqs = p.arqs||[]; S.data = p.data||''; S.tipoD0 = p.tipoD0||{}; persist(); window.kcRender(); }
 });
 })();
 </script>
