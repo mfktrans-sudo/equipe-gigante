@@ -2926,7 +2926,10 @@ function renderFluxo(){
     } else h += fluxoLinha('Base TS São Paulo (aba 1)', 'não enviada', 'neutral');
   }
   h += fluxoLinha('Cargas consolidadas · alocadas (aba 1)', nCargas+' · '+nAloc, (nCargas && nAloc) ? 'ok' : (nCargas ? 'alert' : 'neutral'));
-  h += kc.length ? fluxoLinha('Coletas ligadas a placa e carga (aba 3)', kcOk+' / '+kc.length, kcOk===kc.length ? 'ok' : 'alert')
+  const kcSemPlaca = kc.filter(r=>!r.placa).length;
+  h += kc.length ? ((kcSemPlaca && typeof window.kcPerguntarSemPlaca==='function')
+                    ? '<div class="fitem"><span>Coletas ligadas a placa e carga (aba 3)</span><span><span class="badge alert">'+kcOk+' / '+kc.length+'</span> <button class="small primary" onclick="kcPerguntarSemPlaca()">Definir placa ('+kcSemPlaca+')</button></span></div>'
+                    : fluxoLinha('Coletas ligadas a placa e carga (aba 3)', kcOk+' / '+kc.length, kcOk===kc.length ? 'ok' : 'alert'))
                  : fluxoLinha('Coletas (aba 3)', 'envie Coletas + Tipo de Residência', 'neutral');
   h += cs && cs.veiculos ? fluxoLinha('Saída de Veículos CD (aba 6)', cs.veiculos+' formulário(s) · '+cs.ligadas+'/'+cs.coletas+' coletas ligadas'+(cs.semNfdv ? ' · '+cs.semNfdv+' sem NFDV' : ''), (cs.sem||cs.semNfdv) ? 'alert' : 'ok')
                          : fluxoLinha('Saída de Veículos CD (aba 6)', 'aguardando consolidação / Programação', 'neutral');
