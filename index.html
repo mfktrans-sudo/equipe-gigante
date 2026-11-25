@@ -1138,8 +1138,13 @@
   </div>
 
   <div class="panel" id="kcSemPanel" style="display:none;">
-    <div class="panel-head"><div><h2>⚠ Coletas sem placa ou sem carga</h2><div class="desc">Confira se a ORM está no Tipo de Residência e se a placa está na Lista de carga.</div></div></div>
-    <div class="table-wrap" style="max-height:300px;overflow-y:auto;"><table id="kcSem"><thead><tr><th>ORM</th><th>Descrição do Produto</th><th>Placa</th><th>Motivo</th></tr></thead><tbody></tbody></table></div>
+    <div class="panel-head"><div><h2>⚠ Coletas sem placa ou sem carga</h2><div class="desc">Confira se a ORM está no Tipo de Residência e se a placa está na Lista de carga. Coleta incluída depois do Roadshow? Use <b>Definir placa</b> — o ajuste vale para a aba 3, a Saída de Veículos (aba 6), o Kit Coletas (.xlsx) e o status do fluxo.</div></div></div>
+    <div class="table-wrap" style="max-height:300px;overflow-y:auto;"><table id="kcSem"><thead><tr><th>ORM</th><th>Descrição do Produto</th><th>Placa</th><th>Motivo</th><th></th></tr></thead><tbody></tbody></table></div>
+  </div>
+
+  <div class="panel" id="kcManPanel" style="display:none;">
+    <div class="panel-head"><div><h2>✎ Placas definidas manualmente</h2><div class="desc">Coletas cuja ORM não estava no Tipo de Residência. Se um novo Tipo de Residência trouxer a ORM, a placa dele prevalece.</div></div></div>
+    <div class="table-wrap" style="max-height:240px;overflow-y:auto;"><table id="kcMan"><thead><tr><th>ORM</th><th>Descrição do Produto</th><th>Placa</th><th>Carga · Onda</th><th></th></tr></thead><tbody></tbody></table></div>
   </div>
 </div>
 
@@ -8167,7 +8172,11 @@ function listaViva(){
       if(!pp.length) pp = pres;
       var nums = [], qtd = 0;
       pp.forEach(function(p){ var v = String(p.preRomaneio); if(nums.indexOf(v)<0) nums.push(v); qtd += (parseInt(p.qtdEntrega)||0); });
-      out.push({seq:it.n, placa:String(a.placa||'').toUpperCase(), prerom:nums.join('/'), qtd:qtd, tipo:a.transportadora||'', motorista:'', rg:''});
+      /* NF's por filial (33 = principal, 05) — independente do total acima; as da D0 entram em calcular() */
+      var q33 = 0, q05 = 0;
+      pres.forEach(function(p){ var n = (parseInt(p.qtdEntrega)||0);
+        if(typeof isFilialPrincipal==='function' && isFilialPrincipal(p.filial)) q33 += n; else if(String(p.filial)==='05') q05 += n; });
+      out.push({seq:it.n, placa:String(a.placa||'').toUpperCase(), prerom:nums.join('/'), qtd:qtd, q33:q33, q05:q05, tipo:a.transportadora||'', motorista:'', rg:''});
     });
   }catch(e){ console.warn('Saída: não consegui ler a Lista de carga da aba 1', e); return []; }
   return out;
@@ -8185,18 +8194,18 @@ function calcular(){
     var idx = {};
     LISTA_ATUAL.forEach(function(l){
       var k = norm(l.placa), g = idx[k];
-      if(!g){ g = idx[k] = {seq:l.seq, placa:l.placa, pres:[], qtd:0, tipo:l.tipo, motorista:l.motorista, rg:l.rg, seqs:[]}; base.push(g); }
-      g.seqs.push(l.seq); g.seq = Math.min(g.seq, l.seq); g.qtd += l.qtd;
+      if(!g){ g = idx[k] = {seq:l.seq, placa:l.placa, pres:[], qtd:0, q33:0, q05:0, tipo:l.tipo, motorista:l.motorista, rg:l.rg, seqs:[]}; base.push(g); }
+      g.seqs.push(l.seq); g.seq = Math.min(g.seq, l.seq); g.qtd += l.qtd; g.q33 += (l.q33||0); g.q05 += (l.q05||0);
       cleanPre(l.prerom).split('/').forEach(function(p){ if(p && g.pres.indexOf(p)<0) g.pres.push(p); });
     });
   }else{
-    LISTA_ATUAL.forEach(function(l){ base.push({seq:l.seq, placa:l.placa, pres:cleanPre(l.prerom).split('/').filter(Boolean), qtd:l.qtd, tipo:l.tipo, motorista:l.motorista, rg:l.rg, seqs:[l.seq]}); });
+    LISTA_ATUAL.forEach(function(l){ base.push({seq:l.seq, placa:l.placa, pres:cleanPre(l.prerom).split('/').filter(Boolean), qtd:l.qtd, q33:l.q33, q05:l.q05, tipo:l.tipo, motorista:l.motorista, rg:l.rg, seqs:[l.seq]}); });
   }
   var cargas = base.map(function(b){
     var p = progMap[norm(b.placa)] || null;
     var rot = rotuloTransp((p && p.transp) || cadastroTransp(b.placa) || b.tipo);
     var fast = rot==='FASTSHOP', preencher = fast || S.opts.terceiros;
-    return {seq:b.seq, seqs:b.seqs, placa:b.placa, prerom:b.pres.join('/'), qtd:b.qtd, transp:rot, fast:fast,
+    return {seq:b.seq, seqs:b.seqs, placa:b.placa, prerom:b.pres.join('/'), qtd:b.qtd, q33:b.q33, q05:b.q05, qtdD0:0, transp:rot, fast:fast,
       regiao:p ? p.regiao : '', naProg:!!p,
       motorista: preencher ? ((p&&p.motorista)||b.motorista) : '', rg: preencher ? ((p&&p.rg)||b.rg) : '',
       placaVeic: preencher ? b.placa : '', coletas:[]};
@@ -8265,9 +8274,13 @@ function formHTML(c, dataStr){
   h += T(118,428,'Primeira NF',{size:13}) + T(118,513,'Última NF',{size:13});
   h += T(551,418,'NORMAS INTERNAS DE OPERAÇÕES DA SEGURANÇA',{size:22,al:'c',w:700});
   h += T(969,481,'QTD NF´s',{size:18,b:1,al:'c',w:160,u:1}) + X(892,492,1043,523,esc(c.qtd||''),{size:25});
+  /* NF's por filial (33 / 05 / D0): cada filial tem seu romaneio, facilita achar divergência na conferência dos malotes */
+  [['33',c.q33,528],['05',c.q05,553],['D0',c.qtdD0,578]].forEach(function(f){
+    h += T(884,f[2]+11,f[0],{size:15,b:1,al:'r',w:40}) + X(892,f[2],1043,f[2]+22,(f[1]==null?'':esc(f[1])),{size:18});
+  });
   h += T(543,485,'Controle de fluxo de veículos (Fast Shop)',{size:22,al:'c',w:620});
   h += T(543,545,'AUTORIZAÇÃO DE ENTRADA / SAÍDA',{size:28,b:1,al:'c',w:700});
-  h += R(115,559,1044,561);
+  h += R(115,559,835,561);
   h += T(342,613,'NOME DO MOTORISTA:',{size:14.5,al:'r',w:200}) + D(348,808,622) + T(354,613,esc(c.motorista),{size:15,w:440});
   h += T(888,612,'RG:',{size:14.5,al:'r',w:60}) + D(893,1042,620) + T(896,612,esc(c.rg),{size:15,w:140});
   h += T(342,653,'PLACA DO VEÍCULO:',{size:14.5,al:'r',w:200}) + D(348,1042,662) + T(354,653,esc(c.placaVeic),{size:15,w:440});
@@ -8430,7 +8443,7 @@ if(!S.opts.data) S.opts.data = hojeISO();
 (function(){
 'use strict';
 var KEY = 'kc_kit_v1';
-var S = { coletas:[], tipo:{}, lista:{}, arqs:[], data:'', tipoD0:{} };
+var S = { coletas:[], tipo:{}, lista:{}, arqs:[], data:'', tipoD0:{}, manual:{} };   /* manual: {ORM -> placa} definida à mão quando a ORM não está no Tipo de Residência */
 var ROWS = [];
 
 function nm(s){ return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
@@ -8450,7 +8463,7 @@ function kcIdbDel(k){ return kcIdb().then(function(db){ return new Promise(funct
 function kcIdbGet(k){ return kcIdb().then(function(db){ return new Promise(function(ok,er){ var q=db.transaction('kv').objectStore('kv').get(k); q.onsuccess=function(){ db.close(); ok(q.result); }; q.onerror=function(){ er(q.error); }; }); }); }
 function persist(){
   if(window.__GDN_RESETANDO && !window.__GDN_PERSIST_OK) return;
-  var leve = {coletas:S.coletas, tipo:{}, lista:S.lista, arqs:S.arqs, data:S.data, tipoD0:S.tipoD0};
+  var leve = {coletas:S.coletas, tipo:{}, lista:S.lista, arqs:S.arqs, data:S.data, tipoD0:S.tipoD0, manual:S.manual};
   try{ localStorage.setItem(KEY, JSON.stringify(leve)); }
   catch(e){ console.warn('Kit coletas: não consegui salvar no navegador', e); }
   try{ if(window.gdnDia) window.gdnDia.salvar('coleta'); }catch(e){}
@@ -8461,10 +8474,10 @@ function restore(){
     var raw = localStorage.getItem(KEY);
     if(raw){
       var p = JSON.parse(raw);
-      S.coletas = p.coletas||[]; S.tipo = p.tipo||{}; S.lista = p.lista||{}; S.arqs = p.arqs||[]; S.data = p.data||''; S.tipoD0 = p.tipoD0||{};
+      S.coletas = p.coletas||[]; S.tipo = p.tipo||{}; S.lista = p.lista||{}; S.arqs = p.arqs||[]; S.data = p.data||''; S.tipoD0 = p.tipoD0||{}; S.manual = p.manual||{};
     }
   }catch(e){ console.warn('Kit coletas: estado salvo ilegível, ignorando', e); }
-  kcIdbGet('tudo').then(function(t){ if(t && ((t.coletas||[]).length || Object.keys(t.tipo||{}).length)){ S.coletas = t.coletas||[]; S.tipo = t.tipo||{}; S.lista = t.lista||{}; S.arqs = t.arqs||[]; S.data = t.data||''; S.tipoD0 = t.tipoD0||{}; if(typeof window.kcRender==='function') window.kcRender(); } }).catch(function(){});
+  kcIdbGet('tudo').then(function(t){ if(t && ((t.coletas||[]).length || Object.keys(t.tipo||{}).length)){ S.coletas = t.coletas||[]; S.tipo = t.tipo||{}; S.lista = t.lista||{}; S.arqs = t.arqs||[]; S.data = t.data||''; S.tipoD0 = t.tipoD0||{}; S.manual = t.manual||{}; if(typeof window.kcRender==='function') window.kcRender(); } }).catch(function(){});
 }
 
 /* ---------- leitura dos arquivos ---------- */
@@ -8650,16 +8663,16 @@ window.kcFiles = async function(fileList){
       if(!achou) say('"'+f.name+'" não parece Coletas, Tipo de Residência nem Lista de carga (não achei as colunas esperadas).','err');
     }catch(e){ console.error(e); say('Erro ao ler "'+f.name+'": '+(e.message||e),'err'); }
   }
-  if(ok){ await ajustarTipo(); persist(); window.kcRender(); say(ok+' arquivo(s) reconhecido(s).','ok'); }
+  if(ok){ await ajustarTipo(); persist(); window.kcRender(); say(ok+' arquivo(s) reconhecido(s).','ok'); kcAtualizarOutrasAbas(); window.kcPerguntarSemPlaca(); }
 };
 window.kcDrop = function(ev){ ev.preventDefault(); ev.currentTarget.classList.remove('drag'); window.kcFiles(ev.dataTransfer.files); };
 window.kcLimpar = function(){
   if(!confirm('Remover Coletas, Tipo de Residência e Lista de carga carregados nesta aba?')) return;
-  S.coletas=[]; S.tipo={}; S.tipoD0={}; S.lista={}; S.arqs=[]; TIPO_WB=null; TIPO_DIAG=''; persist(); window.kcRender();
+  S.coletas=[]; S.tipo={}; S.tipoD0={}; S.manual={}; S.lista={}; S.arqs=[]; TIPO_WB=null; TIPO_DIAG=''; persist(); window.kcRender();
 };
 /* Novo dia: limpa tudo da aba sem confirmação e volta a data para hoje. */
 window.kcNovoDia = function(){
-  S.coletas=[]; S.tipo={}; S.tipoD0={}; S.lista={}; S.arqs=[]; S.data=''; ROWS=[]; TIPO_WB=null; TIPO_DIAG='';
+  S.coletas=[]; S.tipo={}; S.tipoD0={}; S.manual={}; S.lista={}; S.arqs=[]; S.data=''; ROWS=[]; TIPO_WB=null; TIPO_DIAG='';
   persist(); window.kcRender();
   return kcIdbDel('tudo');   /* quem chama (Novo dia) espera isto terminar antes de recarregar */
 };
@@ -8694,12 +8707,13 @@ function listaViva(){
 function calcular(){
   var viva = listaViva();
   var rows = S.coletas.map(function(c){
-    var placa = S.tipo[normOrm(c.orm)] || S.tipo[c.orm] || '';
+    var placa = S.tipo[normOrm(c.orm)] || S.tipo[c.orm] || '', manual = false;
+    if(!placa){ var pm = (S.manual||{})[normOrm(c.orm)]; if(pm){ placa = pm; manual = true; } }   /* placa definida manualmente (coleta incluída depois do Roadshow) */
     var L = placa ? (viva.mapa[nm(placa)] || S.lista[nm(placa)]) : null;
     var motivo = '';
     if(!placa) motivo = temArq('tipo') ? 'ORM não encontrada no Tipo de Residência' : 'Tipo de Residência não carregado';
     else if(!L) motivo = (temArq('lista') || viva.n) ? 'Placa não está na Lista de carga' : 'Lista de carga não carregada';
-    return { orm:c.orm, nfdv:c.nfdv||'', desc:c.desc, qtd:c.qtd, tipo:c.tipo, placa:placa, carga:L?L.carga:'', pre:L?escolherPre(L):'', onda:L?L.doca:'', transp:L?L.transp:'', motivo:motivo, ok:!!L };
+    return { orm:c.orm, nfdv:c.nfdv||'', desc:c.desc, qtd:c.qtd, tipo:c.tipo, placa:placa, carga:L?L.carga:'', pre:L?escolherPre(L):'', onda:L?L.doca:'', transp:L?L.transp:'', motivo:motivo, ok:!!L, manual:manual };
   });
   rows.sort(function(a,b){
     if(a.ok!==b.ok) return a.ok ? -1 : 1;
@@ -8806,6 +8820,96 @@ window.kcImprimir = function(){
   }
 };
 
+
+/* ---------- placa manual (ORM que o Roadshow não roteirizou / não está no Tipo de Residência) ---------- */
+function kcPlacasDaLista(){
+  var out = {}, viva = listaViva();
+  Object.keys(S.lista||{}).forEach(function(k){ var L = S.lista[k]; out[k] = {placa:L.placa, carga:L.carga, doca:L.doca, transp:L.transp}; });
+  Object.keys(viva.mapa).forEach(function(k){ var L = viva.mapa[k]; out[k] = {placa:L.placa, carga:L.carga, doca:L.doca, transp:L.transp}; });
+  return Object.keys(out).map(function(k){ return out[k]; }).sort(function(a,b){ return (Number(a.carga)||0)-(Number(b.carga)||0); });
+}
+var KC_PLACA_RX = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/;
+/* Abre a caixa. seq = {i,n} quando vem na fila automática. Resolve 'ok' | 'skip' | 'stop'. */
+function kcCaixaPlaca(r, seq){
+  return new Promise(function(res){
+    var lista = kcPlacasDaLista(), porK = {};
+    lista.forEach(function(L){ porK[nm(L.placa)] = L; });
+    var o = document.createElement('div');
+    o.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(3,6,12,.78);display:flex;align-items:center;justify-content:center;padding:20px';
+    var atual = (S.manual||{})[normOrm(r.orm)] || '';
+    o.innerHTML =
+      '<div style="background:var(--bg-1);border:1px solid var(--line);border-radius:10px;width:100%;max-width:460px;padding:18px">'+
+      '<div style="font-weight:700;font-size:15px;margin-bottom:4px">Definir placa da coleta'+(seq?' <span style="color:var(--text-2);font-weight:400;font-size:12px">('+seq.i+' de '+seq.n+')</span>':'')+'</div>'+
+      '<div style="font-size:12.5px;color:var(--text-2);margin-bottom:12px">'+esc(r.motivo||'ORM sem placa')+'. Informe a placa do veículo que vai levar esta coleta.</div>'+
+      '<div style="background:var(--bg-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:13px;line-height:1.6">'+
+        '<b>ORM '+esc(r.orm)+'</b> · '+esc(r.tipo||'Coleta')+(r.qtd!==''&&r.qtd!=null?' · Qtd '+esc(r.qtd):'')+'<br>'+esc(r.desc||'')+'</div>'+
+      '<label>Placa</label>'+
+      '<input id="kcpIn" list="kcpLista" autocomplete="off" maxlength="8" placeholder="AAA0A00" value="'+esc(atual)+'" style="width:100%;text-transform:uppercase;font-family:var(--mono);font-size:15px">'+
+      '<datalist id="kcpLista">'+lista.map(function(L){ return '<option value="'+esc(L.placa)+'">Carga '+esc(L.carga)+' · '+esc(L.transp)+' · '+esc(L.doca)+'</option>'; }).join('')+'</datalist>'+
+      '<div id="kcpInfo" style="font-size:12.5px;min-height:34px;margin:8px 0 4px"></div>'+
+      '<div id="kcpErr" style="color:var(--red);font-size:12.5px;min-height:16px;margin-bottom:8px"></div>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">'+
+        (seq ? '<button class="ghost" id="kcpStop">Parar de perguntar</button><button class="ghost" id="kcpSkip">Pular</button>' : '<button class="ghost" id="kcpSkip">Cancelar</button>')+
+        '<button class="primary" id="kcpOk">Salvar placa</button></div></div>';
+    document.body.appendChild(o);
+    var inp = o.querySelector('#kcpIn'), info = o.querySelector('#kcpInfo'), err = o.querySelector('#kcpErr');
+    var fim = function(v){ o.remove(); res(v); };
+    var mostra = function(){
+      var k = nm(inp.value); err.textContent = '';
+      if(!k){ info.innerHTML = ''; return; }
+      var L = porK[k];
+      if(L) info.innerHTML = '<span style="color:var(--teal)">✓ Carga '+esc(L.carga)+' · '+esc(L.transp||'—')+' · '+esc(L.doca||'—')+'</span>';
+      else if(lista.length) info.innerHTML = '<span style="color:var(--amber,#e0a030)">⚠ Esta placa não está na Lista de carga — a coleta continua pendente até a placa entrar numa carga.</span>';
+      else info.innerHTML = '<span style="color:var(--text-2)">Lista de carga ainda não disponível — a ligação com a carga será feita quando ela existir.</span>';
+    };
+    var ok = function(){
+      var k = nm(inp.value);
+      if(!KC_PLACA_RX.test(k)){ err.textContent = 'Placa inválida. Use o formato AAA0A00 ou AAA0000.'; return; }
+      S.manual = S.manual || {}; S.manual[normOrm(r.orm)] = k;
+      persist(); window.kcRender(); kcAtualizarOutrasAbas();
+      say('Placa '+k+' definida para a ORM '+r.orm+(porK[k] ? ' — carga '+porK[k].carga+'.' : ' (placa fora da Lista de carga).'), porK[k] ? 'ok' : 'err');
+      fim('ok');
+    };
+    inp.addEventListener('input', mostra); inp.addEventListener('change', mostra);
+    o.querySelector('#kcpOk').onclick = ok;
+    o.querySelector('#kcpSkip').onclick = function(){ fim('skip'); };
+    var st = o.querySelector('#kcpStop'); if(st) st.onclick = function(){ fim('stop'); };
+    o.addEventListener('keydown', function(ev){ if(ev.key==='Enter') ok(); else if(ev.key==='Escape') fim('skip'); });
+    mostra(); inp.focus(); inp.select();
+  });
+}
+/* Reflete a mudança nas demais telas (aba 6 · Saída, status do fluxo, arquivos carregados). Kit xlsx e Saída já leem calcular() na hora. */
+function kcAtualizarOutrasAbas(){
+  try{ if(typeof window.csRender==='function') window.csRender(); }catch(e){}
+  try{ if(typeof renderFluxo==='function') renderFluxo(); }catch(e){}
+  try{ if(typeof renderArquivosCarregados==='function') renderArquivosCarregados(); }catch(e){}
+}
+window.kcDefinirPlaca = function(orm){
+  var r = calcular().filter(function(x){ return normOrm(x.orm)===normOrm(orm); })[0];
+  if(!r){ say('Coleta '+orm+' não encontrada.','err'); return; }
+  return kcCaixaPlaca(r, null);
+};
+window.kcRemoverPlacaManual = function(orm){
+  var k = normOrm(orm); if(!(S.manual && S.manual[k])) return;
+  if(!confirm('Remover a placa definida manualmente da ORM '+orm+'? Ela voltará a ficar sem placa.')) return;
+  delete S.manual[k]; persist(); window.kcRender(); kcAtualizarOutrasAbas();
+  say('Placa manual da ORM '+orm+' removida.','ok');
+};
+/* Depois de carregar os arquivos: se sobrou coleta sem placa por não estar no Tipo de Residência, abre a caixa uma a uma. */
+var KC_PERGUNTANDO = false;
+window.kcPerguntarSemPlaca = async function(){
+  if(KC_PERGUNTANDO || !temArq('coletas') || !temArq('tipo')) return;
+  var pend = calcular().filter(function(r){ return !r.placa; });
+  if(!pend.length) return;
+  KC_PERGUNTANDO = true;
+  try{
+    for(var i=0;i<pend.length;i++){
+      var v = await kcCaixaPlaca(pend[i], {i:i+1, n:pend.length});
+      if(v==='stop') break;
+    }
+  } finally { KC_PERGUNTANDO = false; }
+};
+
 /* ---------- tela ---------- */
 window.kcRender = function(){
   if(!$('view-kitcoletas')) return;
@@ -8835,9 +8939,19 @@ window.kcRender = function(){
   if(sem.length){
     sp.style.display = 'block';
     $('kcSem').querySelector('tbody').innerHTML = sem.map(function(r){
-      return '<tr><td>'+esc(r.orm)+'</td><td>'+esc(r.desc)+'</td><td>'+esc(r.placa||'—')+'</td><td>'+esc(r.motivo)+'</td></tr>';
+      return '<tr><td>'+esc(r.orm)+'</td><td>'+esc(r.desc)+'</td><td>'+esc(r.placa||'—')+'</td><td>'+esc(r.motivo)+'</td><td><button class="small primary" onclick="kcDefinirPlaca(\''+esc(r.orm)+'\')">'+(r.placa ? 'Trocar placa' : 'Definir placa')+'</button></td></tr>';
     }).join('');
   } else sp.style.display = 'none';
+  var mp = $('kcManPanel'), man = ROWS.filter(function(r){ return r.manual; });
+  if(mp){
+    if(man.length){
+      mp.style.display = 'block';
+      $('kcMan').querySelector('tbody').innerHTML = man.map(function(r){
+        return '<tr><td>'+esc(r.orm)+'</td><td>'+esc(r.desc)+'</td><td>'+esc(r.placa)+'</td><td>'+(r.ok ? esc((r.carga!==''?'Carga '+r.carga+' · ':'')+r.onda) : '<span style="color:var(--amber,#e0a030)">'+esc(r.motivo)+'</span>')+'</td>'+
+          '<td><button class="small" onclick="kcDefinirPlaca(\''+esc(r.orm)+'\')">Alterar</button> <button class="small" onclick="kcRemoverPlacaManual(\''+esc(r.orm)+'\')">Remover</button></td></tr>';
+      }).join('');
+    } else mp.style.display = 'none';
+  }
 };
 
 /* ---------- encaixe na navegação existente (sem alterar a função original) ---------- */
@@ -8846,14 +8960,14 @@ window.switchTab = function(tab){ _sw.apply(this, arguments); if(tab==='kitcolet
 /* Usado pela aba 6 · Saída de Veículos CD: coletas do dia já ligadas à placa (ORM -> Tipo de Residência) e com o NFDV da planilha de Coletas.
    Recalcula na hora (não depende de a aba 3 estar aberta). */
 window.kcColetasDoDia = function(){
-  try{ return calcular().map(function(r){ return {orm:r.orm, nfdv:r.nfdv, placa:r.placa, tipo:r.tipo, desc:r.desc, qtd:r.qtd, carga:r.carga, pre:r.pre, onda:r.onda, transp:r.transp, motivo:r.motivo}; }); }
+  try{ return calcular().map(function(r){ return {orm:r.orm, nfdv:r.nfdv, placa:r.placa, tipo:r.tipo, desc:r.desc, qtd:r.qtd, carga:r.carga, pre:r.pre, onda:r.onda, transp:r.transp, motivo:r.motivo, manual:!!r.manual}; }); }
   catch(e){ console.warn('Kit coletas: não consegui entregar as coletas à aba Saída', e); return []; }
 };
 restore();
 if(window.gdnDia) window.gdnDia.registrar('coleta', {
-  get: function(){ return {coletas:S.coletas, tipo:S.tipo, lista:S.lista, arqs:S.arqs, data:S.data, tipoD0:S.tipoD0}; },
+  get: function(){ return {coletas:S.coletas, tipo:S.tipo, lista:S.lista, arqs:S.arqs, data:S.data, tipoD0:S.tipoD0, manual:S.manual}; },
   tem: function(){ return !!((S.coletas||[]).length || Object.keys(S.tipo||{}).length || (S.arqs||[]).length); },
-  set: function(p){ S.coletas = p.coletas||[]; S.tipo = p.tipo||{}; S.lista = p.lista||{}; S.arqs = p.arqs||[]; S.data = p.data||''; S.tipoD0 = p.tipoD0||{}; persist(); window.kcRender(); }
+  set: function(p){ S.coletas = p.coletas||[]; S.tipo = p.tipo||{}; S.lista = p.lista||{}; S.arqs = p.arqs||[]; S.data = p.data||''; S.tipoD0 = p.tipoD0||{}; S.manual = p.manual||{}; persist(); window.kcRender(); }
 });
 })();
 </script>
