@@ -7178,16 +7178,19 @@ function pararSyncIscas(){ if(iscaUnsub){ iscaUnsub(); iscaUnsub = null; } iscaP
 /* ---------- Parâmetros (Configurações) no Firestore (gdn_docas / parametrosConfig) ----------
    Unidades, docas indisponíveis/extras, faixas, transportadoras, filiais, abas visíveis etc.: o "Novo dia" não apaga e o banco é a fonte da verdade. */
 const paramRef = doc(db, 'gdn_docas', 'parametrosConfig');
-let paramUltimo = null, paramTimer = null, paramUnsub = null, paramPronto = false, paramSujo = false;   // paramSujo: há alteração local ainda não enviada ao Firebase
+let paramUltimo = null, paramTimer = null, paramUnsub = null, paramPronto = false, paramSujo = false, paramBase = null;   // paramBase: parâmetros como estavam na última sincronização (para saber se houve edição local de verdade)   // paramSujo: há alteração local ainda não enviada ao Firebase
 const PARAM_FORA = ['cadastroPlacas','iscaMapa','iscaTerrExtra','iscaRegioesExtra','iscaTerritorios','migFilialCAJD0'];   // têm documentos próprios ou são marcas locais
 function paramDados(){ const C = STATE.config||{}, o = {}; Object.keys(C).forEach(k=>{ if(PARAM_FORA.indexOf(k)<0 && C[k]!==undefined) o[k]=C[k]; }); return JSON.parse(JSON.stringify(o)); }
 function paramStatus(txt, erro){ const el = document.getElementById('paramNuvem'); if(el){ el.textContent = txt; el.style.color = erro ? 'var(--red,#c0392b)' : 'inherit'; } }
 async function paramEnviar(){
   if(!paramPronto || !auth.currentUser) return;
-  const d = paramDados(), j = canon(d); if(j === paramUltimo){ paramSujo = false; return; }
+  const d = paramDados(), j = canon(d); if(j === paramUltimo){ paramSujo = false; paramBase = j; return; }
+  /* saveState() roda por qualquer motivo (não só edição de parâmetros). Se os parâmetros locais são iguais ao da última sincronização,
+     não houve edição aqui: não envia, para não sobrescrever no banco a versão mais nova (faixas de doca) com uma cópia local desatualizada. */
+  if(paramBase !== null && j === paramBase){ paramSujo = false; return; }
   try{
     await setDoc(paramRef, {json: JSON.stringify(d), atualizadoEm: serverTimestamp(), atualizadoPor: auth.currentUser.email || ''});
-    paramUltimo = j; paramSujo = false;
+    paramUltimo = j; paramSujo = false; paramBase = j;
     paramStatus('☁ Parâmetros salvos no Firebase — iguais em todos os computadores e não apagados pelo “Novo dia”.');
   }catch(e){
     console.error('Firestore parâmetros (gravar)', e);
@@ -7205,7 +7208,10 @@ function iniciarSyncParam(){
     let rem = {};
     try{ rem = JSON.parse(snap.data().json || '{}') || {}; }catch(e){ rem = {}; }
     paramUltimo = canon(rem);
-    if(paramSujo) return;   // há alteração local (ex.: faixa de doca) ainda não enviada: não sobrescreve com a versão antiga do banco
+    /* só protege se há edição local de verdade ainda não enviada (parâmetros diferentes da última sincronização) */
+    if(paramSujo && paramBase !== null && canon(paramDados()) !== paramBase) return;   // 1º snapshot (paramBase nulo): o banco vale — ao abrir a página os saveState() automáticos marcavam 'sujo' e a cópia local antiga ia por cima do banco
+      // ex.: faixa de doca digitada e ainda não enviada: não sobrescreve com a versão antiga do banco
+    if(paramUltimo === canon(paramDados())){ paramBase = paramUltimo; paramSujo = false; }
     if(paramUltimo !== canon(paramDados())){                           // o banco é a fonte da verdade
       const C = STATE.config = STATE.config||{};
       /* proteção: faixa de doca preenchida aqui nunca é substituída por 0–0 vindo do banco */
@@ -7214,6 +7220,7 @@ function iniciarSyncParam(){
       Object.keys(rem).forEach(k=>{ if(PARAM_FORA.indexOf(k)<0) C[k] = rem[k]; });
       let restaurouFaixa = false;
       (C.transportadoras||[]).forEach(t=>{ const f = faixaLocal[String(t && t.nome||'').trim().toUpperCase()]; if(f && !(t.docaIn>0 && t.docaFim>0)){ t.docaIn = f.docaIn; t.docaFim = f.docaFim; restaurouFaixa = true; } });
+      paramBase = paramUltimo;   // o banco acaba de ser aplicado: este é o ponto de comparação
       if(restaurouFaixa) window.gdnParamSync();
       try{ revincularTransportadoras(); }catch(e){}
       try{ saveState(); }catch(e){}
@@ -7226,7 +7233,7 @@ function iniciarSyncParam(){
     paramStatus('⚠ Sem acesso ao Firestore para os parâmetros ('+(err.code||err.message)+'). Confira as regras do banco para gdn_docas/parametrosConfig. Os dados continuam salvos neste navegador.', true);
   });
 }
-function pararSyncParam(){ if(paramUnsub){ paramUnsub(); paramUnsub = null; } paramPronto = false; paramUltimo = null; }
+function pararSyncParam(){ if(paramUnsub){ paramUnsub(); paramUnsub = null; } paramPronto = false; paramUltimo = null; paramBase = null; }
 
 /* ---------- Equipe da Produtividade no Firestore (gdn_docas / equipeProdutividade) ---------- */
 const eqRef = doc(db, 'gdn_docas', 'equipeProdutividade');
@@ -8221,8 +8228,15 @@ function calcular(){
      NFDV, em ordem: coluna do Kit -> planilha de Coletas enviada aqui (por ORM) -> planilha de Coletas da aba 3 (por ORM). */
   var vivas = kcVivas(), nfdvAba3 = {};
   vivas.forEach(function(v){ if(v.nfdv) nfdvAba3[String(v.orm).trim()] = v.nfdv; });
-  var usaAba3 = !S.coletas.length && vivas.length;
-  var fonte = usaAba3 ? vivas.map(function(v){ return {orm:v.orm, placa:v.placa||'', carga:v.carga, pre:v.pre, onda:v.onda, transp:v.transp, desc:v.desc, qtd:v.qtd, tipo:v.tipo, kit:'', nfdv:v.nfdv, cep:'', cliente:'', _motivo:v.motivo}; }) : S.coletas;
+  /* A aba 3 (viva, já com placas definidas manualmente) sempre vale. Um Kit_Coletas enviado aqui só complementa ORMs que a aba 3 não tem —
+     antes, um Kit antigo salvo tinha prioridade e ignorava a placa indicada depois na aba 3. */
+  var usaAba3 = vivas.length > 0;
+  var fonte;
+  if(usaAba3){
+    fonte = vivas.map(function(v){ return {orm:v.orm, placa:v.placa||'', carga:v.carga, pre:v.pre, onda:v.onda, transp:v.transp, desc:v.desc, qtd:v.qtd, tipo:v.tipo, kit:'', nfdv:v.nfdv, cep:'', cliente:'', _motivo:v.motivo}; });
+    var jaTem = {}; fonte.forEach(function(f){ jaTem[String(f.orm).trim()] = 1; });
+    (S.coletas||[]).forEach(function(c){ if(!jaTem[String(c.orm).trim()]) fonte.push(c); });
+  } else fonte = S.coletas;
   var semNfdv = 0;
   fonte.forEach(function(c0){
     var c = Object.assign({}, c0);
@@ -8326,6 +8340,9 @@ function dataForm(){ return dataBR(S.opts.data) || dataBR(hojeISO()); }
 /* ---------- impressão ---------- */
 function imprimir(cargas){
   if(!cargas.length){ say('Nada para imprimir.','err'); return; }
+  /* ordem da impressão: PRÉ-romaneio crescente (as NFs saem da impressora nessa sequência). Só afeta a impressão; a tela segue por carga. */
+  var _pre = function(c){ var n = String(c.prerom||'').split('/').map(function(x){ return parseInt(x,10); }).filter(function(x){ return !isNaN(x); }); return n.length ? Math.min.apply(null,n) : Infinity; };
+  cargas = cargas.map(function(c,i){ return {c:c,i:i,p:_pre(c)}; }).sort(function(a,b){ return (a.p===b.p ? 0 : a.p<b.p ? -1 : 1) || a.i-b.i; }).map(function(o){ return o.c; });
   var ds = dataForm();
   var html = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Controle de saída</title><style>'+FORM_CSS+
     '@page{size:A4 portrait;margin:0}html,body{margin:0;padding:0;background:#fff}.csf-sheet{page-break-after:always;break-after:page}.csf-sheet:last-child{page-break-after:auto;break-after:auto}'+
